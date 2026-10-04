@@ -1,6 +1,6 @@
 # Cairo MVP decisions
 
-Discussion record, October 4, 2026. Planning only. This document records confirmed user choices and the remaining differences between [the original comparison](PLAN-COMPARISON.md) and [the other plan](../opencode/README.md). Recommendations remain proposals until resolved in discussion. The current planning documents reflect the completed background simplification and subsequent choices; a final implementation handoff will follow the remaining decisions.
+Discussion record, October 4, 2026. Planning only. This document records confirmed user choices and the differences between [the original comparison](PLAN-COMPARISON.md) and [the other plan](../opencode/README.md). [CODING-PLAN.md](CODING-PLAN.md) is now the authoritative final handoff requested by the user. It selects explicit implementation defaults for previously pending details; the discussion below preserves their earlier status rather than claiming the user individually chose every default.
 
 | Topic | Status | Decision |
 | --- | --- | --- |
@@ -11,12 +11,12 @@ Discussion record, October 4, 2026. Planning only. This document records confirm
 | Bookmap availability | Confirmed user assumption | `bookmap-plugin` will always be running during the user's trading workflow. Cairo consumes its existing token/output and does not need to launch the plugin or provide standalone Schwab login for the MVP. |
 | Chart data | Confirmed, corrected | Load aggregated one-minute bars through Massive REST. Cairo opens no Massive WebSocket: the user's available connection is already used by `bookmap-plugin`. A snapshot/stale chart is acceptable. Sharing raw market data from Bookmap and live candles are deferred. |
 | Trade management | Confirmed | Traders provide guidelines in human language per setup; Cairo interprets and enforces the reviewed instructions. Different setups can have different management styles. Neither earlier preset model defines the product. |
-| OpenCode hosting | Proposed baseline from the selected plan | Bundle the headless OpenCode server as a local sidecar and use its client in Cairo. The in-process SDK remains an alternative hosting arrangement; choosing the runtime does not by itself prove Windows packaging. |
+| OpenCode hosting | Coding-handoff default; compatibility to prove | Bundle the headless OpenCode server as a local sidecar and use its client in Cairo. T01 verifies the pinned Windows/server/plugin combination. The in-process SDK is an alternative, not an automatically selected fallback. |
 | Cairo storage | Confirmed | No Cairo-owned SQLite, ORM, migrations, or historical operational database in the MVP. Keep live projections in memory and retain only necessary editable/recovery files. OpenCode can manage its own internal session storage. |
 | Shared foundation | Agreed across both plans | TypeScript, Electron, Lightweight Charts, Massive market data, Schwab, existing Bookmap detector reuse, collaborative tradebooks, and a deterministic engine independent of model latency. |
 | MVP modes/release boundary | Confirmed | Observer for entries; observer through assistant for exits. Traders enter through their existing platform. Cairo may submit supported exit/protective changes only after exact human approval. Assisted entries and automated management are deferred. |
 
-The comparison topics are below. UI, broker connection, REST-only charting, management direction, and the MVP execution boundary are resolved above. Engine hosting, Bookmap observation bridge, artifact activation, initial examples/observations, and focus-symbol/model choices remain pending.
+The comparison topics are below. UI, broker connection, REST-only charting, management direction, and the MVP execution boundary were explicitly resolved by the user. For the final handoff, use the documented defaults: engine in Electron main; existing local WebSocket for Bookmap observations only; Markdown narrative plus reviewed JSON interpretation; explicit activation/attachment; personal Gap Give and Go narrative plus a separate ORB fixture; one focus chart and one configured model, with all held positions monitored. These are author-selected MVP defaults, not additional user-confirmed answers. Runtime and installed-source uncertainties become concrete early verification tasks.
 
 | Order | Difference to resolve | Original ChatGPT plan | Other plan |
 | --- | --- | --- | --- |
@@ -33,7 +33,9 @@ Transport and agent-role scaffolding should follow the chosen runtime with the s
 
 The other plan records one active UI symbol, one shared model, external token ownership, and Bookmap export as preferences from its own conversation. Preserve that evidence when resolving those topics rather than treating them as technical errors. Held broker positions still need monitoring even if a different chart is selected.
 
-For decision 1, the current recommendation is to host the trading engine as a separate TypeScript module **inside Electron main for the MVP**, following the other plan. This reduces process lifecycle and recovery plumbing while the workload is primarily asynchronous feeds and small rule evaluations. OpenCode remains a separate runtime process. Avoid synchronous disk/network work or heavy computation in the main event loop, consistent with [Electron's performance guidance](https://www.electronjs.org/docs/latest/tutorial/performance).
+The following paragraphs preserve the discussion before the final coding handoff selected its defaults. Statements that a choice remained pending describe that earlier discussion; use CODING-PLAN.md for current implementation instructions.
+
+For decision 1, the discussion recommendation was to host the trading engine as a separate TypeScript module **inside Electron main for the MVP**, following the other plan. This reduces process lifecycle and recovery plumbing while the workload is primarily asynchronous feeds and small rule evaluations. OpenCode remains a separate runtime process. Avoid synchronous disk/network work or heavy computation in the main event loop, consistent with [Electron's performance guidance](https://www.electronjs.org/docs/latest/tutorial/performance).
 
 The alternative is an Electron [utility process](https://www.electronjs.org/docs/latest/api/utility-process), which provides a separate Node process. It offers a separate failure/event-loop boundary at the cost of another process to start, monitor, and recover. Neither arrangement has been benchmarked in Cairo. Keep the engine independent of desktop UI code and accessed through the same small local API so a later move does not require changing its trading behavior.
 

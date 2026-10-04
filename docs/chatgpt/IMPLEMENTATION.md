@@ -1,6 +1,6 @@
 # Cairo simplified implementation checkpoints
 
-Updated October 4, 2026. Planning only. This replaces the earlier M0–M9 database/history-heavy sequence. Read [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md), [MVP-SPEC.md](MVP-SPEC.md), and [PLAN-DECISIONS.md](PLAN-DECISIONS.md). The plan is not finalized; resolve each pending choice before implementing its dependent work.
+Updated October 4, 2026. Planning only. **Use [CODING-PLAN.md](CODING-PLAN.md) for implementation:** its 50 checkbox tasks and task-ID commits supersede the coarse milestone order below. This document remains a high-level scope explanation, replacing the earlier database/history-heavy sequence. Previously pending details now have explicit handoff defaults or early compatibility tasks.
 
 ## Proposed order
 

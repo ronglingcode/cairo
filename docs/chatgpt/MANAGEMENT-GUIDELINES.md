@@ -2,13 +2,15 @@
 
 October 4, 2026. Planning only. The user confirmed that traders provide management guidelines in human language and Cairo enforces them, with different styles for different setups. This replaces choosing between personal scalp/core/runner presets and generic partial/breakeven presets. Read [PLAN-DECISIONS.md](PLAN-DECISIONS.md) for other confirmed and pending choices.
 
+Use [CODING-PLAN.md](CODING-PLAN.md) for the final artifact/activation defaults and ordered implementation tasks. The discussion-stage format questions below are resolved there as Markdown narrative plus a reviewed internal JSON interpretation and explicit per-position attachment.
+
 ## Product contract
 
 Each setup's tradebook contains the trader's management narrative. The trader can write it directly or develop it with the Cairo copilot. The original wording remains visible alongside Cairo's interpretation. Traders do not need to write YAML, JSON, code, or learn a rule language.
 
 Cairo proposes a reviewed, executable interpretation of that narrative. At attachment/activation, bind it to the actual trade's symbol, side, position, levels, and account. The resulting per-trade snapshot governs management. A setup can use one position, partial exits, several allocations, time-based exits, price/indicator conditions, Bookmap events, or combinations where implemented. No strategy example supplies hidden defaults, and tiers or R multiples are required only when the trader asks for them.
 
-The confirmed decisions are the source/flexibility of management policy and the MVP execution boundary: observer entries and exits up to assistant. The implementation proposal below uses the selected OpenCode copilot to interpret guidelines and the live engine to monitor supported, reviewed rules and stage exit proposals. Exact artifact format/activation UI remains pending. Assisted entries and automated management are deferred.
+The confirmed decisions are the source/flexibility of management policy and the MVP execution boundary: observer entries and exits up to assistant. The selected OpenCode copilot interprets guidelines; the live engine monitors supported, reviewed rules and stages exit proposals. The final handoff uses Markdown narrative, a clause-linked reviewed JSON interpretation, and explicit per-position attachment. Assisted entries and automated management are deferred.
 
 ## From language to an active policy
 

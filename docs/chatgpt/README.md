@@ -14,19 +14,20 @@ Management is confirmed: traders provide guidelines in human language for each s
 
 The MVP execution boundary is confirmed: **observer for entries, and up to assistant for exits**. Traders enter externally. Supported partial/full exits and protective exit-order changes require exact human approval for every broker mutation. Assisted entries and automated management are deferred.
 
-The plan is still being finalized. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) records confirmed choices and differences awaiting discussion. Recommendations in the documents below do not override that ledger.
+**Start implementation with [CODING-PLAN.md](CODING-PLAN.md).** It is the final self-contained handoff with 50 ordered tasks, verification, checkboxes, and separate local commits. It preserves the user-confirmed choices and selects explicit MVP defaults for remaining implementation details. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) retains the decision/discussion history; it does not require reopening routine defaults before coding.
 
 ## Current planning source of truth
 
 | File | Purpose |
 | --- | --- |
+| [CODING-PLAN.md](CODING-PLAN.md) | Authoritative coding handoff: 50 tasks, completion flags, checks, and per-task commits |
 | [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md) | Start here: scope cuts, retained/discarded data, restart behavior |
 | [PLAN-DECISIONS.md](PLAN-DECISIONS.md) | Confirmed choices and remaining discussion |
 | [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) | Human-language guidelines, interpretation/review, and per-trade enforcement |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Small engine/plugin/UI boundaries and provisional hosting choices |
 | [MVP-SPEC.md](MVP-SPEC.md) | Live behavior, minimal contracts, approval/recovery acceptance |
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) | Proposed implementation checkpoints; unresolved choices must be resolved before their work |
-| [HANDOFF.md](HANDOFF.md) | Starting prompt once decisions and implementation authorization are complete |
+| [HANDOFF.md](HANDOFF.md) | Short prompt to start/resume the task checklist |
 
 The selected OpenCode plan proposes a bundled local server sidecar, with exact Windows packaging to prove. OpenCode may retain its own runtime/session storage internally; **no Cairo-owned SQLite** does not promise an entirely database-free third-party runtime.
 
@@ -44,4 +45,4 @@ These preserve earlier research. Their SQLite, full-history, replay, journal/res
 
 Important findings remain: the Bookmap detector currently keeps serializable signals in memory and still needs an observation export/stream; Cairo leaves its heatmap external. ViteApp supplies reusable Massive/Schwab examples. Personal management semantics and the separate 1-minute ORB reference must survive simplification. The engine never waits for model inference.
 
-No secrets were inspected or paid inference/broker calls made. This simplification changes planning documents only; no commits or pushes are part of it.
+No secrets were inspected or paid inference/broker calls made. Planning through the scope decisions was committed locally as `8f7a2d7` at the user's request. The coding handoff is committed separately. No application implementation or remote push is part of this work.

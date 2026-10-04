@@ -2,7 +2,9 @@
 
 October 4, 2026. This replaces the earlier database/history-heavy MVP. The user requested no SQLite, prioritized live trading, and selected **Embedded OpenCode V2 with a Cairo plugin**. Planning only.
 
-[PLAN-DECISIONS.md](PLAN-DECISIONS.md) owns the remaining choices. React with TypeScript and Vite is confirmed for the UI. Cairo consumes a valid Schwab token produced by `bookmap-plugin` (bmtrader), read-only, and calls Schwab directly from its backend; no ProxyServer is required. The plugin owns renewal; Cairo checks expiry and adopts its rotated token. Charting uses Massive REST one-minute aggregate snapshots; Cairo opens no Massive WebSocket because the user's available connection is already used by Bookmap. A stale chart is acceptable and raw-data sharing/live candles are deferred. Management uses trader-authored human-language guidelines per setup, interpreted and enforced by Cairo. The MVP execution boundary is observer entries and exits up to assistant. Engine hosting, Bookmap observation transport details, artifact format/activation, initial examples/additional observations, and focus-symbol/model choices remain under discussion. The scope/storage contract below does not silently settle them.
+For coding, [CODING-PLAN.md](CODING-PLAN.md) is the final handoff: 50 small tasks with checks and separate local commits. It selects explicit defaults for the discussion-stage details below and supersedes this document's coarse proposed work sequence.
+
+[PLAN-DECISIONS.md](PLAN-DECISIONS.md) records user choices. React/TypeScript/Vite, read-only Bookmap-maintained Schwab tokens with direct backend requests, REST one-minute chart snapshots without a Cairo Massive WebSocket, human-language setup-specific management, observer entries, and assistant exits are confirmed. The final coding handoff selects main-process engine, WebSocket observations, Markdown narrative/reviewed JSON interpretation with explicit attachment, one focus chart/model, and the personal narrative/ORB fixture defaults. Compatibility questions become early verification tasks. Raw-data sharing/live candles, assisted entries, and automated management are deferred.
 
 ## The first useful product
 
@@ -36,7 +38,7 @@ The user will always run `bookmap-plugin` while trading. Cairo treats it as an e
 
 ## Keep only essential authored/recovery files
 
-These live in the user's Cairo data directory, outside the repository. Names are illustrative; the tradebook format remains pending.
+These live in the user's Cairo data directory, outside the repository. Use the small file names/defaults in CODING-PLAN.md; the narrative is Markdown and its reviewed internal interpretation is JSON.
 
 | File/artifact | Retained contents | Reason |
 | --- | --- | --- |

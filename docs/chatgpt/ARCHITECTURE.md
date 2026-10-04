@@ -1,14 +1,14 @@
 # Cairo simplified MVP architecture
 
-Updated October 4, 2026. Read [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md), [MVP-SPEC.md](MVP-SPEC.md), and [PLAN-DECISIONS.md](PLAN-DECISIONS.md). This is a current planning target, not a finalized implementation decision record. Earlier SQLite/history/replay requirements are superseded.
+Updated October 4, 2026. Start coding with [CODING-PLAN.md](CODING-PLAN.md), which selects explicit implementation defaults and supplies the ordered task checklist. This document explains the architecture; [MVP-SPEC.md](MVP-SPEC.md) covers behavior and [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves user decisions. Earlier SQLite/history/replay requirements are superseded.
 
-## Confirmed foundation and pending choices
+## Confirmed foundation and handoff defaults
 
 TypeScript/Electron Windows desktop with React/Vite, Lightweight Charts, Massive, Schwab, Bookmap detector reuse, collaboratively authored tradebooks, and a deterministic trading engine independent of model latency.
 
 **Selected AI runtime: Embedded OpenCode V2 plus a Cairo plugin. No Cairo-owned SQLite, ORM, migrations, or historical operational database.**
 
-The proposed OpenCode packaging is a pinned bundled headless server sidecar with its client in the desktop. Exact packaging must be proved. Schwab is confirmed as a valid token produced by `bookmap-plugin` (bmtrader), consumed read-only, plus direct backend HTTP. Charting is corrected to Massive REST one-minute aggregate snapshots; Cairo opens no Massive WebSocket because the user's available connection is used by Bookmap. A stale chart is acceptable. Management is confirmed as trader-authored human-language guidelines per setup, interpreted and enforced by Cairo. The MVP observes entries and supports exits up to exact-human-approved assistant; automated management and assisted entries are deferred. Pending differences are engine in Electron main versus utility process, observation bridge details, artifact activation, initial examples/additional supported observations, and focus-symbol/model choices. Follow the decision ledger rather than treating the old recommendation as confirmed.
+OpenCode packaging defaults to a pinned bundled headless server sidecar; T01 proves exact Windows compatibility. Schwab uses a valid token produced by `bookmap-plugin` (bmtrader), consumed read-only, plus direct backend HTTP. Charting uses Massive REST one-minute snapshots with no Cairo Massive WebSocket; a stale chart is acceptable. Management follows trader-authored human-language guidelines per setup. Entries are observer-only and exits reach exact-human-approved assistant. The final handoff defaults to main-process engine, WebSocket observations, Markdown/JSON artifacts with explicit attachment, one focus chart and one configured model. Additional observations are introduced only when the selected guideline requires them. Automated management and assisted entries are deferred.
 
 ## Small responsibilities
 
@@ -41,7 +41,7 @@ OpenCode may own internal session storage. Cairo does not duplicate it. A chat t
 
 Proposed organization: main/preload/renderer, shared contracts, engine market/Bookmap/broker/rules/execution/files/API modules, and one Cairo plugin module. One project is enough initially; split packages only when a real consumer requires it.
 
-The engine imports no renderer globals or chart objects and can be tested against fake feeds/broker/clock. Hosting it in main or a utility process is still pending. Keep provider I/O asynchronous and defer heavy research/backtests. Renderer reload must not restart the engine or subscriptions. The desktop runs monitoring while open/minimized; no Windows service or persistent daemon is required.
+The engine imports no renderer globals or chart objects and can be tested against fake feeds/broker/clock. The final handoff defaults to an independent module in Electron main, with no initial utility-process framework. Keep provider I/O asynchronous and defer heavy research/backtests. Renderer reload must not restart the engine or subscriptions. The desktop runs monitoring while open/minimized; no Windows service or persistent daemon is required.
 
 A small loopback HTTP interface and one engine event stream serve UI/plugin. Avoid duplicate IPC/HTTP domain command surfaces, unnecessary second event protocols, a plugin marketplace, or a large dependency-injection framework.
 
@@ -59,7 +59,7 @@ Separate snapshot context from live evidence. Any derived VWAP/high/low/range is
 
 The existing detector can serialize patterns but currently keeps them in memory. A scoped observation export/stream still needs implementation. Keep its detector/heatmap in Bookmap. Send pattern episodes and only context required by chosen rules; no full-depth transport or Cairo detector rewrite.
 
-Transport/export specifics remain pending. Minimum meaningful contract: symbol/alias and real-price mapping, episode/revision, source mode live/replay/unknown, readiness/heartbeat/reset, detector/config revision, and event/receive time. Unknown/replay inputs can support observer review but cannot authorize source-dependent broker writes. Validate installed live/replay metadata; current-looking timestamps are insufficient.
+The handoff defaults to observation-only messages on the existing local WebSocket, with server-pushed status/episode snapshot on connection and live updates thereafter. No JSONL tail/replay fallback. Minimum meaningful contract: symbol/alias and real-price mapping, episode/revision, source mode live/replay/unknown, readiness/heartbeat/reset, detector/config revision, and event/receive time. T16-T19 verify installed metadata and implement the additive export. Unknown/replay inputs can support observer review but cannot authorize source-dependent broker writes. Current-looking timestamps are insufficient.
 
 Separate observation eligibility from native execution so Bookmap and Cairo cannot both act on one managed signal. Recording, log-tail backfill, and general replay are not required to deliver live observations.
 
@@ -85,7 +85,7 @@ Meaningful event/user request → fresh compact engine snapshot → OpenCode/mod
 
 The first path never waits for the second. Merge repeated episodes; do not call a model each tick. Start with the live copilot and necessary domain tools. Large role/skill/command trees, deep premarket, journal, research/backtesting, recording/replay, and historical analytics are deferred.
 
-Tradebooks keep the trader's setup/management narrative and its reviewed interpretation with deterministic/human/advisory/unsupported coverage per clause. The trader does not have to write a rule language. One position can follow a different setup's style from another. Freeze an armed/attached snapshot; file edits or AI drafts cannot silently change active rules. Proposed qualitative assessments without agreed observable criteria stay advisory or require assistant approval in the initial MVP. Exact file format/publishing workflow remains pending; no complete immutable-history database is required.
+Tradebooks keep the trader's setup/management narrative and its reviewed interpretation with deterministic/human/advisory/unsupported coverage per clause. The trader does not have to write a rule language. One position can follow a different setup's style from another. Freeze an enabled/attached snapshot; file edits or AI drafts cannot silently change active rules. Qualitative assessments without agreed observable criteria stay advisory or require assistant approval. The handoff defaults to Markdown narrative plus a revision/hash-linked JSON interpretation and explicit review/attachment; no complete immutable-history database is required.
 
 ## Files and recovery
 
