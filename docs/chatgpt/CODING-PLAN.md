@@ -169,13 +169,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Progress (2026-10-04): implementation staged locally, task incomplete.** Added the Electron/Vite/React shell, strict TypeScript config, lockfile, minimal fake-mode workspace, ignore rules, scripts, and one synthetic smoke check. Verified `npm ci --ignore-scripts --no-audit --no-fund --legacy-peer-deps --os=win32 --cpu=x64`, `npm run test` (1 pass), `npm run typecheck`, and `npm run build` (Vite 7.3.6; production renderer, main, and preload emitted). Vite/Electron plugin emits nonfatal Rollup option warnings. `npm run dev` starts the Vite server and builds both Electron bundles, but Electron's Windows binary download did not finish, so no desktop window smoke was possible. The installed binary is not part of the committed files. Retry the Electron download and run the dev-window smoke before checking off T02. No real provider or broker connections exist. Dependency install took repeated retries because npm registry metadata was unusually slow; the clean lockfile install then completed from cache.
 
-- [ ] **T03 — Define small domain contracts and fake I/O ports**
+- [x] **T03 — Define small domain contracts and fake I/O ports**
 
 **Depends:** T02. **Repository:** Cairo.
 
 **Deliver:** Contracts for timestamped chart context, Bookmap observations, broker facts, tradebooks/interpretations, position attachments, exit tickets, and source status. Provide fake clock, HTTP/broker responses, and observation sources through simple interfaces; no dependency-injection framework.
 
 **Verify:** Representative valid/invalid inputs exercise boundary parsing, unknown mode, nonfinite prices, and absent fields. Fakes make no network calls. **Commit:** `feat(T03): define Cairo contracts and fake ports`.
+
+**Verified (2026-10-04):** Added shared contracts and boundary parsers in `src/shared/contracts.mts` for chart snapshots, Bookmap observations, broker facts, tradebooks/interpretations, attachments, source status, and exit tickets. Added deterministic fake clock, HTTP, broker-read, and observation ports. `npm run test` passed (5 checks, including unknown mode, nanosecond string preservation, nonfinite prices, absent fields, and fake-only I/O); `npm run typecheck` passed; `npm run build` passed. Build has nonfatal Vite/Electron Rollup-option warnings recorded under T02. T02's Electron window smoke remains pending its binary download; the shell and lockfile required by this task are present. No network or broker calls were made.
 
 - [ ] **T04 — Own the engine lifecycle in Electron main**
 
