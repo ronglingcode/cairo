@@ -167,6 +167,8 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verify:** Clean dependency install, typecheck, build, and Windows dev-window smoke. **Commit:** `build(T02): bootstrap Electron React TypeScript shell`.
 
+**Progress (2026-10-04): implementation staged locally, task incomplete.** Added the Electron/Vite/React shell, strict TypeScript config, lockfile, minimal fake-mode workspace, ignore rules, scripts, and one synthetic smoke check. Verified `npm ci --ignore-scripts --no-audit --no-fund --legacy-peer-deps --os=win32 --cpu=x64`, `npm run test` (1 pass), `npm run typecheck`, and `npm run build` (Vite 7.3.6; production renderer, main, and preload emitted). Vite/Electron plugin emits nonfatal Rollup option warnings. `npm run dev` starts the Vite server and builds both Electron bundles, but Electron's Windows binary download did not finish, so no desktop window smoke was possible. The installed binary is not part of the committed files. Retry the Electron download and run the dev-window smoke before checking off T02. No real provider or broker connections exist. Dependency install took repeated retries because npm registry metadata was unusually slow; the clean lockfile install then completed from cache.
+
 - [ ] **T03 — Define small domain contracts and fake I/O ports**
 
 **Depends:** T02. **Repository:** Cairo.
