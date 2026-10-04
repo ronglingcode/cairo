@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairo — UI mockups</title>
+<style>
+  :root {
+    --bg:#0b0e11; --panel:#131722; --panel2:#171c26; --panel3:#1a1f2e;
+    --border:#2a2e39; --text:#d1d4dc; --muted:#787b86; --dim:#4c525e;
+    --green:#26a69a; --red:#ef5350; --amber:#f0b90b; --blue:#4a9eff; --purple:#a78bfa;
+    --mono:"JetBrains Mono", Consolas, "Cascadia Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:13px/1.45 Inter, "Segoe UI", system-ui, sans-serif; }
+  .page { max-width:1180px; margin:0 auto; padding:22px 18px 60px; }
+  h1 { font-size:19px; margin:0 0 2px; letter-spacing:.4px; }
+  h1 .sub { color:var(--muted); font-size:12px; font-weight:400; margin-left:8px; }
+  .tabs { display:flex; gap:8px; margin:16px 0 14px; }
+  .tabs button { background:var(--panel); color:var(--muted); border:1px solid var(--border);
+                 border-radius:7px; padding:7px 12px; font-size:12px; cursor:pointer; }
+  .tabs button.active { color:var(--text); border-color:var(--blue); background:#16202f; }
+  .screen { display:none; }
+  .screen.active { display:block; }
+  .caption { color:var(--muted); font-size:12px; margin:10px 2px 0; }
+  .caption b { color:var(--text); font-weight:600; }
+
+  /* window chrome */
+  .window { border:1px solid var(--border); border-radius:10px; overflow:hidden;
+            background:var(--panel); box-shadow:0 18px 50px rgba(0,0,0,.45); }
+  .titlebar { display:flex; align-items:center; gap:8px; height:30px; padding:0 12px;
+              background:#0e1219; border-bottom:1px solid var(--border); color:var(--dim); font-size:11px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#2f3542; }
+  .titlebar .t { margin-left:6px; letter-spacing:.5px; }
+
+  /* app bar */
+  .appbar { display:flex; align-items:center; gap:9px; padding:9px 12px; background:var(--panel2);
+            border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .brand { font-weight:800; letter-spacing:1.5px; color:var(--text); font-size:13px; }
+  .brand i { color:var(--blue); font-style:normal; }
+  .sym { font-family:var(--mono); font-weight:700; font-size:15px; }
+  .px.up { color:var(--green); font-family:var(--mono); font-size:12px; }
+  .chip { border:1px solid var(--border); border-radius:6px; padding:3px 7px; color:var(--muted);
+          font-size:11px; white-space:nowrap; }
+  .chip b { color:var(--text); font-family:var(--mono); font-weight:600; }
+  .grow { flex:1; }
+  .mode { display:flex; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+  .mode span { padding:4px 10px; color:var(--muted); font-size:11px; }
+  .mode span.on { background:#1d2735; color:var(--text); font-weight:600; }
+  .feed { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); }
+  .feed .led { width:7px; height:7px; border-radius:50%; background:var(--green); }
+  .feed.warn .led { background:var(--amber); }
+  .kill { border:1px solid #6b2b2b; background:#241317; color:#ff8a8a; border-radius:7px;
+          padding:5px 11px; font-weight:700; font-size:11px; letter-spacing:.6px; cursor:pointer; }
+
+  /* layout */
+  .main { display:grid; grid-template-columns: 1fr 292px; min-height:430px; }
+  .chartwrap { border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .chart-head { display:flex; gap:10px; align-items:center; padding:7px 10px; color:var(--muted); font-size:11px; }
+  .chart-head .lg { display:flex; align-items:center; gap:5px; }
+  .sw { width:9px; height:3px; border-radius:2px; display:inline-block; }
+  svg.chart { display:block; width:100%; height:auto; background:#0f131c; }
+  .plan-strip { display:flex; gap:8px; padding:8px 10px; border-top:1px solid var(--border);
+                background:var(--panel2); flex-wrap:wrap; align-items:center; }
+  .lvl { font-family:var(--mono); font-size:11px; border:1px solid var(--border); border-radius:5px; padding:2px 6px; color:var(--muted);}
+  .lvl b { color:var(--text); }
+
+  .side { display:flex; flex-direction:column; background:var(--panel); min-width:0; }
+  .pane-title { display:flex; align-items:center; gap:7px; padding:8px 10px; color:var(--muted);
+                font-size:11px; letter-spacing:.7px; text-transform:uppercase; border-bottom:1px solid var(--border); }
+  .pane-title .grow { flex:1; }
+  .sig { padding:9px 10px; border-bottom:1px solid var(--border); cursor:default; }
+  .sig:hover { background:#161c27; }
+  .sig-top { display:flex; align-items:center; gap:6px; }
+  .badge { font-size:10px; font-weight:700; border-radius:4px; padding:1px 5px; }
+  .badge.long { background:#0f2e2a; color:var(--green); }
+  .badge.short { background:#33191b; color:#ff8a8a; }
+  .src { font-size:9px; letter-spacing:.5px; border:1px solid var(--border); border-radius:4px; padding:1px 4px; color:var(--muted); }
+  .src.bm { color:var(--purple); border-color:#3b3358; }
+  .sig b { font-size:12px; }
+  .sig-meta { color:var(--muted); font-size:11px; margin-top:3px; font-family:var(--mono); }
+  .sig-meta .score { color:var(--amber); }
+  .sig-actions { margin-top:6px; display:flex; gap:6px; }
+  .mini { background:transparent; border:1px solid var(--border); color:var(--muted); font-size:10px;
+          border-radius:5px; padding:2px 7px; cursor:pointer; }
+  .mini.primary { border-color:#2c4a6b; color:#9cc7ff; }
+
+  .card { margin:9px 10px; border:1px solid var(--border); border-radius:8px; background:var(--panel2); }
+  .card .h { padding:6px 9px; border-bottom:1px solid var(--border); color:var(--muted); font-size:10px;
+             letter-spacing:.7px; text-transform:uppercase; display:flex; }
+  .card .h .grow { flex:1; }
+  .card .b { padding:8px 9px; font-size:12px; }
+  .kv { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
+  .kv span { color:var(--muted); } .kv b { font-family:var(--mono); font-weight:600; }
+  .pos.big { font-family:var(--mono); font-size:15px; }
+  .pos.big .up { color:var(--green); }
+
+  /* bottom row */
+  .bottom { display:grid; grid-template-columns: 1fr 372px; border-top:1px solid var(--border); }
+  .chat { border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:280px; }
+  .chat .msgs { padding:10px 12px; display:flex; flex-direction:column; gap:9px; overflow:auto; }
+  .msg { max-width:86%; border-radius:9px; padding:7px 10px; font-size:12.5px; }
+  .msg.user { align-self:flex-end; background:#1c2736; }
+  .msg.agent { align-self:flex-start; background:var(--panel3); border:1px solid var(--border); }
+  .msg.synthetic { align-self:stretch; max-width:none; background:#141b2a; border:1px dashed #2f4361;
+                   color:#9cc7ff; font-family:var(--mono); font-size:11px; }
+  .tools { display:flex; gap:6px; flex-wrap:wrap; }
+  .tool { font-size:10px; font-family:var(--mono); color:#8fd4b8; border:1px solid #234a3f;
+          background:#11211c; border-radius:5px; padding:2px 6px; }
+  .chat .input { margin:auto 12px 12px; border:1px solid var(--border); border-radius:8px; color:var(--dim);
+                 padding:8px 10px; font-size:12px; background:#0f131b; }
+  .draftline { font-size:11px; color:var(--muted); margin-top:5px; }
+
+  /* approvals */
+  .approvals { padding:10px 12px; background:var(--panel); }
+  .appr { border:1px solid #5b4a1f; border-radius:9px; background:#1c1a12; overflow:hidden; }
+  .appr .h { display:flex; align-items:center; gap:8px; padding:7px 10px; background:#26211236; border-bottom:1px solid #5b4a1f; }
+  .appr .h b { color:var(--amber); font-size:11px; letter-spacing:.6px; }
+  .appr .h .timer { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--amber); }
+  .appr .b { padding:10px; }
+  .appr .title { font-family:var(--mono); font-size:14px; margin-bottom:8px; }
+  .appr .title .side { color:var(--green); }
+  .appr .rows { border-top:1px solid #35321f; }
+  .appr .kv { border-bottom:1px solid #35321f; padding:4px 0; }
+  .appr .kv b.g { color:var(--green); } .appr .kv b.r { color:#ff8a8a; }
+  .appr .srcs { display:flex; gap:6px; margin:8px 0; flex-wrap:wrap; }
+  .appr .btns { display:flex; gap:8px; }
+  .btn { flex:1; border-radius:7px; padding:8px 10px; font-weight:700; font-size:12px; cursor:pointer; border:1px solid; }
+  .btn.approve { background:#12352e; border-color:#1f6f5c; color:#7fe3c9; }
+  .btn.reject { background:#2a1518; border-color:#6b2b2b; color:#ff9a9a; }
+  .hint { color:var(--muted); font-size:10.5px; margin-top:7px; }
+  .observer-note { border:1px solid #2c4a6b; background:#12202f; color:#9cc7ff; border-radius:8px;
+                   padding:9px 11px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Cairo — UI mockups <span class="sub">static design reference · not production code</span></h1>
+  <nav class="tabs">
+    <button data-tab="premarket" class="active">1 · Premarket planning</button>
+    <button data-tab="observer">2 · Live observer</button>
+    <button data-tab="assistant">3 · Assistant approval</button>
+  </nav>
+
+  <!-- ============================== PREMARKET ============================== -->
+  <section class="screen active" id="premarket">
+    <div class="window">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">cairo — trading copilot</span></div>
+      <div class="appbar">
+        <span class="brand">CA<i>I</i>RO</span>
+        <span class="sym">INTC</span>
+        <span class="chip">premkt <b>34.98</b></span>
+        <span class="chip">gap <b>+3.2%</b></span>
+        <span class="chip">PM vol <b>2.1M</b></span>
+        <span class="chip">ATR14 <b>0.71</b></span>
+        <span class="grow"></span>
+        <div class="mode"><span class="on">observer</span><span>assistant</span><span>auto</span></div>
+        <span class="feed"><span class="led"></span>Massive</span>
+        <span class="feed warn"><span class="led"></span>Bookmap idle</span>
+        <span class="feed"><span class="led"></span>Schwab token ✓</span>
+        <span class="chip">08:12 ET</span>
+        <button class="kill">KILL</button>
+      </div>
+      <div class="main">
+        <div class="chartwrap">
+          <div class="chart-head">
+            <span class="lg"><i class="sw" style="background:var(--green)"></i>candles 1m</span>
+            <span class="lg"><i class="sw" style="background:var(--amber)"></i>VWAP</span>
+            <span class="lg"><i class="sw" style="background:var(--green)"></i>PM high</span>
+            <span class="lg"><i class="sw" style="background:var(--red)"></i>PM low</span>
+            <span class="lg"><i class="sw" style="background:#8a8f9c"></i>levels</span>
+            <span class="grow"></span><span>premarket 04:00 → 09:30</span>
+          </div>
+          <svg class="chart" id="chart-premarket" viewBox="0 0 880 360"></svg>
+          <div class="plan-strip">
+            <span class="lvl">PDC <b>33.94</b></span>
+            <span class="lvl">PMH <b>35.05</b></span>
+            <span class="lvl">PML <b>34.55</b></span>
+            <span class="lvl">key <b>35.00</b></span>
+            <span class="lvl">vwap <b>34.97</b></span>
+            <span style="color:var(--muted);font-size:11px">Plan: <b style="color:var(--text)">gap_and_go</b> active above 35.00 · conditional gap_and_crap below 34.55</span>
+            <span class="grow"></span>
+            <button class="mini primary">Open plan.md</button>
+            <button class="mini">Ask Cairo to revise</button>
+          </div>
+        </div>
+        <div class="side">
+          <div class="pane-title"><b>PLAN</b><span class="grow"></span><span style="text-transform:none">2026-10-04</span></div>
+          <div class="card"><div class="h">tradebook</div><div class="b">
+            <div class="kv"><span>selected</span><b>gap_and_go</b></div>
+            <div class="kv"><span>entry pattern</span><b>offer_wall_breakout</b></div>
+            <div class="kv"><span>source</span><b>Bookmap</b></div>
+            <div class="kv"><span>entry window</span><b>09:30–11:30</b></div>
+          </div></div>
+          <div class="card"><div class="h">scenario A</div><div class="b">
+            accepts above PMH 35.05 → watch offer_wall_breakout, T1 = HOD+, invalidation = lose key 35.00
+          </div></div>
+          <div class="card"><div class="h">scenario B</div><div class="b">
+            loses PML 34.55 / VWAP → gap_and_crap, watch offer_reappear below VWAP
+          </div></div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="chat">
+          <div class="pane-title">copilot · premarket-planner<span class="grow"></span><span style="text-transform:none">session: premarket 10-04</span></div>
+          <div class="msgs">
+            <div class="msg user">Build the plan for INTC.</div>
+            <div class="tools">
+              <span class="tool">cairo_market_context ✓</span>
+              <span class="tool">cairo_tradebook_list ✓</span>
+              <span class="tool">cairo_plan_write ✓</span>
+            </div>
+            <div class="msg agent">Plan saved to plans/2026-10-04/INTC.md.<br><br>
+              <b>Gap +3.2%</b> on 2.1M premarket shares; PMH 35.05 / PML 34.55 / key level 35.00.<br><br>
+              <b>Active:</b> gap_and_go while price holds above 35.00 and VWAP — watching
+              <b>offer_wall_breakout</b> above PMH.<br>
+              <b>Conditional:</b> loss of 34.55 → gap_and_crap, watching <b>offer_reappear</b> below VWAP.</div>
+            <div class="draftline">plan levels are drawn on the chart · 4 scenario levels pushed to plan sidecar</div>
+          </div>
+          <div class="input">Ask Cairo…  (plan, levels, news, scenarios)</div>
+        </div>
+        <div class="approvals">
+          <div class="pane-title">approvals<span class="grow"></span><span style="text-transform:none">0 pending</span></div>
+          <div class="observer-note">Observer mode — Cairo proposes and explains only. Switch to
+            <b>assistant</b> to stage orders for approval, or <b>auto</b> for rule-based exits.</div>
+          <div class="hint">Mode changes are instant and are enforced by the engine, not just the UI.</div>
+        </div>
+      </div>
+    </div>
+    <p class="caption"><b>Screen 1 — premarket planning.</b> One active symbol, typed by the trader. The
+      planner agent writes the plan file and its structured sidecar; levels render on the chart and in
+      the strip. No order capability in observer mode.</p>
+  </section>
+
+  <!-- ============================== OBSERVER ============================== -->
+  <section class="screen" id="observer">
+    <div class="window">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">cairo — trading copilot</span></div>
+      <div class="appbar">
+        <span class="brand">CA<i>I</i>RO</span>
+        <span class="sym">INTC</span>
+        <span class="px up">35.18 &nbsp;+1.24 &nbsp;+3.65%</span>
+        <span class="chip">VWAP <b>34.97</b></span>
+        <span class="chip">HOD <b>35.22</b></span>
+        <span class="chip">LOD <b>34.61</b></span>
+        <span class="grow"></span>
+        <div class="mode"><span class="on">observer</span><span>assistant</span><span>auto</span></div>
+        <span class="feed"><span class="led"></span>Massive live</span>
+        <span class="feed"><span class="led"></span>Bookmap ws+file</span>
+        <span class="feed"><span class="led"></span>Schwab ✓</span>
+        <span class="chip">10:41:12 ET</span>
+        <button class="kill">KILL</button>
+      </div>
+      <div class="main">
+        <div class="chartwrap">
+          <div class="chart-head">
+            <span class="lg"><i class="sw" style="background:var(--green)"></i>candles 1m</span>
+            <span class="lg"><i class="sw" style="background:var(--amber)"></i>VWAP</span>
+            <span class="lg"><i class="sw" style="background:var(--blue)"></i>signal</span>
+            <span class="grow"></span><span>regular session 09:30 → 10:45</span>
+          </div>
+          <svg class="chart" id="chart-observer" viewBox="0 0 880 360"></svg>
+          <div class="plan-strip">
+            <span class="lvl">PDC <b>33.94</b></span>
+            <span class="lvl">PMH <b>35.05</b></span>
+            <span class="lvl">PML <b>34.55</b></span>
+            <span class="lvl">key <b>35.00</b></span>
+            <span style="color:var(--muted);font-size:11px">Last signal: <b style="color:var(--purple)">offer_wall_breakout</b> long · score 72 · 10:41:07 · <b style="color:var(--text)">armed</b></span>
+            <span class="grow"></span>
+            <button class="mini">Draw levels</button>
+            <button class="mini">Capture signal</button>
+          </div>
+        </div>
+        <div class="side">
+          <div class="pane-title"><b>SIGNALS</b><span class="grow"></span><span style="text-transform:none">today · 3</span></div>
+          <div class="sig">
+            <div class="sig-top"><span class="badge long">LONG</span><span class="src bm">BOOKMAP</span><b>offer_wall_breakout</b></div>
+            <div class="sig-meta"><span class="score">72 high</span> · @ 35.12 · 10:41:07 · episode 8f21</div>
+            <div class="sig-actions"><button class="mini primary">Explain</button><button class="mini">Stage draft</button></div>
+          </div>
+          <div class="sig">
+            <div class="sig-top"><span class="badge long">LONG</span><span class="src">CAIRO</span><b>orb-high-break</b></div>
+            <div class="sig-meta"><span class="score">100</span> · @ 35.11 · 09:31:02 · orb-1m</div>
+            <div class="sig-actions"><button class="mini">Explain</button><button class="mini">Stage draft</button></div>
+          </div>
+          <div class="sig">
+            <div class="sig-top"><span class="badge long">LONG</span><span class="src">CAIRO</span><b>premarket_high_break</b></div>
+            <div class="sig-meta"><span class="score">90</span> · @ 35.09 · 09:30:14 · gap_and_go</div>
+            <div class="sig-actions"><button class="mini">Explain</button><button class="mini">Stage draft</button></div>
+          </div>
+          <div class="card"><div class="h">position <span class="grow"></span><span style="text-transform:none">read-only source: bmtrader</span></div><div class="b">
+            <div class="pos big">LONG 320 INTC <span class="up">+0.50R</span></div>
+            <div class="kv"><span>entry / last</span><b>35.02 / 35.18</b></div>
+            <div class="kv"><span>stop</span><b>34.70 → BE at +1R</b></div>
+            <div class="kv"><span>T1 / T2</span><b>35.50 (160 sh) / 35.98</b></div>
+            <div class="kv"><span>nearest rule</span><b>be-at-1r (0.50R away)</b></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="chat">
+          <div class="pane-title">copilot · live-copilot<span class="grow"></span><span style="text-transform:none">live session 10-04</span></div>
+          <div class="msgs">
+            <div class="msg synthetic">SIGNAL INTC long offer_wall_breakout score 72 @ 35.12 (high) · episode 8f21</div>
+            <div class="msg agent"><b>Bookmap signal.</b> Buyers cleared the 35.08 offer (8.2k lots, qualified 4.2s),
+              pullback held above the wall and the post-clear high went at 35.12. Value is 2 ticks from PMH (35.05);
+              VWAP agrees (34.97).<br><br>
+              <b>Caution:</b> opposing offer ~1.6× the reference at 35.40 caps the runway before HOD 35.22.
+              Score is 72 (high).<br><br>
+              Observer mode — no order action from me. Want a staged draft ready in case you switch to assistant?</div>
+          </div>
+          <div class="input">Ask Cairo…  (why this signal? what invalidates it?)</div>
+        </div>
+        <div class="approvals">
+          <div class="pane-title">approvals<span class="grow"></span><span style="text-transform:none">0 pending</span></div>
+          <div class="observer-note">Observer mode: signals, explanations and alerts are live; order
+            actions are denied by OpenCode permissions <i>and</i> the engine.</div>
+          <div class="hint">Detected by: Bookmap plugin → WS push :8765 (file backfill as fallback).</div>
+        </div>
+      </div>
+    </div>
+    <p class="caption"><b>Screen 2 — live observer.</b> Bookmap and candle signals in one rail; the agent
+      explains them with engine-supplied numbers only. The position card mirrors whatever app actually
+      executed the trade (read-only).</p>
+  </section>
+
+  <!-- ============================== ASSISTANT ============================== -->
+  <section class="screen" id="assistant">
+    <div class="window">
+      <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="t">cairo — trading copilot</span></div>
+      <div class="appbar">
+        <span class="brand">CA<i>I</i>RO</span>
+        <span class="sym">INTC</span>
+        <span class="px up">35.16 &nbsp;+1.22 &nbsp;+3.60%</span>
+        <span class="chip">VWAP <b>34.98</b></span>
+        <span class="chip">signal <b style="color:var(--purple)">offer_wall_breakout 72</b></span>
+        <span class="grow"></span>
+        <div class="mode"><span>observer</span><span class="on">assistant</span><span>auto</span></div>
+        <span class="feed"><span class="led"></span>Massive live</span>
+        <span class="feed"><span class="led"></span>Bookmap ws+file</span>
+        <span class="feed"><span class="led"></span>Schwab ✓</span>
+        <span class="chip">10:42:03 ET</span>
+        <button class="kill">KILL</button>
+      </div>
+      <div class="main">
+        <div class="chartwrap">
+          <div class="chart-head">
+            <span class="lg"><i class="sw" style="background:var(--green)"></i>candles</span>
+            <span class="lg"><i class="sw" style="background:var(--amber)"></i>VWAP</span>
+            <span class="lg"><i class="sw" style="background:var(--blue)"></i>staged entry</span>
+            <span class="lg"><i class="sw" style="background:var(--red)"></i>stop</span>
+            <span class="lg"><i class="sw" style="background:var(--green)"></i>targets</span>
+            <span class="grow"></span><span>draft D-1042 · expires in 4:32</span>
+          </div>
+          <svg class="chart" id="chart-assistant" viewBox="0 0 880 360"></svg>
+          <div class="plan-strip">
+            <span class="lvl">entry <b style="color:var(--blue)">35.14</b></span>
+            <span class="lvl">stop <b style="color:#ff8a8a">34.70</b></span>
+            <span class="lvl">T1 <b style="color:var(--green)">35.80</b></span>
+            <span class="lvl">T2 <b style="color:var(--green)">36.46</b></span>
+            <span class="lvl">risk <b>$1,000 (1R)</b></span>
+            <span style="color:var(--muted);font-size:11px">tradebook <b style="color:var(--text)">bookmap-offer-wall-breakout</b> · source signal 8f21</span>
+          </div>
+        </div>
+        <div class="side">
+          <div class="pane-title"><b>SIGNALS</b><span class="grow"></span><span style="text-transform:none">1 staged</span></div>
+          <div class="sig">
+            <div class="sig-top"><span class="badge long">LONG</span><span class="src bm">BOOKMAP</span><b>offer_wall_breakout</b></div>
+            <div class="sig-meta"><span class="score">72 high</span> · @ 35.12 · 10:41:07 · armed</div>
+            <div class="sig-meta" style="color:#9cc7ff">draft D-1042 staged · awaiting approval</div>
+            <div class="sig-actions"><button class="mini primary">Open draft</button><button class="mini">Expire</button></div>
+          </div>
+          <div class="card"><div class="h">sizing <span class="grow"></span><span style="text-transform:none">engine-computed</span></div><div class="b">
+            <div class="kv"><span>R per share</span><b>$0.44</b></div>
+            <div class="kv"><span>shares (1R)</span><b>2,272</b></div>
+            <div class="kv"><span>worst case</span><b>−$1,000 (at stop)</b></div>
+            <div class="kv"><span>capped by</span><b>none · BP ok</b></div>
+          </div></div>
+          <div class="card"><div class="h">guardrails</div><div class="b">
+            <div class="kv"><span>mode</span><b style="color:var(--green)">assistant ok</b></div>
+            <div class="kv"><span>token</span><b style="color:var(--green)">fresh (bmtrader)</b></div>
+            <div class="kv"><span>session window</span><b style="color:var(--green)">open</b></div>
+            <div class="kv"><span>daily loss</span><b>0 / $4,000</b></div>
+            <div class="kv"><span>symbol</span><b>INTC (active)</b></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="chat">
+          <div class="pane-title">copilot · trade-manager<span class="grow"></span><span style="text-transform:none">live session 10-04</span></div>
+          <div class="msgs">
+            <div class="msg agent">Staged a draft from the signal — <b>BUY 2,272 INTC</b>, stop-market entry
+              35.14 (+1 tick over the post-clear high), stop <b>34.70</b> (pullback low − 1 tick),
+              T1 35.80 / T2 36.46. Risk exactly 1R = $1,000. Worst case at the stop: −$1,000.<br><br>
+              Sent to Approvals. I will not resubmit if you reject — I'll wait for new evidence.</div>
+            <div class="draftline">draft D-1042 · title: <span style="font-family:var(--mono)">BUY 2,272 INTC stop 34.70 · T1 35.80 (50%) · T2 36.46 · risk $1,000 (1R) · offer_wall_breakout</span></div>
+          </div>
+          <div class="input">Ask Cairo…  (adjust stop, size down to 0.5R…)</div>
+        </div>
+        <div class="approvals">
+          <div class="pane-title">approvals<span class="grow"></span><span style="text-transform:none">1 pending</span></div>
+          <div class="appr">
+            <div class="h"><b>APPROVAL REQUIRED · ENTRY</b><span class="timer">expires 4:32</span></div>
+            <div class="b">
+              <div class="title"><span class="side">BUY</span> 2,272 INTC</div>
+              <div class="rows">
+                <div class="kv"><span>entry</span><b>STOP-MKT 35.14</b></div>
+                <div class="kv"><span>stop</span><b class="r">34.70</b></div>
+                <div class="kv"><span>T1 · 50%</span><b class="g">35.80 (1.5R)</b></div>
+                <div class="kv"><span>T2 · 50%</span><b class="g">36.46 (3R)</b></div>
+                <div class="kv"><span>risk</span><b>$1,000 · 1R</b></div>
+              </div>
+              <div class="srcs">
+                <span class="src bm">BOOKMAP offer_wall_breakout · 72</span>
+                <span class="src">tradebook bookmap-offer-wall-breakout v1</span>
+              </div>
+              <div class="btns">
+                <button class="btn approve">Approve once</button>
+                <button class="btn reject">Reject</button>
+              </div>
+              <div class="hint">Enter = approve · Esc = reject · approvals expire with the draft; nothing submits silently.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption"><b>Screen 3 — assistant approval.</b> The engine stages and validates the draft;
+      OpenCode raises the <span style="font-family:var(--mono)">ask</span>; it lands here as a trade card.
+      Approve → bracket order via ProxyServer → Schwab. Reject → the agent waits for new evidence.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(n, a) { var e = document.createElementNS(NS, n); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  function rng(seed) { var a = seed; return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function bars(seed, n, start, drift, vol) {
+    var r = rng(seed), out = [], c = start;
+    for (var i = 0; i < n; i++) {
+      var o = c, move = (r() - 0.5) * 0.09 + drift;
+      c = o + move;
+      var h = Math.max(o, c) + r() * 0.05, l = Math.min(o, c) - r() * 0.05;
+      out.push({ o: o, h: h, l: l, c: c, v: 0.4 + r() * (vol || 1) });
+    }
+    return out;
+  }
+  function draw(id, o) {
+    var svg = document.getElementById(id); if (!svg) return;
+    var W = 880, H = 360, L = 10, R = 62, T = 14, B = 20;
+    var bs = o.bars, min = Infinity, max = -Infinity;
+    bs.forEach(function (b) { min = Math.min(min, b.l); max = Math.max(max, b.h); });
+    (o.hlines || []).forEach(function (l) { min = Math.min(min, l.p); max = Math.max(max, l.p); });
+    var pad = (max - min) * 0.10; min -= pad; max += pad;
+    var x = function (i) { return L + (i + 0.5) * (W - L - R) / bs.length; };
+    var y = function (p) { return H - B - (p - min) / (max - min) * (H - T - B); };
+    var g;
+    for (g = 0; g <= 4; g++) {
+      var p = min + (max - min) * g / 4;
+      svg.appendChild(el("line", { x1: L, x2: W - R, y1: y(p), y2: y(p), stroke: "#1a1f2b" }));
+      var t = el("text", { x: W - R + 6, y: y(p) + 3, fill: "#6b7280", "font-size": "10" });
+      t.textContent = p.toFixed(2); svg.appendChild(t);
+    }
+    var cw = Math.max(2, (W - L - R) / bs.length * 0.62);
+    bs.forEach(function (b, i) {
+      var col = b.c >= b.o ? "#26a69a" : "#ef5350";
+      svg.appendChild(el("line", { x1: x(i), x2: x(i), y1: y(b.h), y2: y(b.l), stroke: col, "stroke-width": "1" }));
+      var top = y(Math.max(b.o, b.c)), bot = y(Math.min(b.o, b.c));
+      svg.appendChild(el("rect", { x: x(i) - cw / 2, y: top, width: cw, height: Math.max(1, bot - top), fill: col }));
+    });
+    if (o.vwap !== false) {
+      var sum = 0, vol = 0, pts = [];
+      bs.forEach(function (b, i) { var tp = (b.h + b.l + b.c) / 3; sum += tp * b.v; vol += b.v; pts.push(x(i) + "," + y(sum / vol)); });
+      svg.appendChild(el("polyline", { points: pts.join(" "), fill: "none", stroke: "#f0b90b", "stroke-width": "1.5", opacity: ".9" }));
+    }
+    (o.hlines || []).forEach(function (l) {
+      svg.appendChild(el("line", { x1: L, x2: W - R, y1: y(l.p), y2: y(l.p), stroke: l.c || "#6b7280",
+        "stroke-width": l.w || 1, "stroke-dasharray": l.dash || "none", opacity: l.o == null ? 1 : l.o }));
+      if (l.label) { var t = el("text", { x: L + 4, y: y(l.p) - 4, fill: l.c || "#6b7280", "font-size": "10" }); t.textContent = l.label; svg.appendChild(t); }
+    });
+    (o.markers || []).forEach(function (m) {
+      var i = Math.min(m.i, bs.length - 1), cx = x(i), cy = y(m.p);
+      svg.appendChild(el("circle", { cx: cx, cy: cy, r: 5, fill: m.c || "#4a9eff", stroke: "#0b0e11", "stroke-width": "1.5" }));
+      var t = el("text", { x: cx + 8, y: cy - 6, fill: m.c || "#4a9eff", "font-size": "10", "font-weight": "600" });
+      t.textContent = m.label; svg.appendChild(t);
+    });
+    if (o.test) { var tt = el("text", { x: L + 4, y: T + 10, fill: "#3d4450", "font-size": "10" }); tt.textContent = o.test; svg.appendChild(tt); }
+  }
+
+  // ---- screen 1: premarket
+  var pm = bars(7, 66, 34.30, 0.010, 1.6);
+  draw("chart-premarket", {
+    bars: pm,
+    hlines: [
+      { p: 33.94, c: "#8a8f9c", dash: "4 4", label: "PDC 33.94" },
+      { p: 35.05, c: "#26a69a", dash: "6 3", label: "PM high 35.05" },
+      { p: 34.55, c: "#ef5350", dash: "6 3", label: "PM low 34.55" },
+      { p: 35.00, c: "#c9cdd6", dash: "2 3", label: "key 35.00", o: .8 }
+    ]
+  });
+
+  // ---- screen 2: observer RTH
+  var rth = bars(21, 75, 34.96, 0.004, 1.2);
+  draw("chart-observer", {
+    bars: rth,
+    hlines: [
+      { p: 33.94, c: "#8a8f9c", dash: "4 4" },
+      { p: 35.05, c: "#26a69a", dash: "6 3", label: "PM high 35.05" },
+      { p: 34.55, c: "#ef5350", dash: "6 3", label: "PM low 34.55" },
+      { p: 35.00, c: "#c9cdd6", dash: "2 3", o: .7 },
+      { p: 35.22, c: "#4a9eff", dash: "1 4", label: "HOD 35.22", o: .7 }
+    ],
+    markers: [{ i: 71, p: 35.12, label: "offer_wall_breakout · 72", c: "#a78bfa" }]
+  });
+
+  // ---- screen 3: assistant staged
+  var rth2 = bars(21, 75, 34.96, 0.004, 1.2);
+  draw("chart-assistant", {
+    bars: rth2,
+    hlines: [
+      { p: 34.70, c: "#ef5350", dash: "none", w: 1.4, label: "stop 34.70" },
+      { p: 35.14, c: "#4a9eff", dash: "6 3", w: 1.4, label: "entry 35.14 (staged)" },
+      { p: 35.80, c: "#26a69a", dash: "2 3", label: "T1 35.80 (1.5R)" },
+      { p: 36.46, c: "#26a69a", dash: "2 3", label: "T2 36.46 (3R)" }
+    ],
+    markers: [{ i: 71, p: 35.12, label: "signal 8f21 · 72", c: "#a78bfa" }]
+  });
+
+  // ---- tabs
+  var buttons = document.querySelectorAll(".tabs button");
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      buttons.forEach(function (x) { x.classList.toggle("active", x === b); });
+      document.querySelectorAll(".screen").forEach(function (s) { s.classList.toggle("active", s.id === b.dataset.tab); });
+    });
+  });
+  var initial = new URLSearchParams(location.search).get("tab");
+  if (initial) {
+    var pick = document.querySelector('.tabs button[data-tab="' + initial + '"]');
+    if (pick) pick.click();
+  }
+})();
+</script>
+</body>
+</html>

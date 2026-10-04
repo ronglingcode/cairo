@@ -339,3 +339,43 @@ hardcoded in code). Agent files omit `model:` and inherit it. The MVP UI does no
 per-trade model selection.
 
 **Consequences.** Simple configuration and prompt tuning; changing the model is one config edit.
+
+---
+
+## ADR-015 — OpenCode version pinning and upgrade policy
+
+**Status:** Accepted
+
+**Context.** Cairo embeds OpenCode V2 (`@opencode/cli` sidecar + `@opencode/plugin` API). OpenCode
+ships quickly, and its plugin/server API is versioned with the release (V1→V2 replaced both the
+server API and the plugin API). Cairo trades real money, so an upstream update must never silently
+change tool, permission, or streaming behavior.
+
+**Decision.**
+
+- `packages/cairo-plugin` pins `@opencode/plugin` to the same minor as the bundled CLI. Both pinned
+  versions are recorded in the root README of the app repo.
+- Dev mode may use the globally installed `opencode` CLI (fast iteration), but `bun run verify` plus
+  `scripts/smoke.mjs` (tool registration, permission actions, approval round-trip, streaming) guard
+  against drift; if the global CLI drifts from the pin, install the pinned version for testing.
+- The packaged Cairo app bundles an exact, pinned `opencode-cli` binary
+  (`resources/opencode-cli.exe`). It never resolves the user's global install at runtime.
+- **Updates are manual but available in-app.** The app checks the npm registry for newer
+  `@opencode/cli` versions (setting `checkForOpencodeUpdates`, default on) and shows a non-blocking
+  notice with current → available version. "Download & test" stages the binary in
+  `%USERPROFILE%\Cairo\.state\opencode/<version>/`, runs a compatibility smoke (serve + plugin load
+  + a `cairo_health` tool call + permission-action check), and activates only if it passes;
+  otherwise it reports incompatibility and keeps the current binary. The previous version is kept
+  for one-click rollback, and "Ignore this version" is remembered.
+- A version outside the tested range may still install if the smoke passes, with a warning; when the
+  plugin API itself changed, the plugin pin must ship with a new Cairo release instead.
+- Upgrading is never silent or automatic: the in-app flow is user-initiated and gated; plugin-pin
+  bumps run the full plugin smoke, approvals flow, and replay e2e before a Cairo release (previous
+  pin kept as the rollback path).
+- Cairo's own application updates (electron-updater) are independent of OpenCode's release cadence.
+
+**Consequences.** Cairo does not inherit OpenCode updates automatically, but compatible runtime
+updates are offered in-app and install only after a smoke gate, with rollback. Bug/security fixes
+arrive either through that flow or by bumping the plugin pin in a Cairo release. If compatibility
+ever breaks, the trading engine and workspace are unaffected — only the agent layer is at risk, and
+it can be rolled back independently.

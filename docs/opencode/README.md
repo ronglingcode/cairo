@@ -111,6 +111,7 @@ cairo/
 | Doc | Contents |
 | --- | --- |
 | [`architecture-diagram.md`](architecture-diagram.md) | Visual map: system context, signal flow, assistant order sequence, mode enforcement, trade lifecycle, build order. |
+| [`ui-mockup/index.html`](ui-mockup/index.html) | Static, interactive mockup + screenshots of the three MVP screens (premarket · observer · assistant approval). |
 | [`00-decisions.md`](00-decisions.md) | Architecture decision records (what & why). Do not relitigate these without the user. |
 | [`01-architecture.md`](01-architecture.md) | Components, process model, interfaces, event flows, OpenCode mapping. |
 | [`02-data-models.md`](02-data-models.md) | Tradebook YAML, signal model, plans, trade lifecycle, journal, storage layout. |
@@ -137,6 +138,7 @@ verified.
 | 7 | Modes implemented as OpenCode permission rules + engine guardrails | `observer` = deny, `assistant` = ask, `auto` = allow for pre-validated management actions; entries always `ask`. |
 | 8 | Bookmap signals enter Cairo via plugin WS push + JSONL append (T0) | Fast path for latency, file for durability/backfill; the plugin already serializes `bookmap_pattern_signal` JSON; the change is additive. |
 | 9 | One active symbol at a time in the MVP UI | Matches the trader's actual workflow (one stock, full attention); keeps charts, prompts and alerts focused. |
+| 10 | OpenCode runtime is pinned; updates are manual but available in-app | In-app check, staged download, compatibility smoke, one-click rollback; nothing updates silently (ADR-015). |
 
 ## Related repositories (read-only reference)
 

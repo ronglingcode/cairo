@@ -355,9 +355,10 @@ Synthetic messages do not trigger prompt hooks and are not user input — safe f
 
 ## 9. Versioning, failure modes, and guardrails
 
-**Pinning.** `packages/cairo-plugin/package.json` pins the `@opencode/plugin` version to the same
-minor as the bundled `@opencode/cli` (record both in the repo README). Plugin API changes ship in
-OpenCode releases; upgrading is a deliberate task, not incidental.
+**Pinning and updates.** `packages/cairo-plugin/package.json` pins the `@opencode/plugin` version to
+the same minor as the bundled `@opencode/cli` (record both in the repo README). The app offers
+user-initiated runtime updates (staged download + compatibility smoke + rollback, ADR-015); plugin
+API bumps still ship with a Cairo release. Nothing updates silently.
 
 **Failure modes and mitigations.**
 

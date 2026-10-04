@@ -116,6 +116,8 @@ trading and detection continue.
 - Dev: the globally installed `opencode` CLI (`@opencode/cli@2.x`).
 - Packaged: `resources/opencode-cli.exe` copied from the pinned `@opencode/cli` platform package,
   spawned by Electron main with `serve` + `--hostname 127.0.0.1` + a fixed port (default 4096).
+- Manually updatable: the app can stage a newer CLI under `.state/opencode/<version>/`, smoke-test
+  it, and activate/roll back (ADR-015); `resources/opencode-cli.exe` stays the factory fallback.
 - Launched with `cwd = %USERPROFILE%\Cairo`, so the workspace's `AGENTS.md`, `.opencode/agents`,
   `.opencode/skills`, `.opencode/commands`, `.opencode/plugins` and `opencode.jsonc` apply.
 - The renderer connects with `@opencode/client` (`OpenCode.make({ baseUrl })`); event stream via

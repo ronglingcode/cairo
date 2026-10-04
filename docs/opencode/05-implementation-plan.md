@@ -148,9 +148,11 @@ candle detectors keep the MVP usable.
 - **Goal:** the desktop app opens, starts the engine + OpenCode sidecar, and shows chat.
 - **Files:** `apps/desktop/electron/{main.ts,preload.ts,sidecars.ts}`, `apps/desktop/src/**`
   (React + Vite + Tailwind; panels stubbed), `apps/desktop/electron-builder.yml`.
-- **Notes:** dev uses the globally installed `opencode`; packaged uses `resources/opencode-cli.exe`
-  pinned from `@opencode/cli`. Main passes `{enginePort, opencodePort, token}` via preload.
-  Window state persistence; single instance; graceful sidecar shutdown.
+- **Notes:** dev uses the globally installed `opencode`; packaged resolves the active binary via a
+  `resolveOpencodeBinary()` helper (factory `resources/opencode-cli.exe`, later overridable by
+  `.state/opencode/<version>/` for the manual update flow — ADR-015). Main passes
+  `{enginePort, opencodePort, token}` via preload. Window state persistence; single instance;
+  graceful sidecar shutdown.
 - **Acceptance:** `bun run dev` opens a window; chat sends "hello" and streams a reply; killing the
   engine from the app restarts it and the renderer reconnects.
 
@@ -492,8 +494,12 @@ candle detectors keep the MVP usable.
 4. Push plan levels/trade buttons to the Bookmap plugin (same wire shapes as ViteApp).
 5. Firestore read-only watchlist/config import.
 6. macOS packaging (same codebase, `@opencode/cli` darwin binary).
-7. Footprint/heatmap-lite panel if Bookmap is unavailable.
-8. CLI parity (`cairo plan`, `cairo signals`) reusing the same engine + OpenCode sidecar.
+7. OpenCode upgrade flow: in-app update check against the npm registry, versioned sidecar binaries
+   under `.state/opencode/<version>/`, staged download, compatibility smoke (serve + plugin load +
+   `cairo_health` + permission action), activate/rollback UI; plugin-pin bumps still ship with a
+   Cairo release after the smoke/approvals/replay suites pass (ADR-015).
+8. Footprint/heatmap-lite panel if Bookmap is unavailable.
+9. CLI parity (`cairo plan`, `cairo signals`) reusing the same engine + OpenCode sidecar.
 
 ---
 
