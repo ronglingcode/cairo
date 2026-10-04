@@ -1,0 +1,90 @@
+# Cairo: simplified live-trading MVP
+
+October 4, 2026. This replaces the earlier database/history-heavy MVP. The user requested no SQLite, prioritized live trading, and selected **Embedded OpenCode V2 with a Cairo plugin**. Planning only.
+
+[PLAN-DECISIONS.md](PLAN-DECISIONS.md) owns the remaining choices. React with TypeScript and Vite is confirmed for the UI. Cairo consumes a valid Schwab token produced by `bookmap-plugin` (bmtrader), read-only, and calls Schwab directly from its backend; no ProxyServer is required. The plugin owns renewal; Cairo checks expiry and adopts its rotated token. Charting uses Massive REST one-minute aggregate snapshots; Cairo opens no Massive WebSocket because the user's available connection is already used by Bookmap. A stale chart is acceptable and raw-data sharing/live candles are deferred. Management uses trader-authored human-language guidelines per setup, interpreted and enforced by Cairo. The MVP execution boundary is observer entries and exits up to assistant. Engine hosting, Bookmap observation transport details, artifact format/activation, initial examples/additional observations, and focus-symbol/model choices remain under discussion. The scope/storage contract below does not silently settle them.
+
+## The first useful product
+
+A Windows desktop that displays chart data, Bookmap evidence, current positions/working orders, and the conditions of a selected tradebook/active plan. It detects live setups, explains missing evidence, and helps manage a position entered through Cairo, ViteApp, or Schwab.
+
+Traders describe management in their own words, with different styles for different setups. Cairo clarifies material gaps, shows a clause-linked interpretation for review, and attaches the accepted policy to each trade. It enforces supported rules in the selected mode; presets and tier structures are optional examples, not required styles. See [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md).
+
+For entries, Cairo monitors/detects and recommends only; traders execute through their existing platform. For exits, observer mode monitors/recommends and assistant mode stages exact partial/full-close or protective exit-order tickets for human approval. Every broker mutation needs its own approval, including a follow-up after a fill. Engine validation rejects opening/increasing/reversing a position. Assisted entries and automated management are deferred; there is no automatic-management milestone or scaffolding in this MVP.
+
+The lean proposal is one focus chart and one configured model. Held-position monitoring must continue independently of chart focus/age. Leave the heatmap and wall-pattern algorithms in Bookmap; Cairo consumes their observations through a still-needed pattern bridge. The one-minute REST chart loads on selection/manual Refresh and shows its age. It supplies context, not live price triggers. The 1-minute ORB is a separate narrative/synthetic reference; live ORB awaits an agreed fresh source.
+
+## What gets simpler
+
+| Earlier requirement | Simplified MVP |
+| --- | --- |
+| SQLite, tables, repositories, ORM/migrations, adapter packaging spike | No Cairo database dependency |
+| Complete signals/fills/decisions/AI history | Current in-memory state and bounded session timeline |
+| Saved drafts/approvals | In memory; discard on restart |
+| Recording and deterministic captured-session replay | Deferred; small synthetic fixtures suffice for checks |
+| Journal/research modules and background workflows | Deferred; no initial journal/backtest screens |
+| Full immutable version-history archive | Current authored artifacts plus frozen snapshots needed by live attempts/positions |
+| Universal strategy compiler/plugin framework | Supported typed conditions for selected setups, with honest capability gaps |
+| Many packages/roles/skills/commands | Small modules, one live copilot, thin Cairo plugin |
+| Every-tick persistence or append-only audit schema | No automatic feed/history recorder |
+| Assisted entries and rule-triggered automatic management | Observer entries; approved assistant exits/protection only |
+| Cairo Massive WebSocket, live trade-built candles, raw-data relay | REST one-minute snapshot chart; connection remains with Bookmap |
+
+Broker connection is resolved as existing credentials with direct transport. Charting is corrected to REST-only snapshots; the earlier trade-built live candle decision is superseded. The execution release boundary is also resolved. Human artifact format, observation bridge transport, and UI/model scope are discussed separately. Simplification is not a reason to silently replace those choices.
+
+The user will always run `bookmap-plugin` while trading. Cairo treats it as an existing companion for token renewal and Bookmap observations; plugin launching and a standalone Cairo broker login are outside this MVP.
+
+## Keep only essential authored/recovery files
+
+These live in the user's Cairo data directory, outside the repository. Names are illustrative; the tradebook format remains pending.
+
+| File/artifact | Retained contents | Reason |
+| --- | --- | --- |
+| Config | Selected account/source settings, model setting, UI preferences | Avoid configuring each launch |
+| Current tradebooks | Original setup/management narrative, clause-linked reviewed conditions/actions and coverage, current revision | Authored material cannot be rebuilt from a feed |
+| Active plan | Date/symbol, tradebook reference, levels, sizing, stop/targets, optional tiers | Avoid retyping the plan; loading does not arm it |
+| Small recovery checkpoint, e.g. .state/recovery.json | Unresolved attempted broker actions and active-position plan/tier/rule facts not inferable from Schwab | Avoid repeating an uncertain request or applying the wrong management rule after restart |
+
+Use one serialized temporary-file replacement writer for small snapshots. Before a broker request, checkpoint its minimal attempted action; if the write fails, do not send. Prune resolved attempts and confirmed-closed position metadata. The checkpoint is not an event store, history index, or general repository layer.
+
+An unresolved action needs local ID, account/symbol, action kind, exact submitted fields, attempted time, any known broker order ID, and unresolved outcome. An active attachment needs the rule/plan snapshot, broker quantity/basis used for matching, known tier allocation, and already-applied management rule IDs where broker facts cannot reconstruct them. No credentials, complete broker payload history, or explanation transcripts belong there.
+
+Unused approvals and staged drafts are never saved as future trading authority. A resolved accepted order becomes a broker fact; keep only unresolved references and active rule metadata, not a growing order archive.
+
+## Keep live state in memory
+
+REST bar snapshots/as-of context, Bookmap episodes/source status, observer-attempt signal deduplication, current broker positions/orders/recent fills and timestamped returned marks, notifications, session timeline, proposals, drafts, and approvals. No independent Massive trades/quotes cache or stream. Bound caches by the current session or a small explicit limit; refresh bars manually when needed.
+
+OpenCode can keep its own conversations/runtime state. Cairo does not duplicate that storage and does not promise OpenCode is internally database-free. A restored conversation is never authority for the current position or permission to submit.
+
+The cost is deliberate: after restart there is no complete Cairo signal/evidence/decision timeline, replay, or reconstructable journal. Broker history can recover recent fills but not every earlier interpretation or tier attribution. This is acceptable for the live-first MVP.
+
+## Startup and restart behavior
+
+1. Load current artifacts/recovery; start in observer mode with monitoring attachments awaiting current-state confirmation.
+2. Fetch the one-minute REST chart snapshot and connect Bookmap observation/status output. Keep historical chart context separate from live observations; loading/refreshing bars never generates fresh entry/exit triggers.
+3. Fetch selected Schwab positions and working orders, including external/carry-in trades. Broker facts are authoritative.
+4. Reconcile unresolved attempts using known broker IDs/recent orders. **Never automatically retry an uncertain submission.** Ambiguous matching is shown and resolved before conflicting actions.
+5. Match saved position attachments to current facts. Unknown quantity, basis, working orders, or tier attribution requires confirmation.
+6. Discard old drafts and approvals. Rebuild an actionable ticket from fresh state when needed.
+7. Reactivate entry observation attempts or management monitoring only after current state is confirmed. Saved assistant preferences never restore an approval; every exit mutation needs a fresh exact ticket and approval.
+
+If recovery data is unreadable, keep observer/charts usable but block Cairo broker writes until possible pending actions/current state are resolved. Broker-hosted protective orders remain at Schwab according to broker behavior. Cairo-only monitoring and software exits require the app and relevant feeds.
+
+## Keep the harness small
+
+The continuous engine handles feed/account updates and deterministic rule evaluation. It never waits for a model. The copilot runs on user requests and a few meaningful events, merging repeated episode updates rather than inferring every tick.
+
+OpenCode owns model calls, sessions, streaming, tool continuation, compaction, and generic permission interaction. A thin Cairo plugin supplies fresh context, read/proposal/staging tools, event filtering, and exact-ticket approval wiring. The engine owns trading arithmetic, actual broker state, mode policy, validation, and submission.
+
+The supplied plan's baseline is a bundled headless OpenCode server sidecar. Prove the pinned Windows/plugin/client combination; choosing OpenCode does not settle engine hosting. React/TypeScript/Vite is independently confirmed for the UI. No custom OpenAI loop or Agents SDK implementation is needed alongside it.
+
+## Proposed work sequence
+
+- Desktop/engine lifecycle, in-memory snapshot/events, current artifact loader.
+- Schwab position/order visibility and a basic REST snapshot chart.
+- Bookmap observation export, selected personal setup, observer alerts and management recommendations; ORB stays a narrative/synthetic example until fresh data exists.
+- One copilot and collaborative tradebook/plan review.
+- Exact approved exit/protection tickets, minimal recovery checkpoint, tested Schwab exit writer/reconciliation: confirmed MVP completion.
+
+Detailed architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Behaviors/checks: [MVP-SPEC.md](MVP-SPEC.md). Checkpoints: [IMPLEMENTATION.md](IMPLEMENTATION.md).

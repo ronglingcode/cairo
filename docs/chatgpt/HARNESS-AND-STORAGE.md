@@ -1,5 +1,7 @@
 # Why SQLite, and what Cairo's agent harness does
 
+> Earlier rationale retained as background, superseded October 4, 2026: the user requested a live-first MVP **without Cairo-owned SQLite** and selected OpenCode V2 plus a Cairo plugin. The SQLite recommendation below is no longer the MVP plan; its history/journal requirements were removed. Read [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md) for the small file checkpoint/in-memory design and [PLAN-DECISIONS.md](PLAN-DECISIONS.md) for the remaining choices. The custom loop explanation remains explanatory only; OpenCode may keep its own internal runtime storage. The chart now uses Massive REST one-minute snapshots without a Cairo WebSocket; entries are observer-only and exit actions require exact human approval. Older live-candle and automatic-management paths below do not expand this MVP.
+
 Planning explanation, October 4, 2026. Read [the plan comparison](PLAN-COMPARISON.md) for the alternatives. “Bounded OpenAI copilot” describes a proposed operating model, not a product/library name. Nothing in this document has been implemented.
 
 ## 1. Why SQLite belongs in a small local app

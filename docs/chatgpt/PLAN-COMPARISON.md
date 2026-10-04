@@ -1,5 +1,7 @@
 # Comparison with the OpenCode-session plan
 
+> Historical comparison, superseded scope October 4, 2026: the current MVP uses the selected OpenCode V2/Cairo plugin and React/Vite, with no Cairo-owned SQLite or full historical operational database. Read [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md) for retention/live scope and [PLAN-DECISIONS.md](PLAN-DECISIONS.md) for confirmed/pending choices. The old table rows record the proposals being compared; they do not restore database, replay, journal, or custom-runner requirements. Charting is corrected to Massive REST one-minute snapshots, with the user's WebSocket left to Bookmap. Management follows human-language guidelines per setup. Entries are observer-only; exits reach exact-human-approved assistant. Earlier live-stream/preset/automated-execution alternatives below are historical.
+
 Planning review, October 4, 2026. I read all eight documents in [docs/opencode](../opencode/README.md) and compared them with this folder's architecture, specification, research, implementation plan, and handoff. No application implementation was performed, and the other plan was not edited.
 
 The plans agree on the trading foundation. The main disagreement is how much existing agent infrastructure to embed. Several other differences reflect additional preferences recorded in the other session, rather than competing technical conclusions.

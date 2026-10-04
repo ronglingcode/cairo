@@ -1,348 +1,113 @@
-# Cairo MVP behavior and contracts
+# Cairo simplified MVP behavior and contracts
 
-This specification defines the implementation target. Schemas and examples below are planning notation, not implemented source. Read [ARCHITECTURE](ARCHITECTURE.md) and [IMPLEMENTATION](IMPLEMENTATION.md) alongside it.
+Updated October 4, 2026. Read [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [PLAN-DECISIONS.md](PLAN-DECISIONS.md). Planning notation only. OpenCode V2 plus Cairo plugin, React/TypeScript/Vite UI, and no Cairo-owned database are confirmed; remaining design differences are pending.
 
-## 1. Required user journeys
+## 1. Required live journeys
 
-### Collaborate on a tradebook
+**Coauthor a tradebook/plan.** Preserve thesis, entry/context, invalidation, risk, and trader-authored management guidelines in human language. Each setup can have a different management style. Cairo proposes supported structured conditions/actions internally and shows a clause-linked plain-language readback plus deterministic/human/advisory/unsupported coverage. Traders do not need to write a rule language. Clarify material ambiguity; missing hard gates are not satisfied. The active plan binds date/symbol, levels, sizing, stop/targets, optional allocations, and reviewed policy. Save accepted artifacts; keep unaccepted drafts in memory. Freeze active rule snapshots and require review/rearm before replacing them. Exact artifact format/activation flow remains pending. See [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md).
 
-The trader imports a Markdown tradebook or starts a conversation. Cairo preserves its thesis, context, entry/invalidation/risk/management rules, quality filters, and examples. It proposes a structured interpretation with a clause-to-rule mapping and an explicit list of ambiguous/missing conditions.
+**Detect a setup.** Display observed/pending/invalidated conditions and source status. One eligible live Bookmap episode creates one observer signal for the active attempt. Repeated score updates amend it. Entry detection produces alerts/recommendations only; enabling an attempt does not authorize orders. The trader executes entries externally. Disconnect is different from no pattern. Identity/evidence stay in memory; restart clears the attempt, and REST chart snapshots cannot create fresh entry signals. Conditions needing an unavailable live price/candle source show unavailable rather than true.
 
-The trader can edit the narrative, choose observable conditions, attach examples, and compare a proposed revision with the published version. Publishing creates an immutable `TradebookVersion`. A daily plan supplies the symbol, date, concrete levels/targets, risk/quantity, tier allocations, and execution policy. A new setup does not have to match an application-owned strategy name to be documented and used in observer/assistant mode.
+**Manage a trade.** Current Schwab positions/orders appear whether entered through ViteApp, Schwab, or elsewhere. Attach the reviewed interpretation of the selected setup's guidelines, including explicit trade overrides; confirm unknown carry-in context/allocation attribution. Show the source instructions, actual quantity/basis, known protection, targets, triggered conditions, and unenforced clauses. Observer recommends; exit assistant stages exact approval tickets for supported partial/full closes or protective exit-order changes. Each broker mutation requires human approval; no rule submits automatically. Confirming an interpretation does not itself authorize orders. Model latency does not govern rule monitoring.
 
-The compiler shows automation coverage per clause:
+**Approve an action.** Show exact account/symbol/action/quantity/type/prices, affected position/working orders, and reason. Approve this ticket once, then revalidate current facts. A changed plan/position/order arrangement invalidates it. Accepted, working, partial, filled, rejected, and unknown are distinct outcomes.
 
-- `deterministic`: executable with a supported feature/detector and present data.
-- `human`: requires a recorded trader confirmation for a defined scope/window.
-- `advisory`: AI can discuss it, but it cannot independently authorize execution.
-- `unsupported`: requires a new detector/data adapter or clearer definition.
+## 2. Small domain objects
 
-Do not claim "fully automated" when a hard entry/management clause is unresolved. Publishing narrative and arming executable rules are separate operations.
-
-### Detect a live setup
-
-The trader binds a published tradebook to a symbol/date, reviews its capability/data requirements, and arms it. Cairo displays the observed conditions, pending conditions, invalidation, and source status. A new eligible pattern/bar event creates one signal episode with evidence; subsequent updates amend its score/details instead of creating new entry tickets.
-
-Bookmap-dependent rules require a connected, ready observation source. Candle-only rules require the selected Massive inputs. A human context confirmation can make an otherwise discretionary tradebook usable in assistant mode, but cannot magically supply missing depth observations.
-
-### Manage a Schwab trade
-
-Schwab fills/positions populate Cairo whether the trade originated in Cairo, ViteApp, or another Schwab interface. Attach the appropriate plan; confirm unknown carry-in information when needed. Position cards show quantity, basis, planned tiers/stop/targets, actual working orders, current risk/estimates, and triggered rules.
-
-In observer mode, a triggered rule creates an alert and recommendation. In assistant mode, it creates a concrete reviewable ticket. In automated mode, an armed deterministic rule can create an order intent without another prompt. AI explanations may arrive later and do not govern the execution transition.
-
-### Review and replay
-
-After a trade closes, the trader sees the versions used, signals, approvals, fills, management decisions, and notes. AI can summarize process adherence separately from P&L. Replay a recorded input stream through the same evaluator with a fake clock and simulated broker; do not send orders or call the model merely to reproduce deterministic decisions.
-
-## 2. Domain objects
-
-| Object | Essential fields / meaning |
+| Object | Meaning |
 | --- | --- |
-| `TradebookVersion` | Tradebook ID/version, name, narrative Markdown, direction, contextual clauses, entry/invalidation/management rules, quality filters, example references, compiled capability report, detector references |
-| `TradingPlanVersion` | Plan ID/version, tradebook ID/version, trading date, symbol, direction, level/feature bindings, entry window, stop/risk definition, tiers, daily invalidation/rearm policy, execution policy |
-| `DetectorDefinition` | ID/version, required inputs, parameter schema, output schema, event-time semantics, fixture references |
-| `Instrument` | Canonical stock symbol, currency, tick metadata, provider alias mapping |
-| `Bar` | Symbol, interval, start/end milliseconds, OHLC, volume, bar VWAP/null, source, revision, observation sequence, provisional/evaluated status |
-| `FeatureValue` | Feature ID, value/null, event time, receive time, source, quality, evidence reference |
-| `PatternObservation` | Bookmap source identity/mode, symbol, pattern/version, episode/revision, event time, receive time, trigger/reference prices, quality index, contributions, configuration version, available wall/context facts |
-| `Signal` | ID, plan/tradebook versions, symbol/direction, episode key, detection/expiry times, state, evidence, linked intent/trade |
-| `Position` | Account/symbol/lifecycle ID, direction, net quantity, average basis, carry-in flag, realized estimate, broker version, plan attachment, initial risk, logical tiers |
-| `BrokerOrder` | Broker ID, parent/OCO relationships, instructions, original/filled/remaining quantity, prices, status, raw supported payload |
-| `Fill` | Stable provider execution identity or documented composite identity, order/leg IDs, time, price, quantity, instruction; never inferred from quote/target touch |
-| `ActionIntent` | Intent ID, reason/rule/evidence, entry/reduce/close/replace/cancel, quantity/tier, requested order details, source versions, approval/policy decision, state |
-| `AIProposal` | Proposal type, context versions, grounded facts, assumptions, proposed fields, validation result, accepted/rejected/historical state |
-| `JournalEvent` | Local sequence, timestamp, type, subject IDs, fact payload/evidence; interpretation stored separately |
+| Tradebook | Current ID/revision, setup/management narrative, clause-linked reviewed interpretation, capability issues |
+| Active plan | Date/symbol, tradebook reference, concrete levels/risk/stops/targets/tiers/policy |
+| Armed attempt | In-memory identity, frozen snapshot, arming/expiry/rearm state, data requirements |
+| Market/Bookmap snapshot | REST bars/as-of context distinct from live Bookmap episodes; source/event/receive/fetch times, mode/readiness/quality |
+| Signal | In-memory episode/attempt identity and rule evidence/state |
+| Broker snapshot | Selected account, positions, working orders, recent fills needed for management, refresh status |
+| Position attachment | Setup/plan/guideline interpretation snapshot, optional allocations, rule state, matching broker facts |
+| Action ticket | Exact engine-built fields, state revisions, reason/evidence, expiry/approval/submission state |
+| Recovery checkpoint | Unresolved attempted actions and open-position metadata not inferable from Schwab |
 
-Use finite positive real prices; preserve provider fractional precision in observations. Broker order-price rounding uses instrument/order rules, not a blanket rounding of every market price. Whole-share submitted orders are the initial supported writer. A fractional/unsupported broker holding is displayed accurately and does not get rounded into an automated order.
+Use finite valid prices, preserving provider precision until broker order rounding. The initial writer can support whole-share equities; display unsupported/fractional holdings accurately and keep their actions manual. The session timeline is bounded memory, not an audit/journal.
 
-## 3. Tradebook rule language
+## 3. Supported setup semantics
 
-Use a bounded typed expression/sequence model rather than arbitrary code:
+Begin with scalar comparisons, small AND/OR groups, registered Bookmap events, and scoped human confirmations. Unknown data yields unknown, not true. Advisory language cannot authorize execution. Map structured conditions to their narrative clauses; no arbitrary generated JavaScript or universal strategy compiler. Precise vocabulary/publishing flow is still under discussion.
 
-```ts
-type Condition =
-  | { kind: 'compare'; left: ValueRef; op: 'gt'|'gte'|'lt'|'lte'|'eq'; right: ValueRef }
-  | { kind: 'all'|'any'; conditions: Condition[] }
-  | { kind: 'event'; detectorId: string; detectorVersion: string; parameters: object }
-  | { kind: 'hold'; condition: Condition; durationMs: number }
-  | { kind: 'sequence'; steps: Condition[]; withinMs: number }
-  | { kind: 'human'; clauseId: string; scope: 'session'|'attempt'|'position' }
-  | { kind: 'advisory'; clauseId: string };
+Personal reference sources: [Gap Give and Go](../../../Backtest/tradebooks/gap_give_and_go.md), [bid reappear](../../../Backtest/tradebooks/bookmap_patterns/bid_reappear.md), [Bookmap rules](../../../Backtest/tradebooks/bookmap_patterns/bookmap_patterns.md). Preserve key-level entry, bid-reappear/step-up context, either-side-of-VWAP permission, and the trader's explicit stop/day-invalidation/management clauses. Define when any requested LOD/HOD is bound. Core/runner/scalp allocations are optional when requested; no generic breakeven rule is imposed. The existing badge alone does not prove “price never gets below” the original wall. Final initial seed examples remain to be selected; the per-setup human-language management direction is confirmed.
 
-type ValueRef =
-  | { kind: 'literal'; value: number }
-  | { kind: 'binding'; name: string }
-  | { kind: 'feature'; name: string };
-```
+Management interpretation must establish needed condition/source/timing, level binding, action/quantity basis, once/recurrence state, dependencies/precedence, and permitted mode. Clarify only fields required by the actual guideline. Confirmed MVP boundary: reviewed rules monitor and recommend; exit actions require exact human approval. Qualitative clauses without agreed evidence remain advisory or human-confirmed. Never report an unsupported clause as enforced. Follow-up actions contingent on an exit fill wait for broker fill facts, not a target touch or accepted request, and require their own exact approval.
 
-This is illustrative syntax. Implement strict discriminated schemas, bounded nesting (initially depth 4), registered feature IDs, and parameter validation. Restrict the first implementation to `compare`, `all/any`, registered `event`, and `human`; implement `hold/sequence` only for a selected tradebook that needs them. Existing Bookmap detectors already encapsulate their temporal wall behavior; do not duplicate their state machines in this DSL.
+Separate candle reference: 1-minute ORB remains a coauthoring example and synthetic rule fixture, not a required live detector with the REST-only chart. Its intended semantics are a valid frozen 09:30–09:31 Eastern range followed by a fresh crossing of high + buffer for long (short explicitly mirrored). Buffer/window/confirmation/stop/risk/targets are plan inputs. Missing/zero range or missing fresh crossing data is not eligible. Fixture with synthetic fresh inputs: high 101/low 100, prices 100.98 then 101.02, zero buffer -> one long signal. Reading those bars from a REST snapshot alone must not produce that live signal. Live implementation awaits an agreed fresh source.
 
-Logical evaluation is three-valued: true, false, unknown. `all` is false if any child is false, true if every child is true, otherwise unknown. `any` is true if any child is true, false if every child is false, otherwise unknown. A missing feature/source is unknown. Advisory conditions never satisfy a required executable gate.
+## 4. Feed/source contract
 
-Every rule carries `id`, `sourceClauseId`, `phase`, `requiredInputs`, and `capability`. Automated management rules also carry an explicitly permitted action. Hard gates, invalidation, and soft quality scores are distinct. Crossing/sequence memory is scoped to the armed attempt, not reconstructed from an unbounded chat.
+Charting is confirmed as Massive REST aggregated one-minute bars only. The user's available Massive WebSocket is already occupied by `bookmap-plugin`; Cairo opens none, including trade/quote/aggregate subscriptions. Adapt ViteApp's REST client/aggregate mapper; do not activate its trade-built loader, individual-trade backfill, or REST trade polling. Load on symbol/date selection and explicit Refresh; automatic polling/live data sharing is not required. Store normalized bars in a bounded memory snapshot, replace/upsert overlap by symbol/minute without summing volume, and preserve DST-aware session labels.
 
-Feature registry starts with price/quote fields, prior-session/premarket levels, closed candles, regular-session VWAP, 1-minute opening-range high/low/readiness, position quantities/R, and named Bookmap observations. Avoid implementing every possible indicator in the first milestone.
+Show snapshot/no-live-updates status, last successful fetch time, and latest bar time. Preserve older data with an error/age if refresh fails; do not present a forming bar as final or its close as a current tick. These bars and their derived levels/features are timestamped context. Never let loading/refreshing them prove a fresh entry crossing or live exit condition. Source-dependent conditions require their own fresh observations. Bookmap event prices are not continuous quotes. Chart staleness alone does not disable fresh Bookmap-only monitoring or supported explicit trader-requested exits using current broker facts. Raw market-data sharing from Bookmap is deferred; pattern export below remains necessary.
 
-Compiler checks: valid version references, direction consistency, session window ordering, positive/known risk, supported data, no ambiguous quantity/tier action, no contradictory hard rule, all required plan bindings supplied, and each policy permission tied to a specific compiled rule. It returns human-readable issues and a normalized execution graph. An incomplete narrative is still saveable; an incomplete automated policy is not armable.
+Bookmap export/transport remains pending and still needs implementation. Minimum observations include source identity, sequence, live/replay/unknown mode, readiness, heartbeat/reset, detector/config revision, symbol mapping, episode/revision, and real-dollar trigger/reference prices. Preserve nanoseconds safely. No mandatory disk recorder or replay system.
 
-## 4. Two reference tradebooks
+Source-dependent broker actions cannot use unknown/replay/unready Bookmap observations. Validate installed API metadata instead of inferring live mode from timestamps. Observation export must not invoke native broker execution.
 
-### Personal example: Gap Give and Go / bid reappear or step-up
+## 5. Broker facts and optional allocations
 
-Source: [active Backtest tradebook](../../../Backtest/tradebooks/gap_give_and_go.md), [bid reappear](../../../Backtest/tradebooks/bookmap_patterns/bid_reappear.md), [Bookmap global rules](../../../Backtest/tradebooks/bookmap_patterns/bookmap_patterns.md).
+Connection/token ownership is confirmed: consume a valid Schwab token produced by `bookmap-plugin` (bmtrader) from its configured local credential file and make direct backend Schwab calls. Cairo never refreshes or writes the token. Validate presence/expiry before use, adopt rotations, and mark broker state unavailable/stale when authorization is missing, expired, or rejected. Read the selected account, including external/carry-in positions and preexisting protection. Broker positions/orders are authoritative. Coalesce account refresh; deduplicate recent fill observations in memory. Check token rotation/expiry/rejection using fake credentials and broker responses, not live secrets.
 
-The initial imported structure should preserve:
+If the trader's guideline uses tiers/allocations, their quantities sum to current broker quantity. Allocate only filled shares with a declared remainder rule. A partial-exit rule declares whether its fraction refers to initially filled shares or current remaining shares and how rounding works. Unknown outside exits/adds require an agreed allocation or confirmation. A single-position guideline needs no tier model. OCO siblings are alternative exits. Unsupported/ambiguous topology blocks assistant order changes, not position visibility. No complete fill-history ledger/tax-lot accounting is needed.
 
-- Long context and higher-timeframe stock selection, initially trader-confirmed.
-- A chosen key level and entry above that key level.
-- A supported bid reappear or bid step-up observation from Bookmap.
-- No universal VWAP gate: this tradebook permits either side of VWAP.
-- Explicit LOD stop/day invalidation and the instruction not to casually move it.
-- Core target commonly at intraday high; bind a concrete reference/price.
-- Runner trigger/target and scalp/core/runner percentages supplied before entry.
+Use current broker quantity/basis and known stop for simple risk estimates. Any broker-returned marks/quotes retain their source/as-of metadata; do not add a quote stream just for valuation or substitute the stale chart close as a live mark. If no sufficiently fresh mark exists, current unrealized estimates/price-dependent triggers are unavailable. Preserve an active position's original-risk reference only when its rules need R. Targets touched are not confirmed fills.
 
-Do not fill every ambiguous clause automatically. In particular, define whether LOD means the low at arming, at entry, or a later lower low. The existing detector's bid-reappear badge does not by itself prove the narrative condition "price never gets below" the original wall. Preserve that clause as human-confirmed until the observation payload/history can verify it. Import should show this gap.
+## 6. Modes and tickets
 
-An example rule combines human context confirmation, a bid-reappear/step-up detector event, and price above the bound key level. A soft minimum quality-index filter can be a trader option; do not invent one from the published tier labels. The score is not a win probability.
-
-### Candle example: 1-minute opening-range breakout
-
-This is a platform example for other traders, not an imported personal strategy.
-
-1. Capture the valid regular-session 09:30:00-09:31:00 Eastern minute and freeze its high/low for the attempt after Cairo's close watermark.
-2. Before range readiness, entry eligibility is unknown.
-3. Long trigger: an eligible fresh price moves from at/below `rangeHigh + entryBuffer` to above it. Short is explicitly mirrored below `rangeLow - entryBuffer`.
-4. `entryBuffer`, allowed time window, stop choice, quantity/risk, and targets are plan inputs. A closed-bar confirmation variant is a separate parameter, not silently interchangeable with price crossing.
-5. If the first minute is missing, zero-range, or an invalid/gapped load, the example cannot arm; do not guess the opening range.
-6. Only one live signal/entry intent per attempt. Repeated trades above the level do not create repeated orders. Rearm explicitly under the plan's policy.
-7. Historical/backfilled breakouts may be shown as review evidence, never issued as fresh live entry tickets.
-8. Use one logical position tier in the reference example; scalp/core/runner is available as an optional preset for a different management plan.
-
-Synthetic acceptance fixture: first minute high 101.00/low 100.00; zero buffer; next eligible observations 100.98 then 101.02. This creates one long signal, with the stop/target/risk taken from the fixture plan. These numbers are test data, not trading recommendations.
-
-## 5. Signal lifecycle
-
-```text
-draft plan -> armed attempt -> observing -> candidate -> ready
-                         \-> invalidated / expired / disarmed
-ready -> entry intent -> approval pending / policy permitted
-      -> expired / dismissed
-entry intent -> broker pending -> partially filled / filled / rejected / unknown
-filled -> position management
-```
-
-`candidate` is optional for simple event rules. Source unavailable is a monitoring/data state, not proof of setup invalidation. A daily hard invalidation persists for that symbol/direction and cannot be cleared by a new AI draft without an explicit user rearm decision.
-
-Signal identity includes tradebook/plan versions, armed attempt, detector episode or rule crossing episode, and direction. Bookmap episode updates may change quality/evidence while retaining the same signal and intent. Multiple rule interpretations of one episode are visible but cannot silently create multiple entries into the same attempt.
-
-Keep detection time, event time, expiry, evidence operands, and source mode. Entry expiry is a tradebook/plan parameter. A changed plan, expired attempt, or incompatible position state invalidates the old ticket's applicability and requires a new validation/review. Expiry never removes an existing position's protection.
-
-## 6. Bookmap bridge contract
-
-### Existing versus required
-
-Existing `bookmap_pattern_signal` serialization is suitable for a JSONL exporter and observer/replay import. The inspected plugin does not already implement the JSONL writer or live pattern feed. `id` can change on an episode update; `eventTimeNs` is a string; `timestamp` is creation time, not necessarily exchange event time. `referenceWallPriceTick` is not a real-dollar reference price.
-
-The implementation must add a separate observation stream/configuration surface. Suggested additive message contract:
-
-```ts
-type BookmapObservationEnvelope = {
-  schemaVersion: 1;
-  sourceInstance: string;
-  sequence: number;
-  sourceMode: 'live'|'replay'|'unknown';
-  snapshotReady: boolean;
-  detectorVersion: string;
-  configurationVersion: string;
-  type: 'hello'|'status'|'pattern'|'wall_context'|'reset';
-  symbol: string | null;
-  eventTimeNs: string | null;
-  payload: object;
-};
-```
-
-Pattern payload: canonical pattern ID, direction, episode key/revision, real trigger/reference price (`priceUnit: 'real'`), wall peak size, quality index/contributions, relevant captured extreme/levels when available, and source signal ID. `wall_context` supplies only facts required by selected management rules; full depth transport/heatmap rendering is deferred.
-
-Subscription/config: chosen instrument aliases/patterns, key levels/zones, thresholds, tradebook/config version. Add read-only pattern eligibility independent of native execution groups, while preserving existing display-only defaults. The existing detector should remain the authority for its eight patterns. A rule requiring a new context event is unsupported until that event is implemented and fixture-tested.
-
-Validate instrument mapping, snapshot readiness, rule/config versions, and live/replay mode. Heartbeat/status distinguish no pattern from a disconnected source. Reset/replay seek clears temporal observation memory; initial historical snapshots cannot become fresh live signals. Log-tail import has `sourceMode: unknown` unless captured metadata establishes otherwise, so it cannot authorize orders.
-
-The installed API's true replay/live metadata must be established during the bridge milestone. Do not manufacture `live` from a near-current timestamp. If unavailable, keep that source in observer mode and report this specific implementation dependency.
-
-## 7. Broker projection and logical position tiers
-
-REST positions/orders provide authoritative current quantities/status. Account-activity events request a refresh. A target touch is market evidence; a fill is execution evidence. A broker accepted response does not mean filled.
-
-Use selected-account reads; handle working orders entered before today and executed today; build Eastern trading-day history windows; deduplicate fill legs across repeated order-tree reads. Opening fills, adds, partial exits, and reversals are separate events. A reversal closes one lifecycle and opens a new one. A carry-in position with missing prior fills uses its broker basis and flags incomplete history.
-
-Store a plan-defined list of logical tiers with stable IDs, allocation percentages, and management rules. The personal preset uses `scalp`, `core`, and `runner`; the ORB reference uses a single tier. Allocate initial fills by plan percentages with a deterministic rounding/remainder rule whose totals equal the filled whole-share quantity. The personal preset assigns a remainder to core unless changed; other plans specify their remainder tier. Partial fills allocate only filled shares, not requested size. Adds require an explicit allocation; outside/manual exits use a declared allocation order or ask the trader to classify them.
-
-Core and runner management follows the active tradebook. Generic breakeven/ATR trailing rules are not globally enabled. A "strong reversal" remains human/advisory unless the tradebook maps it to a measurable rule. Broker orders may not map one-to-one to tiers; store explicit allocation/order links and display unknown mappings. Never double-count both legs of an OCO as twice the protected quantity.
-
-Risk/P&L examples:
-
-- Initial risk reference: `abs(entryBasis - initialStop) * initialFilledQuantity`; unavailable if the initial stop/basis is unknown. Preserve this denominator for R reporting.
-- Estimated remaining stop risk uses remaining quantity and the agreed/broker stop; proposed protection is labeled separately.
-- Long liquidation estimate uses a valid bid; short uses a valid ask. Fees/commissions and unavailable spreads make the estimate incomplete.
-- Realized estimates use a documented fill-ledger accounting method. Compare against broker totals rather than claiming automatic tax-lot parity.
-
-Automatic rules may reduce/close an assigned tier, adjust a supported protective order, or activate a defined runner. They must account for current broker remaining quantity and already-working closing orders. Conflicting/unknown arrangements fall back to a reviewable assistant action.
-
-## 8. Execution policy and action lifecycle
-
-Policy planning notation:
-
-```ts
-type ExecutionPolicy = {
-  mode: 'observer'|'assistant'|'automated';
-  entry: 'recommend'|'approve';        // MVP automated mode still approves entries
-  management: 'recommend'|'approve'|'rules';
-  allowedRuleIds: string[];
-  allowedActions: ('reduce'|'close'|'replace_stop'|'replace_target')[];
-  maximumPositionQuantity: number;
-  requiresLiveSources: string[];
-};
-```
-
-An observer policy cannot reach a broker write. An assistant approval is for exact intent/version/quantity/side/order details, not unlimited future orders. An automated policy applies only to named deterministic rules and current plan/position attachment. Changing to observer disables pending policy execution immediately. User pause stops new Cairo actions while broker-hosted orders remain visible.
-
-```text
-proposed -> validated -> approval_pending | policy_permitted
-         -> dismissed | invalid
-approved/permitted -> submitting -> accepted -> working -> partial -> filled
-                              \-> rejected | unknown
-```
-
-Save the intent before submission. Accept a `commandId` on UI commands and reuse the same intent for retries of that command. Do not promise exactly-once delivery at the broker: if the network fails after submission, show unknown, query/reconcile known order IDs/recent orders, and request manual resolution if identity is ambiguous. Never blindly repeat an unknown submit.
-
-Before sending, revalidate actual quantity, instrument/side, price fields, working orders, applicable rule/policy versions, and required source mode. This is local order correctness; no distributed fences/account-ownership framework is needed.
-
-Use one execution queue per account/symbol and account for quantities reserved by in-flight/accepted intents until the broker projection catches up. Two locally triggered rules cannot independently allocate the same remaining shares. OCO alternatives are counted by topology, not summed as independent exits. An unknown intent keeps its reservation until reconciled or explicitly resolved. Outside broker actions remain possible and must be reconciled; ambiguous arrangements pause new conflicting actions.
-
-Initial supported order shapes:
-
-1. Whole-share equity entry with explicit market/limit/stop type and a tested protective bracket when appropriate.
-2. Broker-native stop/limit exits linked to known positions/tiers.
-3. Human-approved partial/full closing order.
-4. Rule-based partial/full close or stop replacement only for the tested managed order topology.
-
-Reuse ViteApp's pure factories as examples; preserve actual broker status and IDs. Do not submit unsupported combinations as generic JSON from the model. Shorts depend on the broker's acceptance; Cairo does not invent borrow availability.
-
-Cancel/replace and closing against live OCOs require explicit topology handling. Avoid leaving a full-size closing stop working after a separate closing order, or removing all protection without making the transition visible. Schwab does not become an atomic order coordinator merely because Cairo wraps several requests. Test sequential failures; if a layout cannot be safely handled by the implemented writer, keep that action assistant/manual.
-
-A broker-hosted protective stop is preferred to a software-only protective stop. Automated Bookmap/thesis exits are supplementary rule actions; they require Cairo/feeds running. On restart, restore visibility, reconcile account state, and explicitly resume automated rules before new software-managed actions.
-
-## 9. AI harness contract
-
-### Tools
-
-| Tool | Inputs / bounded result | Effect |
+| MVP mode | Entries | Exits / protective management |
 | --- | --- | --- |
-| `get_tradebook` | ID/version -> narrative + structured rules | Read |
-| `get_plan` | ID/version -> plan + capability issues | Read |
-| `get_market_snapshot` | Symbol -> selected features, source times/quality | Read |
-| `get_bars` | Symbol/interval/range, maximum 500 bars | Read |
-| `get_bookmap_context` | Symbol/episode -> recent pattern/wall evidence | Read |
-| `get_position` | Position ID -> quantity, basis, tiers, working orders | Read |
-| `get_recent_events` | Symbol/subject and limit <= 50 | Read |
-| `propose_tradebook_revision` | Existing version + draft clauses/rules | Save draft only |
-| `propose_plan` | Published tradebook + plan bindings | Save draft only |
-| `propose_management_action` | Position/version + suggested intent/evidence | Save proposal only |
-| `draft_journal_review` | Trade ID + factual/interpretive sections | Save draft only |
-| `propose_experiment` | Versioned setup, data scope, parameters | Save draft only |
+| Observer | Detect / recommend; trader enters externally | Monitor / recommend |
+| Exit assistant | Detect / recommend; trader enters externally | Stage supported exact exit/protection tickets; human approval for every broker mutation |
 
-No model tool is a general shell, arbitrary network request, SQL executor, or direct broker submit. App commands handle publication, arming, policy selection, approvals, and execution. This is a small domain surface, not a general coding harness.
+Assisted entries and automated management are deferred. No auto mode, standing rule execution permission, entry writer, or automation scaffolding is required. Engine validation rejects opening, increasing, or reversing a position in every MVP mode, independently of UI or OpenCode tool permissions. Identify exits using current broker side/quantity and pending protection; BUY can close a short and SELL can open a short, so order side alone is not the check.
 
-All tools return an envelope: `ok`, result/error code, `asOf`, subject versions, source/evidence references, and completeness. Limit output size; query extra data deliberately. Public tool JSON schemas use strict mode, closed objects, and required nullable fields where needed by OpenAI's schema subset. Local domain validation remains mandatory. Use one sequential tool dispatch policy initially; independent-read parallelism can be added later if measured latency justifies it.
+Stage → validate → request exact approval → revalidate → checkpoint attempted action → submit → broker acceptance/status/fills or rejection/unknown.
 
-### Run flow
+Drafts/unused approvals stay in memory. Before the actual broker request, save the minimal attempt successfully. Keep known broker IDs; prune resolved attempts. A failed checkpoint prevents submission. An accepted order may remain working; it is not “unresolved” merely because unfilled.
 
-1. Choose mode-specific instructions/tools and load current factual context.
-2. Start a Responses request with configured model, streaming, bounded output, strict tools or structured final output, and application-owned conversation state.
-3. Preserve returned output items, including reasoning items needed for continuation.
-4. Execute only completed validated tool calls; append a result with the correct `call_id`.
-5. Continue within the mode's step/time budget.
-6. Validate the complete final draft/proposal and current subject versions.
-7. Persist outcome/usage/tool trace and publish it. Historical results remain readable but cannot auto-apply.
+Serialize per account/symbol and reserve in-flight/unresolved quantities. Duplicate command/approval/episode update cannot submit another local copy. Recheck current quantity, exact fields, working orders, rule/policy state, and source requirements.
 
-Use `store: false` with application-maintained context if selected; retain encrypted reasoning items when required for stateless continuation by the chosen model/API. Verify the exact SDK representation during implementation. Local persistence is independent of provider state.
+Timeout-after-send is unknown: reconcile known IDs/recent orders; **never blindly retry**. Local files/deduplication do not promise exactly-once broker execution. Ambiguous matching requires resolution before conflicting actions. Support only a few tested partial/full-close and protective exit-order create/cancel/replace shapes for existing positions; unsupported stop/OCO transitions remain manual. Do not cancel/modify external entry orders in this MVP. Prefer broker-hosted protection. Changes after a fill need a new ticket and approval, not an automatic chained action.
 
-A monitor/manager result should separate `facts`, `interpretation`, `missingInputs`, and `proposal`. Facts cite supplied evidence IDs. Numeric calculations used for orders/risk are produced or checked by core, not trusted from prose. A quality index or AI confidence label cannot be presented as a calibrated probability of profit.
+## 7. OpenCode/Cairo plugin contract
 
-### Failure behavior
+Use the selected OpenCode V2 runtime, proposed as a pinned bundled server sidecar. The plugin is a thin adapter:
 
-| Failure | Required behavior |
-| --- | --- |
-| OpenAI unavailable/timeout/refusal/incomplete result | Mark interpretation unavailable; deterministic alerts/policies continue |
-| Unknown tool or invalid arguments | Structured tool error; no side effect |
-| Model draft has unsupported predicate | Save unresolved draft; do not arm that rule |
-| Position/plan changed during inference | Show result as historical; refresh before actionable review |
-| Bookmap disconnected/unready/replay | Dependent signal/action gates unknown or disabled; preserve broker protection |
-| Massive reconnect/backfill | Restore context; suppress historical entry submissions |
-| Schwab refresh/login failure | Visible degraded broker state; stop new Cairo submissions until resolved |
-| Unknown submit/cancel/replace result | Reconcile status; no blind order retry |
-| App exits | Monitoring/software exits stop; distinguish broker working orders from Cairo policy |
+- Read current tradebook/plan, bounded market/Bookmap evidence, positions/working orders, and recent session events.
+- Interpret per-setup human-language management guidelines into a clause-linked proposal, clarify gaps, and show a readback for review. Propose artifact revisions, entry observations, or exit recommendations; stage engine-built exit/protection tickets only.
+- Wire exact-ticket approval and submission through engine policy. Generic tool allowance or model prose is not trading authority.
+- Supply current context before requests/continuations and filter/coalesce meaningful engine events.
 
-## 10. Local API and events
+One live copilot is sufficient initially. OpenCode owns model-loop/session infrastructure; do not also implement a custom OpenAI loop or Agents SDK. It may retain internal session storage; Cairo adds no chat database.
 
-Routes are implementation targets, not generated code:
+Bound context/run frequency and handle cancellation/stale results. Numeric action/risk fields come from engine code. Partial streaming text never applies a plan/order. AI unavailability does not stop charts/account refresh/deterministic alerts/named rules.
 
-| Route | Purpose |
-| --- | --- |
-| `GET /health` | Runtime readiness/capabilities |
-| `GET /snapshot` | UI bootstrap state + event sequence |
-| `GET /tradebooks/:id/versions/:version` | Read published/draft tradebook |
-| `POST /tradebooks/drafts` | Save draft |
-| `POST /tradebooks/:id/publish` | Validate/publish immutable version |
-| `POST /plans` | Save/validate daily plan |
-| `POST /plans/:id/arm`, `/disarm` | Attempt lifecycle |
-| `GET /market/:symbol/bars` | Normalized chart history |
-| `GET /positions`, `GET /orders` | Current selected-account projections |
-| `POST /positions/:id/attach-plan` | Explicit versioned attachment |
-| `POST /positions/:id/policy`, `/pause` | Select/arm/pause execution policy |
-| `POST /intents/:id/approve`, `/dismiss` | Exact action review |
-| `POST /broker/connect`, `/callback`, `/refresh` | Desktop OAuth and account refresh |
-| `POST /bookmap/connect` | Observation source/configuration |
-| `POST /ai/runs`, `/ai/runs/:id/cancel` | Streamed copilot tasks |
-| `GET /trades/:id/timeline` | Facts/evidence/journal |
-| `GET /events` (WebSocket upgrade) | Chart/application/chat updates |
+## 8. In-memory API and retention
 
-Command bodies include `commandId` and expected relevant object version. A version mismatch returns a conflict with the updated object. This prevents a stale draft approval, not a multi-user coordination system.
+Small local routes: health/snapshot, bars/current context, authored artifacts, plan arm/disarm, account/position/orders, plan attachment, ticket stage/approve/dismiss, broker refresh, and engine events. Use OpenCode client events for chat/permissions; do not duplicate its session API. No journal/history/replay/database-query routes.
 
-Event envelope: `schemaVersion`, local `sequence`, `type`, `observedAt`, optional `eventTime`, subject IDs, versions, and payload. Events include source status, bar upsert/correction, pattern observed/updated, tradebook/plan state, signal state, position/order/fill changes, management trigger, intent state, AI deltas/completion, and journal update.
+Commands include local identity and relevant state revision. Events include runtime-instance identity and in-memory sequence. Buffer while loading snapshot; after disconnect/restart fetch fresh state. No durable event replay requirement.
 
-WS subscribe/snapshot bootstrap must not miss intermediate events. Buffer on client before snapshot, then apply only events with larger sequence. After a runtime restart or reconnect, refresh the snapshot. Critical notifications have durable IDs for local deduplication. High-rate display updates can coalesce; distinct signals/fills/intent transitions cannot.
+Keep current config/tradebooks/active plan and one small recovery file. Unresolved action fields: local/account/symbol identity, exact submitted request, attempt time, any broker ID, uncertain outcome. Active attachments: plan/rule snapshot, known tiers, matching quantity/basis, already-applied rule state if not recoverable from broker. Prune resolved/closed entries; no event archive.
 
-## 11. SQLite and recording
+Restart starts in observer mode, refetches market/account facts, reconciles uncertainty without automatic resend, confirms attachments, discards drafts/approvals/old signals, and requires monitoring reactivation. OpenCode history cannot revive an approval. Unreadable recovery blocks writes until resolved; charts/observer remain usable.
 
-Initial tables: `tradebook_versions`, `plan_versions`, `armed_attempts`, `signals`, `broker_orders`, `fills`, `positions`, `position_tiers`, `execution_policies`, `action_intents`, `domain_events`, `ai_sessions`, `ai_messages`, `ai_runs`, `ai_proposals`, `bars`, `session_metadata`, `journal_notes`, and a schema-migration table.
+## 9. Meaningful acceptance
 
-Version rows are immutable; editing creates another row. Separate provider JSON from normalized fields, preserve meaningful broker statuses, and keep credential files outside the project/database/model context. Use small transactions for intent/event/projection updates. High-frequency raw observations go to the asynchronous recorder rather than one synchronous SQLite transaction per tick.
+1. Different setups' human-language management guidelines produce different reviewed policies; each rule traces to its clause, no generic style is inserted, and unsupported/ambiguous hard gates stay visible.
+2. An eligible Bookmap episode creates one signal; updates do not duplicate tickets. ORB is an example/fixture until fresh crossing data is available.
+3. Cairo opens no Massive WebSocket or trade-polling substitute. REST refresh replaces/upserts bars without double-counting volume; snapshot age is visible and stale bars never issue fresh entry/exit triggers.
+4. Replay/unknown/unready sources never drive live writes.
+5. External positions/stops/OCOs appear; acceptance is distinct from fill.
+6. Partial/outside fills cannot cause excess closes or silently wrong tiers.
+7. Entry signals never submit broker actions. Observer writes nothing; exit assistant submits only approved current exact exit/protection tickets. Opening/increasing/reversing requests are rejected even with generic tool permission or ticket approval.
+8. Duplicate approval sends once locally; unknown submit is reconciled without blind retry.
+9. Failed checkpoint prevents sending; restart discards approvals and requires rearming.
+10. AI stalls and renderer reload do not stop the engine.
+11. Windows package starts without developer tooling or Cairo database dependencies.
 
-Recorder headers identify trading calendar, provider capabilities, detector/config versions, tradebook/plan versions, starting broker snapshot, and whether the recording includes raw depth, summarized walls, pattern events, or only bars. Recorded inputs carry arrival sequence and both times. Replaying pattern events tests Cairo's reaction to patterns; it does not independently validate Bookmap's raw-depth detector.
-
-## 12. Acceptance scenarios
-
-1. A tradebook can be imported/edited/published without rewriting its thesis into a generic setup.
-2. Narrative-to-rule mapping exposes missing human/detector conditions; unsupported hard rules cannot be armed for automation.
-3. Gap Give and Go's executable rules do not acquire an unintended VWAP filter or breakeven stop.
-4. The ORB synthetic crossing creates one signal and repeated above-range prints create no duplicate entry.
-5. Corrected `AM` candles replace values/volume; a late correction cannot retroactively issue a fresh live entry.
-6. Backfill/reconnect restores charts but cannot submit a stale entry from the gap.
-7. Bookmap episode score updates replace the observation and retain one action identity.
-8. Price ticks are converted once; nanoseconds survive parsing; symbol aliases are explicit.
-9. Replay/unknown Bookmap events never reach live Schwab writes. Disconnect is different from no pattern.
-10. Schwab startup recognizes external/carry-in positions and supported standalone/OCO protection.
-11. Partial/canceled/replaced orders retain fills without duplication; reversals split position lifecycles.
-12. Tier quantities always sum to broker remaining quantity; an ambiguous outside exit is visible.
-13. Observer produces zero writes. Assistant writes only after exact approval. Automated writes only from named armed deterministic rules.
-14. Repeated user commands or detector updates cannot submit a second copy of the same intent.
-15. Unknown submit outcome is reconciled/displayed, never blindly retried.
-16. Closing/replacing tested OCO orders does not create excess closing quantity; sequential failures remain visible and actionable.
-17. A stale AI result cannot arm/change a newer tradebook/plan/position policy.
-18. Slow/unavailable OpenAI does not delay deterministic signals or permitted management.
-19. Restart restores timeline/working-order visibility but requires explicit automation resume.
-20. Deterministic replay produces the same signal/intent trace from the same recorded observed inputs, without live network/order effects.
-
-Keep these as meaningful fixtures and integration checks. No live orders are part of the automated test suite.
+Use small synthetic/fake broker/provider fixtures. No live orders/paid inference are required by automated checks; historical audit/replay tests are deferred.

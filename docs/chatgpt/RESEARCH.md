@@ -1,5 +1,7 @@
 # Cairo research notes
 
+> Historical research, updated scope October 4, 2026: current MVP decisions are in [PLAN-DECISIONS.md](PLAN-DECISIONS.md) and [SIMPLIFIED-MVP.md](SIMPLIFIED-MVP.md). The user selected OpenCode V2 plus Cairo plugin and React/Vite. Earlier custom-loop, SQLite, full history, recording/replay, and journal/research requirements are background, not implementation instructions. Cairo live state stays in memory with only necessary authored/recovery files; OpenCode owns its internal session storage. Charting is now REST one-minute snapshots only: no Cairo Massive WebSocket/live candle builder, as Bookmap uses the user's available connection. Entries are observer-only and exits require exact assistant approval; earlier streaming and automation proposals below are superseded.
+
 Research date: October 4, 2026. This is a planning deliverable; no application has been implemented.
 
 ## Findings that determine the design
