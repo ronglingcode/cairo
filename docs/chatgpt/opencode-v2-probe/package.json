@@ -1,0 +1,9 @@
+{
+  "name": "cairo-opencode-v2-probe",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@opencode/plugin": "2.0.22",
+    "@opencode/client": "2.0.22"
+  }
+}
