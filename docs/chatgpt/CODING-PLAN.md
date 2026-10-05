@@ -231,13 +231,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 ### Broker visibility and snapshot chart — T09–T15
 
-- [ ] **T09 — Adapt the Massive one-minute REST reader**
+- [x] **T09 — Adapt the Massive one-minute REST reader**
 
 **Depends:** T03, T07. **Repository:** Cairo.
 
 **Deliver:** Backend REST aggregate fetch/mapping/pagination from the reuse map. Cache by symbol/minute and replace/upsert snapshots. Preserve fetch/bar times and empty/error results; no streaming module, trade endpoint polling, or forming-minute reconstruction.
 
 **Verify:** Pagination, empty results, overlap replacement without volume accumulation, and failed refresh retaining the old snapshot. Instrument the fake network boundary to confirm no WebSocket/trade polling. **Commit:** `feat(T09): load Massive one-minute REST snapshots`.
+
+**Verified (2026-10-04):** Added an HTTPS-only Massive aggregate reader with bearer-header auth, one-minute OHLCV validation, same-host pagination, symbol/date cache, overlap replacement, explicit empty snapshots, and failed-refresh retention. Fake HTTP tests assert pages, no query-string credential, no trades/WebSocket requests, and no volume accumulation. The key is supplied through the backend-only environment getter; no actual key or provider call was used. `npm run test` passed (21 checks) and typecheck passed. Auth and endpoint shape follow [Massive REST docs](https://massive.com/docs/rest) and [stocks aggregate docs](https://www.massive.com/docs/rest/stocks/aggregates/custom-bars).
 
 - [ ] **T10 — Render the basic one-minute snapshot chart**
 
