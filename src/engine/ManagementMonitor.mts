@@ -83,6 +83,11 @@ export class ManagementMonitor {
         const state = this.states.get(key) ?? { status: "waiting" as const }
         const sourceText = attachment.interpretation.clauses.find(clause => clause.clauseId === rule.clauseId)!.sourceText
         const matchingRecommendation = recommendations.find(item => item.id === state.recommendationId)
+        if (state.status === "awaiting-fill" && state.brokerOrderId && !matchingRecommendation) {
+          const recovered = snapshot.brokerAttempts.find(item => item.brokerOrderId === state.brokerOrderId && item.ticket.accountId === attachment.accountId && item.ticket.positionId === attachment.positionId && item.ticket.sourceClauseId === rule.clauseId)
+          if (recovered?.state === "filled") { state.status = "filled"; state.brokerOrderId = undefined }
+          if (recovered && ["rejected", "canceled"].includes(recovered.state)) { state.status = "waiting"; state.brokerOrderId = undefined }
+        }
         if (state.status === "awaiting-fill" && state.brokerOrderId && matchingRecommendation && snapshot.broker.state === "connected" && snapshot.brokerFacts?.accountId === attachment.accountId) {
           const age = this.now() - Date.parse(snapshot.brokerFacts.asOf)
           const fills = new Map(snapshot.brokerFacts.recentFills.filter(fill => Number.isFinite(age) && age >= 0 && age <= 60_000 && fill.orderId === state.brokerOrderId && fill.symbol === attachment.symbol && fill.side === (attachment.baseline?.side === "short" ? "buy" : "sell") && Number.isFinite(fill.quantity) && fill.quantity > 0 && Date.parse(fill.filledAt) >= Date.parse(matchingRecommendation.createdAt) && Date.parse(fill.filledAt) <= this.now()).map(fill => [fill.fillId, fill]))

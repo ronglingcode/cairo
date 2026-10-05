@@ -66,3 +66,6 @@ Only actual matching approved fills reconcile remaining shares/identified alloca
 
 ## T44
 Read-only reconciliation checks known broker IDs first. Missing IDs use bounded exact recent-order matching; even a single candidate requires explicit identity review because an outside order may look identical. Ambiguous/absent/delayed results retain uncertainty and quantity blocking. Reviewed binding verifies current account, exact shape and attempt time. Five synthetic reconciliation/writer checks and typecheck pass; no resend path exists.
+
+## T45
+Startup is observer-first: authored files and essential recovery load, pending checkpoints become uncertain, frozen guidance restores paused, and all drafts/signals/approvals are discarded. Fresh current holdings and explicit quantity/allocation review are required to resume; unresolved attempts block it. Closed positions stay closed. Seven restart/corruption/writer checks and typecheck pass; no approval or submission resumes automatically.

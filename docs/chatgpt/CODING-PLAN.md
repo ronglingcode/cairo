@@ -551,7 +551,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Accepted-but-timeout, absent ID, duplicate-looking external order, delayed visibility, unknown cancel/replace, and ambiguous matching all avoid blind resend. **Commit:** `feat(T44): reconcile uncertain broker actions`.
 
-- [ ] **T45 — Restore attachments and reconcile on restart**
+- [x] **T45 — Restore attachments and reconcile on restart**
 
 **Depends:** T14, T26, T40, T44. **Repository:** Cairo.
 
@@ -612,6 +612,7 @@ Do not mark tasks complete because time/context is running out. Leave precise ne
 ## 8. Prompt to give the implementation agent
 
 > Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16, T21–T23 and T26–T38 are complete. Resume at T39 after 11:50 PM Pacific October 4, 2026. Continue the remaining authorized tasks, each separately committed. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; broadcast only BID_STEP_UP and BID_REAPPEAR when that phase begins. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
+
 
 
 

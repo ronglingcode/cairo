@@ -56,6 +56,7 @@ export class PositionGuidance {
   reconfirm(id: string, expectedRevision: string, factsRevision: number, initialQuantity: number, reviewed: boolean): void {
     if (reviewed !== true) throw new Error("Current position and allocations must be reviewed")
     this.change(id, expectedRevision, attachment => {
+      if (this.engine.getSnapshot().brokerAttempts.some(item => item.ticket.accountId === attachment.accountId && item.ticket.symbol === attachment.symbol && !["filled", "canceled", "rejected"].includes(item.state))) throw new Error("Resolve broker-pending/uncertain attempts before resuming guidance")
       const position = this.currentPosition(attachment.accountId, attachment.positionId, factsRevision)
       if (!Number.isSafeInteger(initialQuantity) || initialQuantity < position.quantity) throw new Error("Initial quantity is invalid")
       const checked = validateManagementPolicy(attachment.interpretation.management, attachment.interpretation, attachment.markdown!)

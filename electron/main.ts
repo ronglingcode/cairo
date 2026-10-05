@@ -1,3 +1,4 @@
+import { RecoveryBootstrap } from "../src/engine/RecoveryBootstrap.mts"
 import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
 import { ProtectionCoordinator } from "../src/engine/ProtectionCoordinator.mts"
 import { ExitTickets } from "../src/engine/ExitTickets.mts"
@@ -29,7 +30,7 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const monitor = new ManagementMonitor(engine, guidance)
 const tickets = new ExitTickets(engine)
@@ -46,6 +47,7 @@ let waker: CopilotWaker | undefined
 let writer: ExitWriter | undefined
 let protection: ProtectionCoordinator | undefined
 let uncertainty: UnknownReconciler | undefined
+let startupRecovery: RecoveryBootstrap | undefined
 let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
@@ -104,8 +106,14 @@ app.whenReady().then(async () => {
   const orderReader = new SchwabOrderReader(http, tokenProvider)
   brokerCoordinator = new BrokerRefreshCoordinator(engine, accountReader, orderReader, { intervalMs: configStore.values.brokerPollIntervalMs })
   const recovery = new RecoveryStore(app.getPath("userData"))
-  try { await recovery.load() } catch { engine.updateSnapshot({ recoveryError: "Recovery file needs manual resolution before broker writes" }) }
-  if (recovery.available) {
+  let recoveryReady = false
+  try {
+    await recovery.load()
+    await recovery.change(current => ({ ...current, attempts: current.attempts.map(item => ({ ...item, ticket: { ...item.ticket, state: "invalidated" }, state: item.state === "checkpointed" ? "unknown" : item.state })) }))
+    recoveryReady = true
+  } catch { engine.updateSnapshot({ recoveryError: "Recovery file needs manual resolution before broker writes" }) }
+  if (recovery.available && recoveryReady) {
+    startupRecovery = new RecoveryBootstrap(engine, recovery, monitor)
     protection = new ProtectionCoordinator(engine, recovery)
     uncertainty = new UnknownReconciler(engine, recovery, http, tokenProvider)
     apiServer.setUnknownReconciler(uncertainty)
@@ -157,6 +165,7 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+
 
 
 

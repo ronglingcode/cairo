@@ -13,6 +13,7 @@ function describe(predicate: Predicate): string {
 export function ManagementPanel({ snapshot }: { snapshot: CairoSnapshot }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [initialQuantities, setInitialQuantities] = useState<Record<string, string>>({})
   async function command(path: string, value: unknown) {
     setBusy(true); setError(null)
     try {
@@ -44,7 +45,7 @@ export function ManagementPanel({ snapshot }: { snapshot: CairoSnapshot }) {
         </div>
       })}
       {attachment.state === "active" && <button className="quiet-button" disabled={busy} onClick={() => void command("pause", { id: attachment.id, expectedRevision: attachment.revision })}>Pause guidance</button>}
-      {attachment.state === "paused" && <button className="quiet-button" disabled={busy} onClick={() => void command("reconfirm", { id: attachment.id, expectedRevision: attachment.revision, factsRevision: snapshot.brokerFactsRevision, initialQuantity: attachment.initialQuantity, reviewed: true })}>I reviewed current quantity and allocations · resume</button>}
+      {attachment.state === "paused" && <><label>Actual initial filled shares <input aria-label={`Initial filled shares for ${attachment.symbol}`} type="number" min={1} step={1} value={initialQuantities[attachment.id] ?? String(attachment.initialQuantity ?? "")} onChange={event => setInitialQuantities({ ...initialQuantities, [attachment.id]: event.target.value })} /></label><button className="quiet-button" disabled={busy} onClick={() => void command("reconfirm", { id: attachment.id, expectedRevision: attachment.revision, factsRevision: snapshot.brokerFactsRevision, initialQuantity: Number(initialQuantities[attachment.id] ?? attachment.initialQuantity), reviewed: true })}>I reviewed current quantity and allocations · resume</button></>}
     </article>)}
     <p className="chart-footnote">Observation confirmation supplies evidence. Exit recommendations require a separate exact ticket approval.</p>
     <details><summary>Session timeline ({snapshot.managementTimeline.length})</summary>{snapshot.managementTimeline.slice(-20).reverse().map(event => <p key={event.id}>{new Date(event.at).toLocaleTimeString()} · {event.symbol} · {event.text}</p>)}</details>

@@ -92,5 +92,5 @@ export class ExitWriter {
       if (state !== attempt.state || filledQuantity !== attempt.filledQuantity) void o.recovery.updateAttempt(attempt.id, { state, filledQuantity, detail: `Broker facts: ${state}` }).then(() => this.publish()).catch(() => this.publish("Recovery update failed; unresolved reservations retained"))
     }
   }
-  private publish(error: string | null = null): void { this.options.engine.updateSnapshot({ brokerAttempts: this.options.recovery.snapshot.attempts, recoveryError: error, executionReady: this.options.recovery.available }) }
+  private publish(error: string | null = null): void { const facts = this.options.engine.getSnapshot().brokerFacts; this.options.engine.updateSnapshot({ brokerAttempts: this.options.recovery.snapshot.attempts, recoveryError: error, executionReady: this.options.recovery.available && Boolean(facts?.ordersComplete) }) }
 }
