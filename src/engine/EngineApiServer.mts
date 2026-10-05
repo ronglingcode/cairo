@@ -6,6 +6,7 @@ import { PreparationConflictError, PreparationStore, PreparationValidationError 
 import type { CairoDomainTools } from "../copilot/CairoDomainTools.mts"
 import type { CopilotChat } from "../copilot/CopilotChat.mts"
 import type { PositionGuidance, AttachRequest } from "./PositionGuidance.mts"
+import type { ManagementMonitor } from "./ManagementMonitor.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -27,6 +28,7 @@ export class EngineApiServer {
   private domainTools: CairoDomainTools | undefined
   private chat: CopilotChat | undefined
   private guidance: PositionGuidance | undefined
+  private monitor: ManagementMonitor | undefined
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -39,6 +41,7 @@ export class EngineApiServer {
   setDomainTools(tools: CairoDomainTools): void { this.domainTools = tools }
   setCopilotChat(chat: CopilotChat): void { this.chat = chat }
   setPositionGuidance(guidance: PositionGuidance): void { this.guidance = guidance }
+  setManagementMonitor(monitor: ManagementMonitor): void { this.monitor = monitor }
 
   async loadPreparation(): Promise<boolean> {
     if (!this.preparationStore) return false
@@ -124,7 +127,7 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
-    if (["/management/attach", "/management/pause", "/management/reconfirm"].includes(url.pathname) && request.method === "POST") {
+    if (["/management/attach", "/management/pause", "/management/reconfirm", "/management/confirm", "/management/rearm"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.guidance) { this.json(response, 503, { error: "Guidance service unavailable" }); return }
       void this.managementCommand(url.pathname, request, response)
@@ -239,6 +242,8 @@ export class EngineApiServer {
       if (route === "/management/attach") this.guidance!.attach(value as unknown as AttachRequest)
       if (route === "/management/pause") this.guidance!.pause(String(value.id), String(value.expectedRevision))
       if (route === "/management/reconfirm") this.guidance!.reconfirm(String(value.id), String(value.expectedRevision), Number(value.factsRevision), Number(value.initialQuantity), value.reviewed === true)
+      if (route === "/management/confirm") { if (!this.monitor) throw new Error("Monitoring unavailable"); this.monitor.confirm(String(value.id), String(value.expectedRevision), Number(value.factsRevision), String(value.conditionId), value.value as boolean) }
+      if (route === "/management/rearm") { if (!this.monitor) throw new Error("Monitoring unavailable"); this.monitor.rearm(String(value.id), String(value.expectedRevision), String(value.ruleId)) }
       this.json(response, 200, { ok: true })
     } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Guidance request failed" }) }
   }

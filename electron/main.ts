@@ -17,12 +17,15 @@ import { CopilotChat } from "../src/copilot/CopilotChat.mts"
 import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
 import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
+import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle() } })
 const guidance = new PositionGuidance(engine)
+const monitor = new ManagementMonitor(engine, guidance)
 const apiServer = new EngineApiServer(engine)
 apiServer.setPositionGuidance(guidance)
+apiServer.setManagementMonitor(monitor)
 let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined

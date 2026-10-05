@@ -24,3 +24,6 @@ reconciles outside quantity/basis/side/fill changes to paused or closed state.
 Source edits and chart focus cannot replace a position's frozen guidance.
 Typecheck and two targeted lifecycle/style checks passed. Review UI follows in
 T28/T34; persistence/restart reactivation follows in the recovery tasks.
+
+## T27
+Deterministic per-position monitoring, bounded confirmations, once-only recommendations, and dependencies gated by actual matching fills. Targeted monitor fixtures and typecheck pass. Broker writes remain absent.

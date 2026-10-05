@@ -218,6 +218,8 @@ export interface CairoSnapshot {
   tradebooks: Tradebook[]
   attachments: PositionAttachment[]
   tickets: ExitTicket[]
+  management: import("../engine/ManagementMonitor.mts").RuleReadback[]
+  recommendations: import("../engine/ManagementMonitor.mts").ManagementRecommendation[]
 }
 
 export interface EngineEvent {

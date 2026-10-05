@@ -401,7 +401,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Two positions keep different styles; source edits do not hot-swap them; external adds/exits expose uncertainty; fractional holdings remain visible/manual. **Commit:** `feat(T26): bind reviewed guidance to current positions`.
 
-- [ ] **T27 — Monitor management conditions and propose exits**
+- [x] **T27 — Monitor management conditions and propose exits**
 
 **Depends:** T21, T26. **Repository:** Cairo.
 
@@ -612,3 +612,4 @@ Do not mark tasks complete because time/context is running out. Leave precise ne
 ## 8. Prompt to give the implementation agent
 
 > Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16, T21, T23, and T29–T32 are complete. Resume at T22. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; no plugin changes now. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
+

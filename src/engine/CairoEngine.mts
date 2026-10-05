@@ -59,6 +59,8 @@ export class CairoEngine {
       tradebooks: [],
       attachments: [],
       tickets: [],
+      management: [],
+      recommendations: [],
     }
   }
 
