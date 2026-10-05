@@ -261,13 +261,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added a backend reader for the Bookmap credential file's `schwab.access_token` and epoch-millisecond `expires_at`, using the configured selected account and a 60-second expiry lead. It rereads on each call to adopt rotations/replacement files; missing/malformed/expired/rejected states remain waiting/stale, with no token content in status. The reader never refreshes or writes the file. Synthetic tests cover BOM, malformed JSON, expiry boundary, rotation, replacement, invalidation, and missing account. `npm run test` passed (25 checks) and typecheck passed. Inspected the sibling Bookmap credential implementation only; no real credential file or token was read.
 
-- [ ] **T12 — Read the explicitly selected Schwab account**
+- [x] **T12 — Read the explicitly selected Schwab account**
 
 **Depends:** T11. **Repository:** Cairo.
 
 **Deliver:** Direct backend HTTP account/account-number mapping reads and explicit account selection. Normalize equity positions including long/short/fractional/external holdings. Preserve raw identity/status needed for later validation. Do not default to the first returned account.
 
 **Verify:** Multiple accounts and external/carry-in positions select correctly; auth failure marks stale without retrying a write. **Commit:** `feat(T12): project selected Schwab account positions`.
+
+**Verified (2026-10-04):** Added direct backend reads for Schwab account-number mappings and the explicitly configured account's positions. The reader requires exactly one account match, fetches by its broker hash, normalizes long/short/fractional equity quantities and optional marks, skips non-equity holdings, and preserves a stable broker position identity. Unknown/missing account, malformed data, and auth rejection remain stale; 401/403 invalidates the token and does not retry. Order coverage is explicitly incomplete pending T13. Synthetic multi-account and holdings tests passed; no broker network request or real token was used. `npm run test` passed (27 checks) and typecheck passed. Reference patterns were checked against Cairo's read-only ViteApp adapter; live account-number availability still requires the user's account/API permissions.
 
 - [ ] **T13 — Project complete working orders and relevant recent fills**
 
