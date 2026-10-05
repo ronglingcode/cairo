@@ -48,3 +48,6 @@ Authoritative exit validation binds account, position, symbol, side, current fac
 
 ## T38
 Exact in-memory tickets contain engine-built payload/affected protection, source, origin, runtime, meaningful facts fingerprint and 60-second expiry. Rule staging requires current scoped evidence; explicit trader staging uses capability-protected controls. Repeated command/episode staging deduplicates. Material changes, stale reads, expiry or dismissal cannot authorize requests. Timestamp-only availability polls no longer change the broker fact revision. All 78 checks, typecheck and production build pass; synthetic browser checks confirmed observation readback, exact 5-share SELL draft, dismissal and artifact acceptance. The disposable management preview is available with npm run preview:fake -- --management. No broker writer exists.
+
+## T39
+Exact one-time approval binds all ticket details and current facts through an engine digest. Renderer capability is required; generic allowances cannot approve. Four approval/staging checks and typecheck pass. Submission remains disconnected.

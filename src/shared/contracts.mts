@@ -165,6 +165,7 @@ export interface ExitOrderShape {
 }
 
 export interface ExitTicket {
+  reviewHash?: string
   positionId?: string
   createdAt?: string
   runtimeInstanceId?: string

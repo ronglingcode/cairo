@@ -137,11 +137,12 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
-    if (["/tickets/stage", "/tickets/dismiss"].includes(url.pathname) && request.method === "POST") {
+    if (["/tickets/stage", "/tickets/dismiss", "/tickets/approve"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(value => {
         if (!this.tickets) throw new Error("Exit staging unavailable")
         if (url.pathname === "/tickets/stage") this.json(response, 200, { ticket: this.tickets.stage(value as unknown as ExitIntent, "trader") })
+        else if (url.pathname === "/tickets/approve") this.json(response, 200, { ticket: this.tickets.approve(String(value.id), String(value.expectedHash)), submitted: false })
         else { this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
       }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Ticket request failed" })); return
     }
