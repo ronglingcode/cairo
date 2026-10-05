@@ -28,6 +28,8 @@ export async function injectTradingContext(
       preparation.markdown = String(preparation.markdown ?? "").slice(0, 6000)
       preparation.truncated = true
     }
+    if (Array.isArray(bounded.attachments)) bounded.attachments = bounded.attachments.map((item: Record<string, unknown>) => ({ id: item.id, accountId: item.accountId, positionId: item.positionId, symbol: item.symbol, state: item.state, revision: item.revision, narrativeHash: item.narrativeHash, initialQuantity: item.initialQuantity, markdown: String(item.markdown ?? "").slice(0, 400), interpretationSummary: JSON.stringify(item.interpretation).slice(0, 1200), truncated: true }))
+    if (Array.isArray(bounded.recommendations)) bounded.recommendations = bounded.recommendations.slice(-10).map((item: Record<string, unknown>) => ({ id: item.id, symbol: item.symbol, quantity: item.quantity, state: item.state, sourceClauseId: item.sourceClauseId, reason: String(item.reason ?? "").slice(0, 300) }))
     serialized = JSON.stringify(bounded)
   }
   if (serialized.length > MAX_CONTEXT_CHARACTERS - 2000) throw new Error("Cairo context exceeds the supported size")

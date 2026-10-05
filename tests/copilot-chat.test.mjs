@@ -107,6 +107,8 @@ test("actual pinned runtime streams, cancels, and reuses a Cairo session after r
   await chat.send("Discuss the one-minute chart", "actual-command-002")
   await until(() => !chat.snapshot.busy && chat.snapshot.outcome === "succeeded")
   assert.ok(chat.snapshot.messages.some(message => message.text.includes("Local fake model")))
+  await chat.notify("Machine observation only. Assess the latest account change; no trading approval.", "synthetic-fixture-001")
+  await until(() => !chat.snapshot.busy && chat.snapshot.outcome === "succeeded")
   await chat.stop()
   await sidecar.restart()
   await chat.connect()

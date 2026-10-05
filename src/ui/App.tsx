@@ -217,6 +217,9 @@ export function App() {
         <aside className="copilot-column">
           <div className="copilot-heading"><div><span className="eyebrow">CAIRO COPILOT</span><h2>Trade assistant</h2></div><span className={`online-tag ${connectionTone(copilotStatus.state)}`}>{sourceLabel(copilotStatus.state).toUpperCase()}</span></div>
           <div className="chat-runtime">
+            <label><input type="checkbox" checked={snapshot?.copilotWake.enabled ?? false} disabled={!snapshot || !apiBaseUrl} onChange={event => { void fetch(`${apiBaseUrl}/copilot/events`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify({ enabled: event.target.checked }) }).then(response => { if (!response.ok) setCopilotRestartError("Event updates could not be changed") }).catch(() => setCopilotRestartError("Event updates unavailable")) }} /> AI updates for account changes</label>
+            {snapshot?.copilotWake.error && <p role="status">{snapshot.copilotWake.error}</p>}
+            {snapshot?.copilotWake.pending && <p role="status">Latest changes queued for AI review</p>}
             <button className="quiet-button" disabled={!apiBaseUrl || restartingCopilot} onClick={() => void restartCopilot()}>{restartingCopilot ? "Restarting…" : "Restart AI"}</button>
             {copilotRestartError && <p className="chart-error" role="status">{copilotRestartError}</p>}
           </div>

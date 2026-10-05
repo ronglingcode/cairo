@@ -36,3 +36,6 @@ The owned-session propose_guidance tool stages complete engine-validated interpr
 
 ## T34
 Capability-protected explicit accept/reject for note and guideline artifacts; saved notes use existing serialized CAS. Guidance acceptance can attach/replace only the reviewed current position, revision and initial shares. Artifacts preserve exact bytes. Completed actions conservatively carry across edits/renames of the same close/protection order type; pending broker actions block replacement. Four artifact/review fixtures and typecheck pass.
+
+## T35
+Opt-in account/recommendation updates coalesce into one latest bounded summary, at most every 15 seconds while AI is available and idle. Repeated timestamps/marks do not wake. Cancellation or uncertain delivery pauses updates; machine metadata grants no approval. Current context includes frozen per-position guidance with explicit truncation. Verified actual pinned session.synthetic requires msg_ IDs and streams a local fake-provider response. Four chat/waker checks and typecheck pass.

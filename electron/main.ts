@@ -1,3 +1,4 @@
+import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
 import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
@@ -23,7 +24,7 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const monitor = new ManagementMonitor(engine, guidance)
 const timeline = new ManagementTimeline(engine, text => { if (Notification.isSupported()) new Notification({ title: "Cairo management recommendation", body: text }).show() })
@@ -33,6 +34,7 @@ apiServer.setManagementMonitor(monitor)
 let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined
+let waker: CopilotWaker | undefined
 let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
@@ -113,6 +115,8 @@ app.whenReady().then(async () => {
     configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
   })
   apiServer.setCopilotChat(chat)
+  waker = new CopilotWaker(engine, chat)
+  apiServer.setCopilotWaker(waker)
   apiServer.setCopilotRestarter(async () => { await chat!.stop(); const ok = await sidecar!.restart(); if (ok) await chat!.connect(); return ok })
   apiServer.setDomainTools(new CairoDomainTools(engine, async id => {
     const client = sidecar?.client
@@ -129,5 +133,6 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+
 
 

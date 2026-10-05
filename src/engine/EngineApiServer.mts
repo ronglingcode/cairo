@@ -8,6 +8,7 @@ import type { CopilotChat } from "../copilot/CopilotChat.mts"
 import type { PositionGuidance, AttachRequest } from "./PositionGuidance.mts"
 import type { ManagementMonitor } from "./ManagementMonitor.mts"
 import type { PolicyReview } from "./PolicyReview.mts"
+import type { CopilotWaker } from "../copilot/CopilotWaker.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -32,6 +33,8 @@ export class EngineApiServer {
   private monitor: ManagementMonitor | undefined
   private policyReview: PolicyReview | undefined
   setPolicyReview(review: PolicyReview): void { this.policyReview = review }
+  private waker: CopilotWaker | undefined
+  setCopilotWaker(waker: CopilotWaker): void { this.waker = waker }
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -130,6 +133,10 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (url.pathname === "/copilot/events" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.readCommand(request).then(value => { if (!this.waker || typeof value.enabled !== "boolean") throw new Error("Event settings unavailable"); this.waker.setEnabled(value.enabled); this.json(response, 200, { ok: true }) }).catch(() => this.json(response, 400, { error: "Invalid event setting" })); return
+    }
     if (["/proposals/accept", "/proposals/reject"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.reviewProposal(url.pathname, request, response); return

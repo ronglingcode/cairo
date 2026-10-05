@@ -109,6 +109,16 @@ export class CopilotChat {
       }
     })
   }
+  notify(text: string, id: string): Promise<void> {
+    return this.serial(async () => {
+      if (!this.client || !this.state.sessionId || !this.state.connected || this.state.busy) throw new Error("Copilot is unavailable or busy")
+      this.state.busy = true; this.state.outcome = null; this.publish()
+      try {
+        await this.client.session.synthetic({ sessionID: this.state.sessionId, id: `msg_${id}`, text: text.slice(0, 8000), description: "Cairo observed account changes", metadata: { cairoMachine: true, grantsApproval: false }, delivery: "queue", resume: true }, { signal: AbortSignal.timeout(10_000) })
+        await this.refresh(this.generation)
+      } catch { this.fail("Event update delivery is uncertain; automatic updates paused. Inspect the session before enabling them again."); throw new Error("Event delivery uncertain") }
+    })
+  }
   cancel(): Promise<void> {
     return this.serial(async () => {
       if (!this.client || !this.state.sessionId || !this.state.connected) throw new Error("Reconnect before canceling")
@@ -182,3 +192,5 @@ export class CopilotChat {
   private fail(error: string): void { this.streamAbort?.abort(); this.state.connected = false; this.state.error = error; this.publish() }
   private publish(): void { this.options.engine.updateSnapshot({ copilotChat: this.snapshot }) }
 }
+
+

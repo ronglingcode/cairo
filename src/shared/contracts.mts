@@ -213,6 +213,7 @@ export interface CairoSnapshot {
   broker: SourceStatus
   brokerFacts: BrokerFacts | null
   copilot: SourceStatus
+  copilotWake: import("../copilot/CopilotWaker.mts").WakeStatus
   copilotChat: CopilotChat | null
   positions: BrokerPosition[]
   tradebooks: Tradebook[]
@@ -530,6 +531,7 @@ export class FakeObservationSource implements ObservationPort {
   }
   get subscriberCount(): number { return this.handlers.size }
 }
+
 
 
 
