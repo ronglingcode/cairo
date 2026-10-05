@@ -112,12 +112,14 @@ export interface InterpretationClause {
   sourceText: string
   coverage: ClauseCoverage
   explanation: string
+  mandatory?: boolean
 }
 
 export interface TradebookInterpretation {
   tradebookId: string
   narrativeHash: string
   clauses: InterpretationClause[]
+  management?: import("../engine/ManagementPolicy.mts").ManagementPolicy
 }
 
 export interface Tradebook {

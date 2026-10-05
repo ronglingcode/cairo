@@ -62,6 +62,12 @@ snapshot and fresh broker facts, with their identities and timestamps.
 
 ## Revised task sequence
 
+Latest instruction (October 4): finish T22, T26–T28 and T33–T38 as ten separate
+task commits, then continue the remaining work at 11:50 PM America/Los_Angeles.
+For T17/T20/T25, broadcast and consume only `BID_STEP_UP` and `BID_REAPPEAR`.
+Other plugin detectors are outside Cairo's broadcast selection. V-shape removal
+is being handled in a separate Bookmap chat.
+
 Preserve existing task IDs and completed commits. Start with **T23** (notes and
 narrative workspace), then **T29 → T30 → T31 → T32** to deliver the copilot with
 preparation and broker context. Next implement **T21 → T22 → T26 → T27 → T28 →

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { PositionAttachment, Tradebook, TradebookInterpretation } from "../shared/contracts.mts"
+import { validateManagementPolicy } from "./ManagementPolicy.mts"
 
 export interface ActivePlan {
   revision: string
@@ -136,6 +137,7 @@ function validateInterpretation(input: unknown, id: string, narrativeHash: strin
     if (!markdown.includes(clause.sourceText)) throw new Error("Interpretation clause is not linked to narrative text")
     seen.add(clause.clauseId)
   }
+  if (value.management) validateManagementPolicy(value.management, value, markdown)
   return structuredClone(value)
 }
 

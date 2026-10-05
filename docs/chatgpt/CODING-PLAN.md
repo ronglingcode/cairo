@@ -359,7 +359,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Missing or stale inputs never become true; stale candle refresh cannot fire a live rule; confirmations are scoped to the actual position/condition; broker-fill conditions remain usable with a stale chart. **Commit:** `feat(T21): evaluate supported rules with source coverage`.
 
-- [ ] **T22 — Define the internal guideline interpretation and validator**
+- [x] **T22 — Define the internal guideline interpretation and validator**
 
 **Depends:** T08, T21. **Repository:** Cairo.
 
