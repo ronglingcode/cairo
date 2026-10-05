@@ -25,7 +25,7 @@ async function harness(t, selectedAccountId, responses) {
 test("Schwab maps the explicitly selected account and normalizes long, short, fractional and carry-in holdings", async (t) => {
   const { reader, http } = await harness(t, "acct-2", [
     { status: 200, body: [{ accountNumber: "acct-1", hashValue: "hash-1" }, { accountNumber: "acct-2", hashValue: "hash-2" }] },
-    { status: 200, body: { securitiesAccount: { positions: [
+    { status: 200, body: { securitiesAccount: { currentBalances: { liquidationValue: 25000, buyingPower: 8000 }, positions: [
       { instrument: { assetType: "EQUITY", symbol: "AAPL", cusip: "cusip-a" }, longQuantity: 2.5, shortQuantity: 0, averagePrice: 100, marketValue: 275 },
       { instrument: { assetType: "EQUITY", symbol: "XYZ", cusip: "cusip-x" }, longQuantity: 0, shortQuantity: 3, averagePrice: 20, marketValue: -66 },
       { instrument: { assetType: "EQUITY", symbol: "CARRY", cusip: "cusip-c" }, longQuantity: 1, shortQuantity: 0, averagePrice: 5 },
@@ -40,6 +40,9 @@ test("Schwab maps the explicitly selected account and normalizes long, short, fr
   assert.equal(result.facts.positions[1].markPrice, 22)
   assert.equal(result.facts.positions[0].positionId.includes("cusip-a"), true)
   assert.equal(result.facts.ordersComplete, false)
+  assert.deepEqual(result.facts.accountAvailability, { liquidationValue: 25000, buyingPower: 8000, updatedAt: result.facts.asOf })
+  assert.equal(result.facts.positions[0].markSource, "Schwab account market value")
+  assert.equal(result.facts.positions[0].markUpdatedAt, result.facts.asOf)
   assert.match(http.requests[1].url, /accounts\/hash-2\?fields=positions$/)
   assert.equal(http.requests.every((request) => request.init.headers.Authorization === "Bearer fake-token"), true)
 })

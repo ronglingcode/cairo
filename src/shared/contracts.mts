@@ -73,6 +73,7 @@ export interface BrokerWorkingOrder {
   ocoGroupId: string | null
   filledQuantity?: number
   brokerStatus?: string
+  positionEffect?: string
 }
 
 export interface BrokerFill {
@@ -92,7 +93,14 @@ export interface BrokerFacts {
   workingOrders: BrokerWorkingOrder[]
   recentFills: BrokerFill[]
   ordersComplete: boolean
+  accountAvailability?: AccountAvailability
   source: SourceStatus
+}
+
+export interface AccountAvailability {
+  liquidationValue: number | null
+  buyingPower: number | null
+  updatedAt: IsoTimestamp
 }
 
 export type ClauseCoverage = "deterministic" | "human" | "advisory" | "unsupported"
@@ -358,6 +366,7 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
       ocoGroupId: nullableText(o.ocoGroupId, `brokerFacts.workingOrders[${index}].ocoGroupId`),
       ...(o.filledQuantity === undefined ? {} : { filledQuantity: finite(o.filledQuantity, `brokerFacts.workingOrders[${index}].filledQuantity`, 0) }),
       ...(o.brokerStatus === undefined ? {} : { brokerStatus: text(o.brokerStatus, `brokerFacts.workingOrders[${index}].brokerStatus`) }),
+      ...(o.positionEffect === undefined ? {} : { positionEffect: text(o.positionEffect, `brokerFacts.workingOrders[${index}].positionEffect`) }),
     }
   })
   const recentFills = item.recentFills.map((raw, index): BrokerFill => {
@@ -373,6 +382,15 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
     }
   })
   if (typeof item.ordersComplete !== "boolean") throw new ContractError("brokerFacts.ordersComplete", "expected a boolean")
+  let accountAvailability: AccountAvailability | undefined
+  if (item.accountAvailability !== undefined) {
+    const a = record(item.accountAvailability, "brokerFacts.accountAvailability")
+    accountAvailability = {
+      liquidationValue: a.liquidationValue === null ? null : finite(a.liquidationValue, "brokerFacts.accountAvailability.liquidationValue"),
+      buyingPower: a.buyingPower === null ? null : finite(a.buyingPower, "brokerFacts.accountAvailability.buyingPower"),
+      updatedAt: isoTimestamp(a.updatedAt, "brokerFacts.accountAvailability.updatedAt"),
+    }
+  }
   return {
     accountId: text(item.accountId, "brokerFacts.accountId"),
     asOf: isoTimestamp(item.asOf, "brokerFacts.asOf"),
@@ -380,6 +398,7 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
     workingOrders,
     recentFills,
     ordersComplete: item.ordersComplete,
+    ...(accountAvailability === undefined ? {} : { accountAvailability }),
     source: sourceStatus(item.source, "brokerFacts.source"),
   }
 }

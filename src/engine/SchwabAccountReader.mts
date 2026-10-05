@@ -38,6 +38,9 @@ export class SchwabAccountReader {
       const updatedAt = new Date(this.now()).toISOString()
       const positions = normalizePositions(account.positions, hashValue, updatedAt)
       const source: SourceStatus = { source: "broker", state: "connected", updatedAt, detail: "Selected Schwab account read; order coverage pending" }
+      const balances = account.currentBalances && typeof account.currentBalances === "object" && !Array.isArray(account.currentBalances)
+        ? account.currentBalances as Record<string, unknown>
+        : {}
       const facts = parseBrokerFacts({
           accountId: authorization.accountId,
           asOf: updatedAt,
@@ -45,6 +48,11 @@ export class SchwabAccountReader {
           workingOrders: [],
           recentFills: [],
           ordersComplete: false,
+          accountAvailability: {
+            liquidationValue: finiteOrNull(balances.liquidationValue),
+            buyingPower: finiteOrNull(balances.buyingPower),
+            updatedAt,
+          },
           source,
         })
       return {
@@ -115,6 +123,7 @@ function normalizePositions(input: unknown, accountHash: string, markUpdatedAt: 
 
 function nonnegative(value: unknown, name: string): number { if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error(`Schwab ${name} is invalid`); return value }
 function positive(value: unknown, name: string): number { if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new Error(`Schwab ${name} is invalid`); return value }
+function finiteOrNull(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null }
 function safeMessage(error: unknown): string {
   return (error instanceof Error ? error.message : "Schwab account read failed").replace(/Bearer\s+\S+/gi, "Bearer [redacted]").slice(0, 240)
 }

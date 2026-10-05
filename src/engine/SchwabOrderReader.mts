@@ -148,6 +148,7 @@ function visitOrder(
         filledQuantity,
         status,
         brokerStatus,
+        positionEffect: typeof leg.positionEffect === "string" ? leg.positionEffect : "UNKNOWN",
         orderType: typeof raw.orderType === "string" ? raw.orderType : "UNKNOWN",
         parentOrderId: parentId,
         ocoGroupId: groupId,

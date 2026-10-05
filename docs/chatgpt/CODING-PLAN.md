@@ -291,13 +291,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added interval polling, protected manual refresh, overlapping-request coalescing, in-flight shutdown cleanup, stale status on failed reads, and retention of last-known positions/orders. Snapshot exposes separate refresh sequence and fact revision; unchanged positions/orders/fills keep the revision stable while mark freshness metadata can advance. Schwab marks carry their source and fetch timestamp and are never labeled live. The engine bounds retained broker positions/orders/fills. Synthetic tests cover coalescing, stable/changed revisions, stale retention, manual API capability, and stopped timers. `npm run test` passed (34 checks); typecheck and production build passed. No Schwab reads were made.
 
-- [ ] **T15 — Display positions, protection, and account availability**
+- [x] **T15 — Display positions, protection, and account availability**
 
 **Depends:** T06, T14. **Repository:** Cairo.
 
 **Deliver:** All selected-account positions and known working protection/recent fills, supported versus manual actions, and broker availability. Held positions remain visible while chart focus changes; chart close is never shown as an unqualified live mark. Add essential order overlays where useful.
 
 **Verify:** Inspect long/short/fractional, carry-in, OCO, stale token, and stale-chart combinations. **Commit:** `feat(T15): show current positions and broker protection`.
+
+**Verified (2026-10-04):** The workspace now shows every selected-account position with long/short/fractional quantity, broker mark and timestamp/source (or unknown), attachment state, linked orders and OCO/parent identities, filled quantity/status, recent executions, and broker liquidation value/buying power with read time. Order coverage and broker/chart stale states remain explicit; common equity order types are identified while unknown types/sessions/topology require manual review. No chart price is presented as a live position mark and no order action is submitted. Synthetic account/order fixtures cover carry-in positions, fractional/short holdings, OCO and stale data; `npm run test` passed (34 checks), typecheck and build passed. Visual combination inspection remains pending the unavailable Electron binary/browser preview (T02/T06).
 
 ### Bookmap observation bridge — T16–T20
 

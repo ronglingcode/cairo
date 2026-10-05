@@ -134,7 +134,7 @@ function hashFacts(facts: BrokerFacts): string {
   const positions = [...facts.positions].map(({ markUpdatedAt: _at, markSource: _source, ...position }) => position).sort((a, b) => a.positionId.localeCompare(b.positionId))
   const orders = [...facts.workingOrders].sort((a, b) => `${a.orderId}:${a.symbol}`.localeCompare(`${b.orderId}:${b.symbol}`))
   const fills = [...facts.recentFills].sort((a, b) => a.fillId.localeCompare(b.fillId))
-  return createHash("sha256").update(JSON.stringify({ accountId: facts.accountId, positions, orders, fills, ordersComplete: facts.ordersComplete })).digest("hex")
+  return createHash("sha256").update(JSON.stringify({ accountId: facts.accountId, positions, orders, fills, ordersComplete: facts.ordersComplete, accountAvailability: facts.accountAvailability })).digest("hex")
 }
 
 function safeError(message: string): string { return message.replace(/Bearer\s+\S+/gi, "Bearer [redacted]").slice(0, 240) }

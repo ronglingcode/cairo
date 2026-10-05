@@ -162,9 +162,28 @@ export function App() {
           <section className="positions-card">
             <div className="card-heading"><div><span className="eyebrow">ACCOUNT MONITOR</span><h2>Positions</h2></div><div className="chart-controls"><button className="quiet-button" disabled={!apiBaseUrl || brokerRefreshing} onClick={() => void refreshBroker()}>{brokerRefreshing ? "Refreshing…" : "Refresh account"}</button><span className="count">{snapshot?.positions.length ?? 0}</span></div></div>
             {brokerRefreshError && <p className="chart-error" role="status">{brokerRefreshError}</p>}
+            {snapshot?.brokerFacts?.accountAvailability && <div className="account-availability">
+              <span>Liquidation value <strong>{formatMoney(snapshot.brokerFacts.accountAvailability.liquidationValue)}</strong></span>
+              <span>Buying power <strong>{formatMoney(snapshot.brokerFacts.accountAvailability.buyingPower)}</strong></span>
+              <small>Broker reported · {formatTime(snapshot.brokerFacts.accountAvailability.updatedAt)}</small>
+            </div>}
             {snapshot?.positions.length ? (
-              <div className="position-list">{snapshot.positions.map((position) => <div className="position-row" key={position.positionId}><strong>{position.symbol}</strong><span className={position.side}>{position.side}</span><span>{position.quantity} shares</span><span>{position.markPrice === null ? "Mark unavailable" : `$${position.markPrice.toFixed(2)}`}</span></div>)}</div>
+              <div className="position-list">{snapshot.positions.map((position) => {
+                const positionOrders = snapshot.brokerFacts?.workingOrders.filter((order) => order.symbol === position.symbol) ?? []
+                const attachment = snapshot.attachments.find((item) => item.positionId === position.positionId && item.accountId === snapshot.brokerFacts?.accountId)
+                return <article className="position-item" key={position.positionId}>
+                  <div className="position-row"><strong>{position.symbol}</strong><span className={`side-pill ${position.side}`}>{position.side}</span><span>{position.quantity} shares</span><span>{position.markPrice === null ? "Mark unknown" : `$${position.markPrice.toFixed(2)}`}</span><small>{position.markPrice === null ? "No broker mark" : `${position.markSource ?? "Broker mark"} · ${position.markUpdatedAt ? formatTime(position.markUpdatedAt) : "time unknown"}`}</small><span className={`attachment-state ${attachment?.state ?? "unattached"}`}>{attachment?.state ?? "unattached"}</span></div>
+                  <div className="protection-heading">Orders &amp; protection <span>{snapshot.brokerFacts?.ordersComplete ? "coverage current" : "coverage incomplete"}</span></div>
+                  {positionOrders.length ? <div className="protection-list">{positionOrders.map((order) => <div className="protection-row" key={`${order.orderId}:${order.symbol}`}>
+                    <strong>{order.orderType} · {order.side.toUpperCase()}</strong><span>{order.positionEffect === "OPENING" ? "Entry order" : order.ocoGroupId || order.positionEffect === "CLOSING" ? "Exit protection" : "Order"} · {order.status} · {order.quantity} shares{order.filledQuantity ? ` · ${order.filledQuantity} filled` : ""}</span>
+                    <small>Order {order.orderId}{order.parentOrderId ? ` · parent ${order.parentOrderId}` : ""}{order.ocoGroupId ? ` · OCO ${order.ocoGroupId}` : ""}</small>
+                    <span className={`support-tag ${supportedOrderType(order.orderType) ? "supported" : "manual"}`}>{supportedOrderType(order.orderType) ? "Type supported" : "Manual review"}</span>
+                  </div>)}</div> : <div className="empty-inline">{snapshot.brokerFacts?.ordersComplete ? "No known working orders or protection." : "Orders and protection are unknown until reads complete."}</div>}
+                </article>
+              })}</div>
             ) : <div className="empty-positions">{brokerStatus.state === "connected" ? "No open positions in the selected account." : "Connect a broker account to monitor open positions."}</div>}
+            <p className="chart-footnote">Observer view · no action is submitted. Unsupported order sessions or OCO changes require manual review.</p>
+            {snapshot?.brokerFacts?.recentFills.length ? <div className="fills-section"><div className="protection-heading">Recent fills <span>last 7 days</span></div>{snapshot.brokerFacts.recentFills.slice(-5).reverse().map((fill) => <div className="fill-row" key={fill.fillId}><strong>{fill.symbol} · {fill.side}</strong><span>{fill.quantity} @ ${fill.price.toFixed(2)}</span><small>{formatTime(fill.filledAt)}</small></div>)}</div> : null}
           </section>
 
           <section className="tickets-card">
@@ -214,5 +233,13 @@ function connectionLabel(state: RendererConnectionState): string {
 
 function formatTime(value: string): string {
   const time = new Date(value)
-  return Number.isFinite(time.getTime()) ? time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "unknown"
+  return Number.isFinite(time.getTime()) ? time.toLocaleString([], { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "unknown"
+}
+
+function formatMoney(value: number | null): string {
+  return value === null ? "Unknown" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)
+}
+
+function supportedOrderType(value: string): boolean {
+  return ["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "STOP-LIMIT"].includes(value.toUpperCase())
 }

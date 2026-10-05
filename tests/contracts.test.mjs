@@ -44,11 +44,14 @@ test("Bookmap observations preserve nanoseconds and reject unknown enum values",
 test("broker facts and exit tickets reject absent or malformed boundaries", () => {
   const facts = parseBrokerFacts({
     accountId: "account-1", asOf: "2026-10-04T16:00:00Z", ordersComplete: true,
+    accountAvailability: { liquidationValue: 25000, buyingPower: 8500, updatedAt: "2026-10-04T16:00:00Z" },
     source: { ...baseSource, source: "broker" },
-    positions: [{ positionId: "pos-1", symbol: "aapl", side: "long", quantity: 10, averagePrice: 200, markPrice: null }],
+    positions: [{ positionId: "pos-1", symbol: "aapl", side: "long", quantity: 10, averagePrice: 200, markPrice: null, markUpdatedAt: null, markSource: null }],
     workingOrders: [], recentFills: [],
   })
   assert.equal(facts.positions[0].symbol, "AAPL")
+  assert.equal(facts.accountAvailability.buyingPower, 8500)
+  assert.equal(facts.positions[0].markUpdatedAt, null)
   const orderStatuses = ["working", "partially-filled", "cancel-pending", "filled", "canceled", "replaced", "rejected", "expired", "unknown"]
   for (const status of orderStatuses) {
     const normalized = parseBrokerFacts({ ...facts, workingOrders: [{ orderId: `o-${status}`, symbol: "AAPL", side: "sell", quantity: 4, filledQuantity: 1, status, orderType: "STOP", parentOrderId: "parent-1", ocoGroupId: "oco-1", brokerStatus: status.toUpperCase() }] })
