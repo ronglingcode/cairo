@@ -30,3 +30,6 @@ Deterministic per-position monitoring, bounded confirmations, once-only recommen
 
 ## T28
 Attached prose, per-rule evidence/quantity/status, scoped observation confirmation, pause/rearm/resume, bounded session timeline, and deduplicated desktop recommendation alerts. Typecheck and three synthetic monitor/timeline checks pass. No approval or broker write is exposed.
+
+## T33
+The owned-session propose_guidance tool stages complete engine-validated interpretations of the current saved prose. Exact clause text, hash/revision binding, numeric provenance, quantity basis and rounding are required; unresolved portions remain visible. Two authored-style fixtures plus invented/missing/partial/stale output checks and typecheck pass; plugin bundle builds.

@@ -16,6 +16,12 @@ export function ManagementPanel({ snapshot }: { snapshot: CairoSnapshot }) {
   return <section className="setup-card"><div className="card-heading"><div><span className="eyebrow">ATTACHED GUIDANCE</span><h2>Management monitor</h2></div></div>
     <p>Every attached position is monitored by the engine. Chart focus and AI availability do not stop monitoring.</p>
     {error && <p role="alert" className="chart-error">{error}</p>}
+    {snapshot.guidanceProposals.map(proposal => <article className="position-item" key={proposal.id}><strong>Proposed interpretation · {proposal.book.title}</strong>
+      <p>Review only · expires {new Date(proposal.expiresAt).toLocaleTimeString()}</p>
+      {proposal.book.interpretation?.clauses.map(clause => <div className="clause-readback" key={clause.clauseId}><blockquote>{clause.sourceText}</blockquote><strong>{clause.coverage}</strong><p>{clause.explanation}</p></div>)}
+      {proposal.book.interpretation?.management?.rules.map(rule => <p key={rule.id}>{rule.action.kind} · {rule.action.quantity.basis === "all" ? "all remaining shares" : rule.action.quantity.basis === "shares" ? `${rule.action.quantity.value} shares` : `${(rule.action.quantity.value ?? 0) * 100}% of ${rule.action.quantity.basis} shares, rounded down`} · {rule.action.orderType} · {rule.recurrence}</p>)}
+      {proposal.issues.map((issue, index) => <p key={index} role="status">Needs attention: {issue}</p>)}
+    </article>)}
     {!snapshot.attachments.length && <div className="empty-inline">Review a guideline interpretation before attaching it to a position.</div>}
     {snapshot.attachments.map(attachment => <article className="position-item" key={attachment.id}><strong>{attachment.symbol} · {attachment.state}</strong><p>{attachment.pauseReason}</p>
       <details><summary>Frozen original guidance</summary><pre className="narrative-text">{attachment.markdown}</pre></details>

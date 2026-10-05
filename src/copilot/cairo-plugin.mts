@@ -27,8 +27,8 @@ export function createCairoPlugin(bridge: Bridge) {
           options: { namespace: "cairo", codemode: false, permission: "cairo_propose" },
           execute: async (input, context) => ({ content: JSON.stringify(await bridge("propose_notes", input, context)) }),
         })
-        editor.add({ name: "propose_guidance", description: "Check availability of reviewed guidance proposals. Reports unavailable until interpretation/attachment is implemented.",
-          input: { type: "object", properties: { text: { type: "string", maxLength: 4000 } }, required: ["text"], additionalProperties: false },
+        editor.add({ name: "propose_guidance", description: "Interpret the latest saved narrative into a review-only policy. Preserve exact clause wording. Ask about missing quantities, initial versus remaining shares, rounding and thresholds; never invent them. Unknown observations stay advisory/unsupported. Read context first. Use version 1 management with levels, allocations and rules. Rules contain id, clauseId, condition, action, recurrence and dependencies; quantities have explicit basis/value/rounding.",
+          input: { type: "object", properties: { tradebookId: { type: "string" }, expectedPreparationRevision: { type: "string" }, expectedTradebookRevision: { type: ["string", "null"] }, clauses: { type: "array", maxItems: 60, items: { type: "object" } }, management: { type: "object" } }, required: ["tradebookId", "expectedPreparationRevision", "expectedTradebookRevision", "clauses", "management"], additionalProperties: false },
           options: { namespace: "cairo", codemode: false, permission: "cairo_propose" },
           execute: async (input, context) => ({ content: JSON.stringify(await bridge("propose_guidance", input, context)) }),
         })
@@ -52,3 +52,4 @@ export default createCairoPlugin(async (operation, input, context) => {
   if (!response.ok) throw new Error("Cairo rejected the tool request; refresh context before continuing")
   return response.json()
 })
+

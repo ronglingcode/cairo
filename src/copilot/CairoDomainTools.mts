@@ -1,3 +1,4 @@
+import { GuidanceProposals } from "../engine/GuidanceProposals.mts"
 import { randomUUID } from "node:crypto"
 import { CairoEngine } from "../engine/CairoEngine.mts"
 import { validateContent, type PreparationContent } from "../engine/PreparationStore.mts"
@@ -49,10 +50,7 @@ export class CairoDomainTools {
       this.drafts = [...this.proposals, draft].slice(-20)
       return { available: true, proposal: draft, applied: false, review: "Proposal only. Notes have not been saved and no position guidance has changed." }
     }
-    if (operation === "propose_guidance") {
-      if (Object.keys(value).length !== 1 || typeof value.text !== "string" || !value.text.trim() || value.text.length > 4000) throw new Error("Guidance proposal needs bounded narrative text")
-      return { available: false, reason: "Reviewed guidance interpretation/attachment is not implemented yet. Discuss the narrative with the trader." }
-    }
+    if (operation === "propose_guidance") return { available: true, applied: false, proposal: new GuidanceProposals(this.engine, this.now).propose(value, sessionId) }
     if (operation === "stage_exit") {
       if (!Object.keys(value).every(key => ["intent", "symbol", "quantity"].includes(key))) throw new Error("Unexpected exit proposal field")
       if (!["close", "cancel-protection", "replace-protection"].includes(String(value.intent))) throw new Error("Cairo permits exit/protection proposals only; opening, increasing, and reversing are rejected")
@@ -91,9 +89,12 @@ export class CairoDomainTools {
       attachments: snapshot.attachments.slice(0, 10).map(attachment => ({
         id: attachment.id, accountId: attachment.accountId, positionId: attachment.positionId,
         symbol: attachment.symbol, state: attachment.state, tradebookRevision: attachment.tradebookRevision,
-        narrativeHash: attachment.narrativeHash,
+        narrativeHash: attachment.narrativeHash, revision: attachment.revision, initialQuantity: attachment.initialQuantity,
+        markdown: attachment.markdown?.slice(0, 4000), interpretation: attachment.interpretation,
       })),
-      capabilities: { noteProposals: true, guidanceAttachment: false, exitStaging: false, brokerWrites: false, bookmap: "planned-final-phase" },
+      recommendations: snapshot.recommendations.slice(-20),
+      capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: false, brokerWrites: false, bookmap: "planned-final-phase" },
     }
   }
 }
+
