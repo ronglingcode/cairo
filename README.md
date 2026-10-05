@@ -8,6 +8,11 @@ See the [revised workflow](docs/chatgpt/PREPARATION-MANAGEMENT-PHASE.md).
 
 ## Run the current app
 
+For your configured OpenAI setup, double-click [`Launch-Cairo.cmd`](Launch-Cairo.cmd).
+It runs the OpenAI launcher with a temporary PowerShell execution-policy override
+and your saved credentials-file reference. Keep the terminal open while Cairo runs.
+From PowerShell, you can also run `.\Launch-Cairo.cmd`.
+
 `npm install` then `npm run dev` starts Cairo's Electron app with a local fake
 model by default. Preparation notes, one-minute chart snapshots and streaming chat
 are implemented. See [model/chart setup and verification](docs/chatgpt/T32-VERIFICATION.md).
