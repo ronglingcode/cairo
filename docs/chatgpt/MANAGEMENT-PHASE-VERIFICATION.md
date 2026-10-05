@@ -39,3 +39,6 @@ Capability-protected explicit accept/reject for note and guideline artifacts; sa
 
 ## T35
 Opt-in account/recommendation updates coalesce into one latest bounded summary, at most every 15 seconds while AI is available and idle. Repeated timestamps/marks do not wake. Cancellation or uncertain delivery pauses updates; machine metadata grants no approval. Current context includes frozen per-position guidance with explicit truncation. Verified actual pinned session.synthetic requires msg_ IDs and streams a local fake-provider response. Four chat/waker checks and typecheck pass.
+
+## T36
+Pure SINGLE equity market/limit/stop/stop-limit close payloads derive SELL or BUY_TO_COVER from current holdings. Only whole shares, NORMAL session and DAY duration; prices format to cents while sub-cent input requires clarification. No entry factory or network writer. Long/short/price/invalid-shape fixtures and typecheck pass. Live broker submission remains for later approved-writer work.
