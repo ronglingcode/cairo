@@ -17,6 +17,8 @@ export function App() {
   const [chartError, setChartError] = useState<string | null>(null)
   const [brokerRefreshing, setBrokerRefreshing] = useState(false)
   const [brokerRefreshError, setBrokerRefreshError] = useState<string | null>(null)
+  const [restartingCopilot, setRestartingCopilot] = useState(false)
+  const [copilotRestartError, setCopilotRestartError] = useState<string | null>(null)
   const refreshAbort = useRef<AbortController | null>(null)
   const brokerRefreshAbort = useRef<AbortController | null>(null)
 
@@ -75,6 +77,17 @@ export function App() {
     } finally {
       if (!controller.signal.aborted) setBrokerRefreshing(false)
     }
+  }
+
+  async function restartCopilot() {
+    if (!apiBaseUrl || !window.cairo?.commandToken || restartingCopilot) return
+    setRestartingCopilot(true)
+    setCopilotRestartError(null)
+    try {
+      const response = await fetch(`${apiBaseUrl}/copilot/restart`, { method: "POST", headers: { Authorization: `Bearer ${window.cairo.commandToken}` } })
+      if (!response.ok) setCopilotRestartError("Copilot could not restart. Check the runtime resources.")
+    } catch { setCopilotRestartError("Copilot connection unavailable") }
+    finally { setRestartingCopilot(false) }
   }
 
   const selectedTradebook = useMemo(
@@ -203,6 +216,8 @@ export function App() {
             <h3>Your trading copilot</h3>
             <p>Save your preparation notes, then discuss your scenarios and one-minute chart context with Cairo. Copilot chat is coming in the next milestone.</p>
             <div className="source-detail">Cairo AI: {sourceLabel(copilotStatus.state)}{copilotStatus.detail ? ` · ${copilotStatus.detail}` : ""}</div>
+            <button className="quiet-button" disabled={!apiBaseUrl || restartingCopilot} onClick={() => void restartCopilot()}>{restartingCopilot ? "Restarting…" : "Restart AI"}</button>
+            {copilotRestartError && <p className="chart-error" role="status">{copilotRestartError}</p>}
             <div className="suggestion">“What should I watch on this setup?” <span>↗</span></div>
             <div className="suggestion">“Review my attached tradebook” <span>↗</span></div>
           </div>

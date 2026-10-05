@@ -11,13 +11,16 @@ import { SchwabAccountReader } from "../src/engine/SchwabAccountReader.mts"
 import { SchwabOrderReader } from "../src/engine/SchwabOrderReader.mts"
 import { BrokerRefreshCoordinator } from "../src/engine/BrokerRefreshCoordinator.mts"
 import { PreparationStore } from "../src/engine/PreparationStore.mts"
+import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
 const apiServer = new EngineApiServer(engine)
 let brokerCoordinator: BrokerRefreshCoordinator | undefined
+let sidecar: OpenCodeSidecar | undefined
 installShutdownHook(app, {
   stop: async () => {
+    await sidecar?.stop()
     await brokerCoordinator?.stop()
     await apiServer.stop()
     await engine.stop()
@@ -72,6 +75,13 @@ app.whenReady().then(async () => {
   engine.start()
   brokerCoordinator.start()
   createWindow(apiBaseUrl, config)
+  sidecar = new OpenCodeSidecar({
+    binary: app.isPackaged ? path.join(process.resourcesPath, "opencode", "opencode.exe") : path.join(app.getAppPath(), "node_modules", "@opencode", "cli", "bin", "opencode.exe"),
+    userDataPath: app.getPath("userData"),
+    onStatus: copilot => engine.updateSnapshot({ copilot }),
+  })
+  apiServer.setCopilotRestarter(() => sidecar!.restart())
+  void sidecar.start()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)
   })

@@ -1,13 +1,13 @@
 # Start or resume the Cairo coding checklist
 
-Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **17 of 50 tasks complete (T01–T16 and T23); 33 remain.** Each completed task has verification notes and a separate local task commit.
+Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **18 of 50 tasks complete (T01–T16, T23, T29); 32 remain.** Each completed task has verification notes and a separate local task commit.
 
 ## Current check-in
 
 - T01 and T02 blockers are resolved. The pinned OpenCode Windows integration probe and Electron development-window smoke passed.
 - T03–T16 are implemented and checked off. T16 defines and parses the normalized Bookmap observation contract; the producer stream is not implemented until T17–T19.
-- T23's notes workspace is complete; commit subject: `feat(T23): add premarket preparation notes workspace`.
-- **Next five authorized tasks: T29, T30, T31, T32, T21**, each in its own commit. T29–T32 deliver the first runnable notes/chart copilot. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
+- T23's notes workspace and T29's owned runtime lifecycle are complete. T29 commit subject: `feat(T29): manage Cairo OpenCode sidecar lifecycle`.
+- **Remaining authorized tasks: T30, T31, T32, T21**, each in its own commit. T30–T32 finish the first runnable notes/chart copilot. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
 - Bookmap T17–T20 and pattern-specific T24–T25 move to the final feature phase after the other features; they remain required for the full MVP. No plugin changes now.
 - No commits were pushed. T01–T16 completion commits are recorded below.
 
@@ -29,6 +29,7 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 | T14 | `10fa827` |
 | T15 | `9654181` |
 | T16 | `6f6fad0` |
+| T23 | `11801d5` |
 
 The [OpenCode probe instructions](opencode-v2-probe/README.md) include optional user verification with `npm run probe:manual`: enter `once`, then `reject`, and expect `ALL CHECKS PASSED`. Tool permission metadata alone did not pause the fake executor; the mock backend explicitly waits for the matching permission reply. Preserve that requirement when implementing production engine-ticket approval in T38–T46. Owned application-side lifecycle and distributed packaging remain T29/T48.
 

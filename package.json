@@ -10,6 +10,8 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@opencode/cli": "2.0.22",
+    "@opencode/client": "2.0.22",
     "lightweight-charts": "5.2.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -25,6 +27,7 @@
     "vite-plugin-electron": "1.1.2"
   },
   "allowScripts": {
+    "@opencode/cli": true,
     "electron@44.5.1": true,
     "esbuild@0.28.2": true
   }

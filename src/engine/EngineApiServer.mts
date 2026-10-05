@@ -20,6 +20,7 @@ export class EngineApiServer {
   private readonly engine: CairoEngine
   private preparationStore: PreparationStore | undefined
   private preparationOperation: Promise<unknown> = Promise.resolve()
+  private copilotRestarter: (() => Promise<boolean>) | undefined
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -27,6 +28,7 @@ export class EngineApiServer {
   constructor(engine: CairoEngine) { this.engine = engine }
 
   setPreparationStore(store: PreparationStore): void { this.preparationStore = store }
+  setCopilotRestarter(restart: () => Promise<boolean>): void { this.copilotRestarter = restart }
 
   async loadPreparation(): Promise<boolean> {
     if (!this.preparationStore) return false
@@ -112,6 +114,12 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (url.pathname === "/copilot/restart" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.copilotRestarter) { this.json(response, 503, { error: "copilot-unavailable" }); return }
+      void this.copilotRestarter().then(ok => this.json(response, ok ? 200 : 503, { ok })).catch(() => this.json(response, 503, { error: "Copilot could not restart" }))
+      return
+    }
     if (url.pathname === "/preparation" && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.preparationStore) { this.json(response, 503, { error: "preparation-store-unavailable" }); return }

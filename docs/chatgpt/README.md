@@ -1,6 +1,6 @@
 # Cairo planning package
 
-Updated October 4, 2026. **T01–T16 and T23 are complete (17/50).** Next is T29–T32 for a runnable notes/chat app with one-minute chart knowledge, then T21. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
+Updated October 4, 2026. **T01–T16, T23, and T29 are complete (18/50).** Next is T29–T32 for a runnable notes/chat app with one-minute chart knowledge, then T21. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
 
 The target is a personal Windows US-stocks desktop for **premarket preparation and AI-assisted trade management**, with Bookmap signal detection added in the final feature phase. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, and collaboratively authored notes/guidance.
 

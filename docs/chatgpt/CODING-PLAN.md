@@ -1,6 +1,6 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. **T01–T16 and T23 complete: 17/50 complete, 33 remaining. T29 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 4, 2026. **T01–T16, T23, T29 complete: 18/50 complete, 32 remaining. T30 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
@@ -419,13 +419,15 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 ### One OpenCode copilot — T29–T35
 
-- [ ] **T29 — Integrate the owned OpenCode sidecar lifecycle**
+- [x] **T29 — Integrate the owned OpenCode sidecar lifecycle**
 
 **Depends:** T01, T04, T07. **Repository:** Cairo.
 
 **Deliver:** Use the verified pinned launch/client arrangement with a Cairo-owned registration/location/config. Handle start failure, health, process exit, explicit restart, and shutdown. Do not stop/reconfigure another user's OpenCode process. Keep token/data directory outside repository.
 
 **Verify:** Fake/unavailable/crashed sidecar does not stop engine/account refresh or preparation editing; owned processes close cleanly; restart uses fresh state. **Commit:** `feat(T29): manage Cairo OpenCode sidecar lifecycle`.
+
+**Verified (2026-10-04):** Added the pinned root CLI/client dependencies and main-owned runtime lifecycle with isolated Cairo config/data/cache/state/workspace, authenticated loopback client, exact process/version identity checks, bounded startup, periodic health, serialized restart, and shutdown of only its owned child. Restart uses a capability-protected API route. Four focused tests passed, including actual Windows 2.0.22 startup/health/shutdown without model requests, missing binary, wrong runtime identity, and crash isolation. Typecheck/build passed; existing nonfatal build-option warnings remain. Application packaging stays T48.
 
 - [ ] **T30 — Register the Cairo domain plugin and read/proposal tools**
 
