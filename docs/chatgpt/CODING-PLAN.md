@@ -251,13 +251,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added pinned Lightweight Charts 5.2.1 candlesticks and volume, symbol/date fields, a manual refresh button, and fetched/latest-bar timestamps with explicit snapshot-only language. A preload capability protects the loopback refresh command; provider requests remain in the main process. Renderer refresh cancellation and server-side response checks prevent a canceled request from overwriting focus; failed refreshes preserve bars and label them stale. API fake test checks capability enforcement and snapshot publication; Massive fakes cover fresh/empty/overlap/error behavior. `npm run test` passed (22 checks), typecheck and production build passed. Electron/browser visual state inspection remains unavailable because the T02 Electron binary download and preview navigation are still blocked. Added required TradingView attribution and notice. Sources: [official series API](https://tradingview.github.io/lightweight-charts/docs/series-types), [migration guide](https://tradingview.github.io/lightweight-charts/docs/migrations/from-v4-to-v5), [license attribution](https://tradingview.github.io/lightweight-charts/docs/5.0).
 
-- [ ] **T11 — Consume the Bookmap Schwab token read-only**
+- [x] **T11 — Consume the Bookmap Schwab token read-only**
 
 **Depends:** T03, T07. **Repository:** Cairo.
 
 **Deliver:** Token provider for the configured producer file: `schwab.access_token`, `schwab.expires_at` in epoch milliseconds, and explicit selected-account binding. Use the 60-second expiry lead, reread/adopt rotations, and never refresh/write the file. Default to waiting status on missing/stale data.
 
 **Verify:** Fake files cover BOM, malformed JSON, expiry, rotation, file replacement, and rejection invalidation without any real secrets. **Commit:** `feat(T11): read Bookmap-maintained Schwab authorization`.
+
+**Verified (2026-10-04):** Added a backend reader for the Bookmap credential file's `schwab.access_token` and epoch-millisecond `expires_at`, using the configured selected account and a 60-second expiry lead. It rereads on each call to adopt rotations/replacement files; missing/malformed/expired/rejected states remain waiting/stale, with no token content in status. The reader never refreshes or writes the file. Synthetic tests cover BOM, malformed JSON, expiry boundary, rotation, replacement, invalidation, and missing account. `npm run test` passed (25 checks) and typecheck passed. Inspected the sibling Bookmap credential implementation only; no real credential file or token was read.
 
 - [ ] **T12 — Read the explicitly selected Schwab account**
 
