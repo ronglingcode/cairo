@@ -72,9 +72,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-openai.ps1 -
 Only the path is saved; missing files or keys produce a setup message.
 It preserves existing configuration fields, backs up existing `config.json` to
 `config.json.before-openai.bak`, selects `openai` and starts the desktop app.
-Close Cairo before changing its settings. The default model is `gpt-4.1`; use
-`-Model YOUR_MODEL_ID` to select another OpenAI model supporting Chat Completions
-and function calling. Account access and a successful live request still need
+Close Cairo before changing its settings. The default model is `gpt-6.1-sol`; use
+`-Model YOUR_MODEL_ID` to select another OpenAI model supporting the Responses API
+and function calling. Real OpenAI models use the native Responses provider;
+the local demo retains its Chat Completions fixture. Account access and a successful live request still need
 verification with your own key. OpenRouter is not currently supported.
 
 ## Bookmap companion and broker ownership

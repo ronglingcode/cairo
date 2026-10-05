@@ -13,7 +13,7 @@ export function modelConfiguration(fake: boolean, model: string, fakeBaseUrl: st
       ],
       model: `cairo-model/${id}`,
       providers: { "cairo-model": {
-        package: "@opencode/ai/providers/openai-compatible",
+        package: fake ? "@opencode/ai/providers/openai-compatible" : "@opencode/ai/providers/openai/responses",
         settings: { baseURL: fake ? fakeBaseUrl : "https://api.openai.com/v1", apiKey: fake ? "fixture-only" : "{env:CAIRO_OPENAI_API_KEY}" },
         models: { [id]: { name: fake ? "Local fake model" : model, capabilities: { tools: true } } },
       } },

@@ -161,7 +161,7 @@ export function App() {
               </div>
             )}
             {chartError && snapshot?.chart?.bars.length ? <p className="chart-error" role="status">{chartError} · showing the last snapshot</p> : null}
-            <p className="chart-footnote">Snapshot data only · no live chart updates · charting by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a></p>
+            <p className="chart-footnote">Times: {Intl.DateTimeFormat().resolvedOptions().timeZone} · Snapshot data only · no live chart updates · charting by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a></p>
           </section>
 
           <section className="setup-card">

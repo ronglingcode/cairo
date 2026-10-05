@@ -1,5 +1,5 @@
 param(
-    [string]$Model = 'gpt-4.1',
+    [string]$Model = 'gpt-6.1-sol',
     [string]$SecretsFile = '',
     [string]$UserDataPath = '',
     [string]$NodeDirectory = ''

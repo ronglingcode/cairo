@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import { CandlestickSeries, createChart, HistogramSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts"
 import type { ChartBar } from "../shared/contracts.mts"
+import { localChartTime } from "./ChartTime.mts"
 
 export function ChartView({ bars, symbol }: { bars: ChartBar[]; symbol: string }) {
   const host = useRef<HTMLDivElement>(null)
@@ -10,11 +11,13 @@ export function ChartView({ bars, symbol }: { bars: ChartBar[]; symbol: string }
 
   useEffect(() => {
     if (!host.current) return
+    const localTime = localChartTime()
     const instance = createChart(host.current, {
     layout: { background: { color: "#f7faff" }, textColor: "#294569", fontFamily: "Inter, sans-serif", attributionLogo: true },
       grid: { vertLines: { color: "#dce8f7" }, horzLines: { color: "#dce8f7" } },
       rightPriceScale: { borderColor: "#c9dbf2" },
-      timeScale: { borderColor: "#c9dbf2", timeVisible: true, secondsVisible: false },
+      timeScale: { borderColor: "#c9dbf2", timeVisible: true, secondsVisible: false, tickMarkFormatter: localTime.tickMarkFormatter },
+      localization: { timeFormatter: localTime.timeFormatter },
       crosshair: { vertLine: { color: "#4388ed" }, horzLine: { color: "#4388ed" } },
     })
     const candleSeries = instance.addSeries(CandlestickSeries, {
