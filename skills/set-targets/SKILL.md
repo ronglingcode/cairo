@@ -1,9 +1,9 @@
 ---
-name: get-targets
+name: set-targets
 description: Identify profit targets and any planned partial exits from the trader's saved rules and available evidence.
 ---
 
-# Get targets
+# Set targets
 
 Use current Cairo context to identify the intended symbol, position side and relevant preparation or attached position guidance. Read Cairo context again if anything is missing or has changed.
 

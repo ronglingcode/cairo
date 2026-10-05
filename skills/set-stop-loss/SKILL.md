@@ -1,9 +1,9 @@
 ---
-name: get-stop-loss
+name: set-stop-loss
 description: Identify the stop-loss level or invalidation condition for a trade from the trader's saved rules and available evidence.
 ---
 
-# Get stop loss
+# Set stop loss
 
 Use current Cairo context to identify the intended symbol, position side and relevant preparation or attached position guidance. Read Cairo context again if anything is missing or has changed.
 

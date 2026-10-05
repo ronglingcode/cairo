@@ -21,7 +21,7 @@ message draft. The chat includes source status, position summaries, and an expan
 **Trading context** drawer with protection, management, and exact exit review controls.
 Enter sends a message; Shift+Enter adds a line break.
 
-Type `/` to choose a skill; `/g` shows `get-stop-loss` and `get-targets`.
+Type `/` to choose a skill; `/s` shows `set-stop-loss` and `set-targets`.
 `manage-trade` includes both workflows. Humans and AI editors share the Markdown
 files in [`skills`](skills). Edits apply to the next skill invocation. See the
 [skill library guide](docs/SKILL-LIBRARY.md) for composition and adding skills.

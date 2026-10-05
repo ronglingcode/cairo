@@ -2,18 +2,18 @@
 
 The shared source library is `cairo/skills/<skill-name>/SKILL.md`. Humans and coding agents can edit these Markdown files directly. No credentials belong in skills.
 
-Type `/` in either Cairo chat window to list skills. `/g` filters to `get-stop-loss` and `get-targets`. Use the arrow keys and Enter or Tab, or click a skill, to insert its command. Enter again sends the message. Shift+Enter inserts a newline; Escape closes the menu.
+Type `/` in either Cairo chat window to list skills. `/s` filters to `set-stop-loss` and `set-targets`. Use the arrow keys and Enter or Tab, or click a skill, to insert its command. Enter again sends the message. Shift+Enter inserts a newline; Escape closes the menu.
 
 Examples:
 
 ```text
-/get-stop-loss
-/get-targets PCVX
+/set-stop-loss
+/set-targets PCVX
 /manage-trade What should I watch next?
-/get-stop-loss /get-targets Explain the rationale in detail.
+/set-stop-loss /set-targets Explain the rationale in detail.
 ```
 
-The native OpenCode prompt hook attaches the selected skill instructions to the request. `manage-trade` also attaches `get-stop-loss` and `get-targets`; repeated dependencies are included once. Skill revisions are recorded in message metadata. Native skill attachments preserve the loaded instructions for conversation replay.
+The native OpenCode prompt hook attaches the selected skill instructions to the request. `manage-trade` also attaches `set-stop-loss` and `set-targets`; repeated dependencies are included once. Skill revisions are recorded in message metadata. Native skill attachments preserve the loaded instructions for conversation replay.
 
 The catalog refreshes when the composer gains focus. Files are reread for each explicit skill invocation, so an edit applies to the next invocation without restarting Cairo. A reply already underway keeps its existing instructions. Regular messages and automatic account-change notifications keep their existing behavior; this initial library is selected with slash commands.
 
@@ -27,7 +27,7 @@ name: example-skill
 description: Explain what the skill does and when it is useful.
 metadata:
   includes:
-    - get-stop-loss
+    - set-stop-loss
 ---
 ```
 
