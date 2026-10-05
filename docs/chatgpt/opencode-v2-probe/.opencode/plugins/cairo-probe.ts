@@ -4,6 +4,7 @@ export default Plugin.define({
   id: "cairo.probe",
   async setup(ctx) {
     await ctx.tool.transform((editor) => {
+      editor.namespace({ name: "cairo", description: "Fake Cairo integration probe tools" })
       editor.add({
         name: "read_fixture",
         description: "Read the fixed, non-sensitive Cairo probe fixture.",
@@ -24,7 +25,7 @@ export default Plugin.define({
           properties: {},
           additionalProperties: false,
         },
-        options: { namespace: "cairo" },
+        options: { namespace: "cairo", permission: "cairo_trade" },
         execute: async () => ({ content: "permission-granted-once" }),
       })
     })

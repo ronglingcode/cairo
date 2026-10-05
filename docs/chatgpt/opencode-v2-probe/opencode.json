@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./.opencode/plugins/cairo-probe.ts"],
   "permissions": [
     { "action": "cairo_read", "resource": "*", "effect": "allow" },
     { "action": "cairo_trade", "resource": "*", "effect": "ask" }
