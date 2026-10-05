@@ -11,7 +11,7 @@ metadata:
 
 Apply [set-stop-loss](../set-stop-loss/SKILL.md) and [set-targets](../set-targets/SKILL.md), which Cairo includes with this skill. Combine their conclusions into one answer without repeating their instructions.
 
-Identify the position from current Cairo context. If several positions could match, ask which one. Use the saved plan and attached guidance together with current broker state and source freshness. Historical conversation is not proof of current position size, fills or order state.
+Both workflows share the included [trade-context](../trade-context/SKILL.md) prerequisite; establish it once. Use the resolved tradebook, confirmed Bookmap pattern and attached guidance together with current broker state and source freshness. Historical conversation is not proof of current position size, fills or order state.
 
 Consider the invalidation condition, next profit target, existing protection and any unresolved order attempt. Prioritize the trader's question and the most relevant supported issue. Do not assert a live stop/target trigger from a chart snapshot or unknown observations.
 

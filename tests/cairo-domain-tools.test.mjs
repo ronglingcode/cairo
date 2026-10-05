@@ -51,7 +51,7 @@ test("Cairo plugin replaces coding tools with only Cairo domain tools", async ()
     list: () => [...catalog.values()], remove: id => catalog.delete(id), namespace: () => {},
     add: tool => catalog.set(`cairo_${tool.name}`, tool),
   }) } })
-  assert.equal(catalog.size, 7)
+  assert.equal(catalog.size, 8)
   assert.ok([...catalog.keys()].every(name => name.startsWith("cairo_")))
   const result = await catalog.get("cairo_read_context").execute({}, {})
   assert.equal(JSON.parse(result.content).operation, "read_context")
@@ -112,7 +112,7 @@ test("self-contained Cairo plugin bundle loads in the actual pinned runtime", { 
   for (let count = 0; calls < 2 && count < 100; count++) await new Promise(resolve => setTimeout(resolve, 100))
   const plugins = await sidecar.client.plugin.list({ location: { directory: sidecar.workspace } })
   assert.ok(plugins.data.some(plugin => plugin.id === "cairo.domain"), JSON.stringify(plugins.data))
-  assert.equal(exposed.length, 7)
+  assert.equal(exposed.length, 8)
   assert.ok(exposed.every(name => name.startsWith("cairo_")), JSON.stringify(exposed))
   assert.equal(calls, 2)
   assert.ok(observed[0].includes("CAIRO_CURRENT_CONTEXT"))

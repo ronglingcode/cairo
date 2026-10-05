@@ -5,6 +5,7 @@ import type { TicketPermissions, ToolSource } from "./TicketPermissions.mts"
 import { randomUUID } from "node:crypto"
 import { CairoEngine } from "../engine/CairoEngine.mts"
 import { validateContent, type PreparationContent } from "../engine/PreparationStore.mts"
+import { positionTradebook } from "../engine/TradeContext.mts"
 
 export interface NoteProposal {
   id: string
@@ -46,10 +47,14 @@ export class CairoDomainTools {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Tool input must be an object")
     const value = input as Record<string, unknown>
     const snapshot = this.engine.getSnapshot()
-    if (operation === "read_bookmap_pattern") {
+    if (operation === "read_bookmap_pattern" || operation === "read_trade_context") {
       if (!this.bookmapPatterns) throw new Error("Bookmap pattern library unavailable")
       if (Object.keys(value).some(key => key !== "positionId")) throw new Error("Unexpected pattern field")
-      return this.bookmapPatterns.read(value.positionId)
+      const pattern = await this.bookmapPatterns.read(value.positionId)
+      if (operation === "read_bookmap_pattern") return pattern
+      const current = this.engine.getSnapshot()
+      return { accountId: current.brokerFacts!.accountId, factsRevision: current.brokerFactsRevision,
+        position: pattern.position, bookmapPattern: pattern, tradebook: positionTradebook(current, pattern.position) }
     }
     if (["read_context", "read_preparation", "read_positions"].includes(String(operation))) {
       if (Object.keys(value).length) throw new Error("This read tool takes no parameters")
@@ -59,7 +64,8 @@ export class CairoDomainTools {
     }
     if (operation === "propose_notes") {
       if (Object.keys(value).some(key => !["markdown", "date", "symbol", "expectedRevision"].includes(key))) throw new Error("Unexpected note proposal field")
-      const content = validateContent(value)
+      // Note proposals edit narrative/date/symbol, preserving the trader's explicit routing assignments.
+      const content = validateContent({ ...value, tradebookAssignments: snapshot.preparation?.tradebookAssignments })
       if (value.expectedRevision !== (snapshot.preparation?.revision ?? null)) throw new Error("Preparation revision changed; read the current notes before proposing edits")
       if (snapshot.preparationError) throw new Error("Saved preparation must be repaired before proposing edits")
       const draft: NoteProposal = { id: randomUUID(), sessionId, expectedRevision: value.expectedRevision as string | null, content, expiresAt: new Date(this.now() + 5 * 60_000).toISOString() }

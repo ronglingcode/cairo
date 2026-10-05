@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto"
 import path from "node:path"
 import type { CairoEngine } from "./CairoEngine.mts"
 import type { BookmapPattern, BookmapPatternPicker, BookmapPatternTag } from "../shared/BookmapPatterns.mts"
-import { skillMentions } from "../shared/SkillCommands.mts"
+import { requiresTradeContext, skillMentions } from "../shared/SkillCommands.mts"
+import { tradeCandidates } from "./TradeContext.mts"
 
 export function parseActivePatterns(markdown: string): BookmapPattern[] {
   const patterns: BookmapPattern[] = []
@@ -101,17 +102,12 @@ export class BookmapPatterns {
   private async prepare(text: string, commandId: string): Promise<{ text: string; picker: BookmapPatternPicker | null }> {
     const commands = skillMentions(text).map(mention => mention.name)
     const manual = commands.includes("bookmap-pattern")
-    if (!manual && !commands.some(command => ["set-stop-loss", "manage-trade"].includes(command))) return { text, picker: null }
+    if (!manual && !requiresTradeContext(text)) return { text, picker: null }
     const { snapshot, facts } = this.facts()
     const catalog = await this.catalog()
     const current = this.facts()
     if (current.facts.accountId !== facts.accountId || current.snapshot.brokerFactsRevision !== snapshot.brokerFactsRevision) throw new Error("Account facts changed; invoke the skill again")
-    const held = facts.positions.filter(position => position.quantity > 0)
-    const explicitSymbol = /^\/(?:set-stop-loss|bookmap-pattern|manage-trade):?\s+([A-Z][A-Z0-9.-]{0,15})\s*$/.exec(text.trim())?.[1]
-    if (explicitSymbol && !held.some(position => position.symbol === explicitSymbol)) throw new Error(`No current ${explicitSymbol} position to tag`)
-    const mentioned = held.filter(position => text.split(/\s+/).some(word => word.replace(/[.,!?;:]$/, "").toUpperCase() === position.symbol))
-    const positions = mentioned.length ? mentioned : held
-    if (!positions.length) throw new Error("No current position to tag. Refresh the account after entry.")
+    const positions = tradeCandidates(text, facts.positions)
     const choices = positions.map(position => ({ position, tradeInstanceId: this.trades.get(this.tradeKey(facts.accountId, position))!, tag: this.tagFor(facts.accountId, position.positionId, position.side), candidates: catalog.filter(pattern => pattern.side === position.side) }))
     if (!manual && choices.length === 1 && this.usable(choices[0].tag) && choices[0].candidates.some(pattern => pattern.id === choices[0].tag!.patternId)) return { text: this.bind(text, choices[0].position), picker: null }
     const picker: BookmapPatternPicker = { id: randomUUID(), text, commandId, accountId: facts.accountId, factsRevision: snapshot.brokerFactsRevision, manual, positions: choices }
@@ -159,7 +155,7 @@ export class BookmapPatterns {
     if (markdown && markdown.length > 24_000) throw new Error("Pattern tradebook exceeds the supported context size")
     const current = this.facts()
     if (current.facts.accountId !== facts.accountId || !current.facts.positions.some(item => item.positionId === position.positionId && item.side === position.side && item.symbol === position.symbol && item.quantity > 0) || (this.tagFor(facts.accountId, position.positionId, position.side)?.revision ?? null) !== (tag?.revision ?? null) || pattern && !this.usable(tag)) throw new Error("Trade or Bookmap tag changed; read context again")
-    return { position, tag, confirmed: Boolean(pattern), candidates, pattern: pattern ?? null, markdown, source: pattern?.sourceFile ? `bookmap_patterns/${pattern.sourceFile}` : null }
+    return { position: current.facts.positions.find(item => item.positionId === position.positionId)!, tag, confirmed: Boolean(pattern), candidates, pattern: pattern ?? null, markdown, source: pattern?.sourceFile ? `bookmap_patterns/${pattern.sourceFile}` : null }
   }
   private bind(text: string, position: { positionId: string; symbol: string; side: string }): string {
     const bound = `${text}\nSelected current trade: ${position.symbol} ${position.side}; positionId: ${position.positionId}. Use its saved Bookmap tag.`

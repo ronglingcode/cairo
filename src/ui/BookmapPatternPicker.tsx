@@ -18,14 +18,14 @@ export function BookmapPatternPicker({ picker, apiBaseUrl, commandToken, onCompl
     finally { setPending(false) }
   }
   return <section className="bookmap-pattern-picker" aria-label="Tag Bookmap pattern">
-    <div className="pattern-heading"><strong>{picker.manual ? "Tag current trade" : "Choose a Bookmap pattern for the stop"}</strong><button type="button" className="quiet-button" disabled={pending} onClick={() => void command("cancel")}>Cancel</button></div>
+    <div className="pattern-heading"><strong>{picker.manual ? "Tag current trade" : "Choose the trade’s Bookmap pattern"}</strong><button type="button" className="quiet-button" disabled={pending} onClick={() => void command("cancel")}>Cancel</button></div>
     {picker.positions.length > 1 && <label>Trade <select aria-label="Trade to tag" value={positionId} disabled={pending} onChange={event => setPositionId(event.target.value)}><option value="">Choose a trade…</option>{picker.positions.map(({ position }) => <option key={position.positionId} value={position.positionId}>{position.symbol} · {position.side} · {position.quantity} shares</option>)}</select></label>}
     {choice && <>
       <p>{choice.position.symbol} · {choice.position.side} · {choice.position.quantity} shares</p>
       {choice.tag && <p className="pattern-previous">{choice.tag.active ? "Saved" : "Previous trade"} pattern: {choice.candidates.find(pattern => pattern.id === choice.tag?.patternId)?.name ?? choice.tag.patternId}. Click to confirm or change.</p>}
       <div className="pattern-options">{choice.candidates.map(pattern => <button type="button" key={pattern.id} disabled={pending || !apiBaseUrl || !commandToken} onClick={() => void command("select", pattern.id)}><strong>{pattern.name}</strong>{choice.tag?.patternId === pattern.id && <span>Previously tagged</span>}</button>)}</div>
       {!choice.candidates.length && <p>No active patterns for this side.</p>}
-      <small>{picker.manual ? "Click a pattern to save it for this trade." : "Click to save the pattern and continue the stop-loss request."}</small>
+      <small>{picker.manual ? "Click a pattern to save it for this trade." : "Click to save the pattern and continue your request."}</small>
     </>}
     {pending && <p role="status">Saving…</p>}
     {error && <p className="chart-error" role="alert">{error}</p>}

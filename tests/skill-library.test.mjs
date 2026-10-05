@@ -23,18 +23,19 @@ async function libraryFixture(t, cleanup = true) {
 
 test("catalog composes skills once, applies file edits and rejects broken dependencies", async t => {
   const { library } = await libraryFixture(t)
-  assert.deepEqual((await library.list()).map(skill => skill.name), ["bookmap-pattern", "manage-trade", "set-stop-loss", "set-targets"])
+  assert.deepEqual((await library.list()).map(skill => skill.name), ["bookmap-pattern", "manage-trade", "set-stop-loss", "set-targets", "trade-context"])
   const selected = await library.forMessage("/manage-trade /set-stop-loss PCVX")
-  assert.deepEqual(selected.map(skill => skill.name), ["set-stop-loss", "set-targets", "manage-trade"])
-  const file = selected[0].path
+  assert.deepEqual(selected.map(skill => skill.name), ["trade-context", "set-stop-loss", "set-targets", "manage-trade"])
+  const stop = selected.find(skill => skill.name === "set-stop-loss")
+  const file = stop.path
   await writeFile(file, (await readFile(file, "utf8")) + "\nUse the trader's updated wording.\n")
   const edited = await library.forMessage("/set-stop-loss")
-  assert.notEqual(edited[0].id, selected[0].id)
-  assert.match(edited[0].content, /updated wording/)
+  assert.notEqual(edited.find(skill => skill.name === "set-stop-loss").id, stop.id)
+  assert.match(edited.find(skill => skill.name === "set-stop-loss").content, /updated wording/)
   await assert.rejects(library.forMessage("/get-stops"), /Unknown skill/)
   assert.deepEqual(await library.forMessage("https://example.org/foo and C:/tmp/foo"), [])
   const targets = path.join(library.directory, "set-targets", "SKILL.md")
-  await writeFile(targets, (await readFile(targets, "utf8")).replace("\n---\n", "\nmetadata:\n  includes: [manage-trade]\n---\n"))
+  await writeFile(targets, (await readFile(targets, "utf8")).replace("    - trade-context", "    - manage-trade"))
   await assert.rejects(library.load(), /cycle/)
 })
 
@@ -44,7 +45,7 @@ test("skill files validate YAML, names, missing dependencies and instruction bou
   const original = await readFile(file, "utf8")
   await writeFile(file, original.replace("name: set-stop-loss", "name: another-name"))
   await assert.rejects(library.load(), /matching name/)
-  await writeFile(file, original.replace("\n---\n", "\nmetadata:\n  includes: [missing-skill]\n---\n"))
+  await writeFile(file, original.replace("    - trade-context", "    - missing-skill"))
   await assert.rejects(library.load(), /Unknown skill \/missing-skill/)
   await writeFile(file, original.replace("description:", "description: ["))
   await assert.rejects(library.load(), /invalid YAML/)
@@ -52,7 +53,7 @@ test("skill files validate YAML, names, missing dependencies and instruction bou
   await assert.rejects(library.load(), /under 32 KB/)
   await writeFile(file, original)
   await mkdir(path.join(library.directory, "empty-folder"))
-  assert.equal((await library.list()).length, 4)
+  assert.equal((await library.list()).length, 5)
 })
 
 test("slash completion filters prefixes and preserves surrounding text and caret", async () => {
@@ -84,7 +85,7 @@ test("authenticated skill catalog refreshes independently of the AI connection",
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("cache-control"), "no-store")
   const body = await response.json()
-  assert.equal(body.skills.length, 4)
+  assert.equal(body.skills.length, 5)
   assert.deepEqual(Object.keys(body.skills[0]).sort(), ["description", "name"])
 })
 
@@ -127,9 +128,9 @@ test("pinned OpenCode attaches composed skills, preserves commands and reloads e
   assert.equal(chat.snapshot.messages[0].text, "/manage-trade PCVX")
   assert.equal(requests.length, 1)
   const payload = JSON.stringify(requests[0].messages)
-  for (const skill of await library.forMessage("/manage-trade")) assert.ok(payload.includes(skill.content.split("\n")[0]), `Missing ${skill.name} instructions`)
+  for (const skill of await library.forMessage("/manage-trade")) assert.ok(payload.includes(skill.content.split("\n")[0].trim()), `Missing ${skill.name} instructions`)
   const context = await sidecar.client.session.context({ sessionID: chat.snapshot.sessionId })
-  assert.deepEqual(context.find(message => message.type === "user").metadata.cairoSkills.map(skill => skill.name), ["set-stop-loss", "set-targets", "manage-trade"])
+  assert.deepEqual(context.find(message => message.type === "user").metadata.cairoSkills.map(skill => skill.name), ["trade-context", "set-stop-loss", "set-targets", "manage-trade"])
   assert.ok(requests[0].tools.every(tool => tool.function.name.startsWith("cairo_")))
   const file = path.join(library.directory, "set-stop-loss", "SKILL.md")
   await writeFile(file, (await readFile(file, "utf8")) + "\nUPDATED_SKILL_INSTRUCTIONS_MARKER\n")

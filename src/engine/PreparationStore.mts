@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
-import type { PreparationNotes } from "../shared/contracts.mts"
+import type { PreparationNotes, TradebookAssignment } from "../shared/contracts.mts"
 
 export interface PreparationContent {
+  tradebookAssignments?: TradebookAssignment[]
   markdown: string
   date: string | null
   symbol: string | null
@@ -64,7 +65,20 @@ export function validateContent(input: unknown): PreparationContent {
   if (value.symbol !== null && (typeof value.symbol !== "string" || !/^[A-Z][A-Z0-9.-]{0,15}$/.test(value.symbol))) {
     throw new PreparationValidationError("Preparation symbol must be an equity symbol or empty")
   }
-  return { markdown: value.markdown, date: value.date as string | null, symbol: value.symbol as string | null }
+  let assignments: TradebookAssignment[] | undefined
+  if (value.tradebookAssignments !== undefined) {
+    if (!Array.isArray(value.tradebookAssignments) || value.tradebookAssignments.length > 100) throw new PreparationValidationError("Tradebook assignments must contain at most 100 symbol/side pairs")
+    const seen = new Set<string>()
+    assignments = value.tradebookAssignments.map(item => {
+      if (!item || typeof item.symbol !== "string" || !/^[A-Z][A-Z0-9.-]{0,15}$/.test(item.symbol) || !["long", "short"].includes(item.side) || typeof item.tradebookId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(item.tradebookId)) throw new PreparationValidationError("Each assignment needs a symbol, long/short side and tradebook ID")
+      const key = `${item.symbol}:${item.side}`
+      if (seen.has(key)) throw new PreparationValidationError("Assign at most one tradebook per symbol and side")
+      seen.add(key)
+      return { symbol: item.symbol, side: item.side, tradebookId: item.tradebookId }
+    })
+  }
+  return { markdown: value.markdown, date: value.date as string | null, symbol: value.symbol as string | null,
+    ...(assignments === undefined ? {} : { tradebookAssignments: assignments }) }
 }
 
 function revision(content: PreparationContent): string {

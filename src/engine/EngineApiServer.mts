@@ -14,6 +14,7 @@ import type { ExitIntent } from "./ExitEligibility.mts"
 import type { ExitWriter } from "./ExitWriter.mts"
 import type { UnknownReconciler } from "./UnknownReconciler.mts"
 import type { TicketPermissions } from "../copilot/TicketPermissions.mts"
+import { requiresTradeContext } from "../shared/SkillCommands.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -310,6 +311,7 @@ export class EngineApiServer {
         if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid message")
         if (typeof value.text !== "string" || !value.text.trim() || value.text.length > 8000 || typeof value.commandId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(value.commandId)) throw new Error("Invalid message or command ID")
         if (this.chat!.snapshot.busy) throw new Error("Wait for the current reply before choosing a pattern")
+        if (requiresTradeContext(value.text) && !this.bookmapPatterns) throw new Error("Current trade context unavailable; reconnect before invoking this skill")
         const prepared = await this.bookmapPatterns?.preflight(value.text, value.commandId)
         if (prepared?.picker) { this.json(response, 200, { patternSelectionRequired: true }); return }
         await this.chat!.send(prepared?.text ?? value.text, value.commandId)

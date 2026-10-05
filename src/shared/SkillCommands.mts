@@ -1,6 +1,12 @@
 export interface SkillSummary { name: string; description: string }
 export interface SkillMention { name: string; start: number; end: number; text: string }
 
+/** These workflows share the same current-trade and confirmed-pattern prerequisite. */
+export const TRADE_CONTEXT_SKILLS = ["trade-context", "set-stop-loss", "set-targets", "manage-trade"] as const
+export function requiresTradeContext(text: string): boolean {
+  return skillMentions(text).some(mention => TRADE_CONTEXT_SKILLS.some(name => name === mention.name))
+}
+
 /** Slash commands are whitespace-delimited; URL and filesystem slashes are ordinary text. */
 export function skillMentions(text: string): SkillMention[] {
   return [...text.matchAll(/(?:^|\s)(\/[a-z][a-z0-9-]*)(?=$|\s|[.,!?;:])/g)].map(match => {

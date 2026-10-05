@@ -1,11 +1,14 @@
 ---
 name: set-targets
 description: Identify profit targets and any planned partial exits from the trader's saved rules and available evidence.
+metadata:
+  includes:
+    - trade-context
 ---
 
 # Set targets
 
-Use current Cairo context to identify the intended symbol, position side and relevant preparation or attached position guidance. Read Cairo context again if anything is missing or has changed.
+Apply the included [trade-context](../trade-context/SKILL.md) prerequisite. Use the confirmed pattern and resolved symbol/side tradebook together with relevant preparation or attached position guidance.
 
 Prefer targets in the position's attached guidance, then clearly distinguish suggestions from unactivated preparation rules. Return the next relevant target first, respecting the trader's sequence and the position's known management state.
 

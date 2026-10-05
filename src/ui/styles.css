@@ -130,6 +130,7 @@ button:focus-visible, summary:focus-visible, textarea:focus-visible { outline: 2
 .notes-intro { margin: 8px 0; }
 .notes-context { gap: 8px 14px; margin-bottom: 10px; }
 .notes-context input { padding: 5px 8px; }
+.notes-context select { max-width: 240px; padding: 5px 8px; border: 1px solid #c9dbf2; border-radius: 6px; background: #f7faff; color: #17345f; font: inherit; }
 .preparation-card textarea { min-height: 120px; padding: 8px; font-size: 12px; line-height: 1.5; }
 .empty-chart { height: 190px; }
 .chart-canvas { height: 250px; }

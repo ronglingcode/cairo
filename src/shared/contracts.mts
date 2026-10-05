@@ -193,7 +193,10 @@ export interface ExitTicket {
   state: "staged" | "dismissed" | "invalidated" | "approved"
 }
 
+export interface TradebookAssignment { symbol: string; side: "long" | "short"; tradebookId: string }
+
 export interface PreparationNotes {
+  tradebookAssignments?: TradebookAssignment[]
   markdown: string
   date: string | null
   symbol: string | null

@@ -14,7 +14,7 @@ Examples:
 /set-stop-loss /set-targets Explain the rationale in detail.
 ```
 
-The native OpenCode prompt hook attaches the selected skill instructions to the request. `manage-trade` also attaches `set-stop-loss` and `set-targets`; repeated dependencies are included once. Skill revisions are recorded in message metadata. Native skill attachments preserve the loaded instructions for conversation replay.
+The native OpenCode prompt hook attaches the selected skill instructions to the request. `manage-trade` also attaches `set-stop-loss` and `set-targets`; all three share `trade-context`, included once. Skill revisions are recorded in message metadata. Native skill attachments preserve the loaded instructions for conversation replay.
 
 The catalog refreshes when the composer gains focus. Files are reread for each explicit skill invocation, so an edit applies to the next invocation without restarting Cairo. A reply already underway keeps its existing instructions. Regular messages and automatic account-change notifications keep their existing behavior; this initial library is selected with slash commands.
 
@@ -22,7 +22,11 @@ The catalog refreshes when the composer gains focus. Files are reread for each e
 
 `/bookmap-pattern` opens a quick picker to tag or change a current trade’s pattern. `/bookmap-pattern SYMBOL` focuses a held symbol. With several holdings and no unique symbol, select the trade first. Cairo reads the side from fresh broker facts and offers only that side’s active patterns.
 
-`/set-stop-loss` and `/manage-trade` open the same picker if the trade has no confirmed active tag. Clicking a pattern saves it, binds the original request to the selected symbol, side and position ID, and continues the request. Manual `/bookmap-pattern` selection saves the tag without sending an AI request. Cancel leaves the message draft available. The picker is shared by docked and detached chat windows.
+`/set-stop-loss`, `/set-targets` and `/manage-trade` use the same deterministic trade-context preflight. They open the picker if the trade is ambiguous or has no confirmed active tag. Clicking a pattern saves it, binds the original request to the selected symbol, side and position ID, and continues the request. Manual `/bookmap-pattern` selection saves the tag without sending an AI request. Cancel leaves the message draft available. The picker is shared by docked and detached chat windows.
+
+In the preparation panel, expand **Tradebooks by stock and side**, add a symbol/side row, choose a library tradebook, and save notes. Each stock can have one long and one short assignment. These assignments persist with preparation and resolve in code from the actual broker position's symbol and side, independent of chart focus. AI note proposals preserve the assignments. Missing library sources stay visible as unavailable; duplicates are rejected when saving.
+
+The shared `cairo.read_trade_context` tool returns the current account/position, confirmed pattern and source, and resolved tradebook. An existing matching position attachment supplies a fallback assignment. If it disagrees with the preparation assignment, the tool reports a conflict and preserves both; changing an assignment never replaces or activates attached guidance. Unassigned books need clarification only when the requested answer requires that book. The pattern's linked source remains distinct from the stock's assigned tradebook.
 
 The canonical catalog is `Backtest/tradebooks/bookmap_patterns/activePatterns.md`, under the configured `CAIRO_TRADEBOOK_PATH`. Edit its Long/Short tables to maintain stable pattern IDs, labels and local tradebook links. Cairo rereads the catalog and linked Markdown each invocation. Unmapped patterns return no source; a source without a stop rule remains undefined. Currently bid vwap shape recovery and bid breakdown need mappings, and bid reappear needs a stop rule.
 

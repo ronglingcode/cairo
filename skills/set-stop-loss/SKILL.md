@@ -1,15 +1,14 @@
 ---
 name: set-stop-loss
 description: Tag the current trade’s Bookmap pattern and route to that pattern’s stop-loss or invalidation rule.
+metadata:
+  includes:
+    - trade-context
 ---
 
 # Set stop loss
 
-Use current Cairo context to identify the intended symbol, position ID and long/short side. If several positions match, ask which trade; never use the chart symbol as proof of the intended position.
-
-First establish the trader-confirmed Bookmap pattern. Cairo opens a side-filtered picker before sending `/set-stop-loss` (and `/manage-trade`) when a tag is missing or needs reconfirmation. The candidates come from `Backtest/tradebooks/bookmap_patterns/activePatterns.md`. Traders can also use `/bookmap-pattern` to tag or change the pattern manually. Never infer a tag from a chart or historical chat. If this skill is reached without a confirmed tag, ask the trader to use `/bookmap-pattern`; wait for selection before giving a pattern-specific stop.
-
-Call `cairo.read_bookmap_pattern` with the current position ID. Require `confirmed: true`, then read the returned source Markdown and use only that pattern’s stop-loss logic. The saved tag belongs to the account and trade; it is retired after an observed flat position or side change and must be reconfirmed after restarting Cairo. A tag identifies a setup; it does not activate guidance.
+Apply the included [trade-context](../trade-context/SKILL.md) prerequisite. Read the confirmed `bookmapPattern` source Markdown returned by `cairo.read_trade_context` and use only that pattern's stop-loss logic.
 
 If the source mapping is undefined or the source contains no stop-loss rule, say “Stop rule not defined for [pattern]” and ask for the missing rule. Do not substitute a similar pattern’s stop. Read the source again if context or the tag changes.
 

@@ -28,7 +28,7 @@ Enter sends a message; Shift+Enter adds a line break.
 
 Type `/` to choose a skill; `/s` shows `set-stop-loss` and `set-targets`.
 `manage-trade` includes both workflows. `/bookmap-pattern` tags the current trade;
-stop-loss requests offer active long/short pattern buttons when a tag is missing. Humans and AI editors share the Markdown
+stop, target and management requests share a trade/pattern picker when context is missing. Assign each stock's long/short tradebooks under **Tradebooks by stock and side** in preparation; held positions resolve the matching side automatically. Humans and AI editors share the Markdown
 files in [`skills`](skills). Edits apply to the next skill invocation. See the
 [skill library guide](docs/SKILL-LIBRARY.md) for composition and adding skills.
 
