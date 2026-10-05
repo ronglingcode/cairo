@@ -33,7 +33,8 @@ test("approved close checkpoints before send; concurrent replay writes once and 
   assert.equal(f.writes.length, 1); assert.equal(results[0].state, "accepted"); assert.equal(f.writer.reserved("fixture", "AAA"), 5)
   assert.equal((await f.writer.submit(reviewed.id, "generic allowance")).id, reviewed.id); assert.equal(f.writes.length, 1)
   const facts = f.engine.getSnapshot().brokerFacts; facts.recentFills.push({ fillId: "f", orderId: "123", symbol: "AAA", side: "sell", quantity: 5, price: 21, filledAt: new Date().toISOString() }); f.engine.updateSnapshot({ brokerFacts: facts }); f.writer.reconcileKnown()
-  await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(f.recovery.snapshot.attempts[0].state, "filled"); assert.equal(f.writer.reserved("fixture", "AAA"), 0)
+  for (let i = 0; i < 100 && f.recovery.snapshot.attempts[0].state !== "filled"; i++) await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(f.recovery.snapshot.attempts[0].state, "filled"); assert.equal(f.writer.reserved("fixture", "AAA"), 0)
 })
 test("timeout-after-send and explicit rejection are distinct; unknown blocks further sends", async t => {
   for (const response of [new Error("timeout"), { status: 400, body: { error: "invalid" } }]) {
