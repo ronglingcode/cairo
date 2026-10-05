@@ -27,8 +27,9 @@ test("source library includes only top-level strategies, without requiring inter
     assert.deepEqual(books.map(book => book.id), ["another", "gap-give-go"])
     assert.equal(books[1].title, "Gap Give and Go")
     assert.equal(books[1].interpretation, null)
-    store.stageDraft(draft())
-    const reviewed = await store.activateDraft("gap-give-go", books[1].revision)
+    await mkdir(store.root, { recursive: true })
+    await writeFile(path.join(store.root, "gap-give-go.interpretation.json"), JSON.stringify(draft().interpretation))
+    const reviewed = await store.loadTradebook("gap-give-go")
     assert.equal(reviewed.interpretation.clauses.length, 1)
     assert.equal(await readFile(path.join(source, "gap-give-go.md"), "utf8"), draft().markdown)
     const updated = draft().markdown + "\nNew authored rule."
@@ -37,38 +38,22 @@ test("source library includes only top-level strategies, without requiring inter
     assert.equal(changed.markdown, updated)
     assert.equal(changed.interpretation, null)
     assert.notEqual(changed.revision, reviewed.revision)
-    store.stageDraft(draft())
-    await assert.rejects(store.activateDraft("gap-give-go", reviewed.revision), /changed/)
-    await assert.rejects(store.activateDraft("gap-give-go", changed.revision), /source tradebooks folder/)
+    await writeFile(path.join(store.root, "gap-give-go.md"), draft().markdown)
+    await rm(path.join(source, "gap-give-go.md"))
+    assert.equal(await store.loadTradebook("gap-give-go"), null)
+    assert.deepEqual((await store.list()).map(book => book.id), ["another"])
+    for (const method of ["stageDraft", "getDraft", "activateDraft"]) assert.equal(store[method], undefined)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
-test("tradebook pair activates only when the narrative and interpretation match, then reopens", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "cairo artifacts "))
+test("missing source folder never falls back to profile tradebooks", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "cairo-read-only-"))
   try {
-    const store = new TradebookStore(root)
-    store.stageDraft(draft())
-    const saved = await store.activateDraft("gap-give-go", null)
-    assert.equal(saved.interpretation.clauses[0].clauseId, "bid-reappears")
-    assert.equal((await store.loadTradebook(saved.id)).revision, saved.revision)
-    assert.equal(store.getDraft(saved.id), null)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test("invalid clause links, stale replacements, and concurrent replacement are rejected", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "cairo artifacts "))
-  try {
-    const store = new TradebookStore(root)
-    assert.throws(() => store.stageDraft(draft("# Setup\nNo matching clause.")), /not linked/)
-    store.stageDraft(draft())
-    const initial = await store.activateDraft("gap-give-go", null)
-    store.stageDraft(draft("# Gap Give and Go\n\nWait for a bid to reappear.\nAvoid a chase."))
-    const results = await Promise.allSettled([
-      store.activateDraft("gap-give-go", initial.revision),
-      store.activateDraft("gap-give-go", initial.revision),
-    ])
-    assert.equal(results.filter((entry) => entry.status === "fulfilled").length, 1)
-    assert.equal(results.filter((entry) => entry.status === "rejected").length, 1)
+    const store = new TradebookStore(root, path.join(root, "missing"))
+    await mkdir(store.root, { recursive: true })
+    await writeFile(path.join(store.root, "gap-give-go.md"), draft().markdown)
+    assert.equal(await store.loadTradebook("gap-give-go"), null)
+    await assert.rejects(store.list(), { code: "ENOENT" })
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

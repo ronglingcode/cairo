@@ -187,8 +187,8 @@ export function App() {
                 <span>Revision {selectedTradebook.revision} · {selectedTradebook.interpretation ? `${selectedTradebook.interpretation.clauses.length} reviewed clauses` : "Interpretation not reviewed"}</span>
                 <details><summary>Original narrative and coverage</summary><pre className="narrative-text">{selectedTradebook.markdown}</pre>{selectedTradebook.interpretation?.clauses.map(clause => <div className="clause-readback" key={clause.clauseId}><strong>{clause.coverage}</strong><blockquote>{clause.sourceText}</blockquote><p>{clause.explanation}</p></div>) ?? <p>Guidance needs interpretation and review before attachment.</p>}</details>
               </div>
-            ) : <div className="empty-inline">No setup selected. Tradebooks you author will appear here.</div>}
-            <p className="chart-footnote">Selection changes focus only; it does not attach or activate a plan.</p>
+            ) : <div className="empty-inline">No tradebooks loaded. Add Markdown files in Backtest/tradebooks.</div>}
+            <p className="chart-footnote">Read-only · Edit tradebooks in Backtest/tradebooks, then restart Cairo to reload. Selection changes focus only; it does not attach or activate a plan.</p>
           </section>
 
           <section className="positions-card">

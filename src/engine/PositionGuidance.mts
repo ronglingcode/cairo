@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { CairoEngine } from "./CairoEngine.mts"
-import type { BrokerPosition, PositionAttachment } from "../shared/contracts.mts"
+import type { BrokerPosition, PositionAttachment, Tradebook } from "../shared/contracts.mts"
 import { validateManagementPolicy } from "./ManagementPolicy.mts"
 
 export interface AttachRequest {
@@ -21,12 +21,16 @@ export class PositionGuidance {
     return position
   }
   attach(request: AttachRequest): PositionAttachment {
+    const book = this.engine.getSnapshot().tradebooks.find(value => value.id === request.tradebookId && value.revision === request.tradebookRevision)
+    if (!book) throw new Error("Current interpreted tradebook is required")
+    return this.attachPolicy(request, book)
+  }
+  attachPolicy(request: AttachRequest, book: Tradebook): PositionAttachment {
     if (request.reviewed !== true || request.carryInConfirmed !== true) throw new Error("Explicit guidance and current-position context review are required")
     const position = this.currentPosition(request.accountId, request.positionId, request.factsRevision)
     if (!Number.isSafeInteger(request.initialQuantity) || request.initialQuantity < position.quantity) throw new Error("Confirm the actual initial filled whole-share quantity")
     const snapshot = this.engine.getSnapshot()
     if (snapshot.attachments.some(value => value.accountId === request.accountId && value.positionId === position.positionId && value.state !== "closed")) throw new Error("Position already has guidance; review a position-policy replacement")
-    const book = snapshot.tradebooks.find(value => value.id === request.tradebookId && value.revision === request.tradebookRevision)
     if (!book?.interpretation?.management) throw new Error("Current interpreted tradebook is required")
     const checked = validateManagementPolicy(book.interpretation.management, book.interpretation, book.markdown)
     if (!checked.monitorable) throw new Error("Mandatory guidance is unresolved or no supported rules exist")
@@ -44,13 +48,14 @@ export class PositionGuidance {
   pause(id: string, expectedRevision: string): void {
     this.change(id, expectedRevision, attachment => ({ ...attachment, state: "paused", pauseReason: "Paused by trader", revision: randomUUID() }))
   }
-  replace(id: string, expectedRevision: string, request: AttachRequest): void {
+  replace(id: string, expectedRevision: string, request: AttachRequest, policy?: Tradebook): void {
     const snapshot = this.engine.getSnapshot()
     const previous = snapshot.attachments.find(item => item.id === id && item.revision === expectedRevision && item.state !== "closed")
     if (!previous || previous.accountId !== request.accountId || previous.positionId !== request.positionId) throw new Error("Current matching attachment is required")
     // Validate with the same attachment rules without exposing an intermediate unattached state.
     const isolated = { getSnapshot: () => ({ ...snapshot, attachments: snapshot.attachments.filter(item => item.id !== id) }), updateSnapshot: () => {} } as unknown as CairoEngine
-    const replacement = new PositionGuidance(isolated, this.now).attach(request)
+    const guidance = new PositionGuidance(isolated, this.now)
+    const replacement = policy ? guidance.attachPolicy(request, policy) : guidance.attach(request)
     this.engine.updateSnapshot({ attachments: snapshot.attachments.map(item => item.id === id ? { ...replacement, id } : item) })
   }
   reconfirm(id: string, expectedRevision: string, factsRevision: number, initialQuantity: number, reviewed: boolean): void {

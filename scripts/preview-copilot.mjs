@@ -15,7 +15,6 @@ import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
 import { ExitTickets } from "../src/engine/ExitTickets.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
-import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { GuidanceProposals } from "../src/engine/GuidanceProposals.mts"
 import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 
@@ -29,7 +28,7 @@ const guidance = new PositionGuidance(engine); const monitor = new ManagementMon
 const timeline = new ManagementTimeline(engine); const tickets = new ExitTickets(engine)
 tickets.setPreflight(() => { guidance.reconcile(); monitor.cycle() })
 api.setPositionGuidance(guidance); api.setManagementMonitor(monitor); api.setExitTickets(tickets)
-api.setPolicyReview(new PolicyReview(engine, new TradebookStore(root), guidance, monitor))
+api.setPolicyReview(new PolicyReview(engine, guidance, monitor))
 if (process.argv.includes("--management")) {
   const { positionEngine, attachmentRequest } = await import("../tests/fixtures/positions.mjs")
   const fixture = positionEngine().getSnapshot()

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { homedir } from "node:os"
 import type { PositionAttachment, Tradebook, TradebookInterpretation } from "../shared/contracts.mts"
 import { validateManagementPolicy } from "./ManagementPolicy.mts"
 
@@ -9,114 +10,44 @@ export interface ActivePlan {
   attachment: PositionAttachment
 }
 
-export interface TradebookDraft {
-  id: string
-  title: string
-  markdown: string
-  interpretation: TradebookInterpretation
-}
-
 export class TradebookStore {
   readonly root: string
-  readonly sourceRoot?: string
-  private drafts = new Map<string, TradebookDraft>()
+  readonly sourceRoot: string
   private operations = new Map<string, Promise<unknown>>()
 
   constructor(userDataPath: string, sourceRoot?: string) {
     this.root = path.join(userDataPath, "tradebooks")
-    this.sourceRoot = sourceRoot
+    this.sourceRoot = sourceRoot ?? path.join(homedir(), "code", "Backtest", "tradebooks")
   }
   async list(): Promise<Tradebook[]> {
-    if (this.sourceRoot) {
-      const entries = await readdir(this.sourceRoot, { withFileTypes: true })
-      const books: Tradebook[] = []
-      for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-        if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.toLowerCase() === "index.md") continue
-        const book = await this.loadTradebook(entry.name.slice(0, -3))
-        if (book) books.push(book)
-      }
-      return books
-    }
-    await mkdir(this.root, { recursive: true })
-    const names = (await readdir(this.root)).filter(name => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\.md$/.test(name)).slice(0, 100)
+    const entries = await readdir(this.sourceRoot, { withFileTypes: true })
     const books: Tradebook[] = []
-    for (const name of names) { const book = await this.loadTradebook(name.slice(0, -3)); if (book) books.push(book) }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.toLowerCase() === "index.md") continue
+      const book = await this.loadTradebook(entry.name.slice(0, -3))
+      if (book) books.push(book)
+    }
     return books
-  }
-
-  stageDraft(draft: TradebookDraft): void {
-    const checked = validateDraft(draft)
-    this.drafts.set(checked.id, structuredClone(checked))
-  }
-
-  getDraft(id: string): TradebookDraft | null {
-    const value = this.drafts.get(id)
-    return value ? structuredClone(value) : null
   }
 
   async loadTradebook(id: string): Promise<Tradebook | null> {
     const safeId = safeIdentifier(id)
-    if (this.sourceRoot) {
-      if (safeId.toLowerCase() === "index") return null
-      try {
-        const markdown = await readFile(path.join(this.sourceRoot, `${safeId}.md`), "utf8")
-        let rawInterpretation = ""
-        let interpretation: TradebookInterpretation | null = null
-        try {
-          rawInterpretation = await readFile(path.join(this.root, `${safeId}.interpretation.json`), "utf8")
-          interpretation = validateInterpretation(JSON.parse(rawInterpretation), safeId, hash(markdown), markdown)
-        } catch { rawInterpretation = "" } // Missing/stale interpretations do not hide authored strategies.
-        return { id: safeId, title: titleFromMarkdown(markdown), markdown, contentHash: hash(markdown), revision: hash(`${markdown}\n${rawInterpretation}`), interpretation }
-      } catch (error) {
-        if (!isMissing(error)) throw error
-      }
-    }
-    const markdownPath = path.join(this.root, `${safeId}.md`)
-    const interpretationPath = path.join(this.root, `${safeId}.interpretation.json`)
+    if (safeId.toLowerCase() === "index") return null
+    let markdown: string
     try {
-      const [markdown, rawInterpretation] = await Promise.all([
-        readFile(markdownPath, "utf8"), readFile(interpretationPath, "utf8"),
-      ])
-      const interpretation = validateInterpretation(JSON.parse(rawInterpretation), safeId, hash(markdown), markdown)
-      return { id: safeId, title: titleFromMarkdown(markdown), markdown, revision: hash(`${markdown}\n${rawInterpretation}`), contentHash: hash(markdown), interpretation }
+      markdown = await readFile(path.join(this.sourceRoot, `${safeId}.md`), "utf8")
     } catch (error) {
       if (isMissing(error)) return null
-      throw new Error(`Tradebook ${safeId} is incomplete or invalid; it cannot be activated`, { cause: error })
+      throw error
     }
-  }
-
-  async activateDraft(id: string, expectedRevision: string | null): Promise<Tradebook> {
-    return this.serial(`tradebook:${safeIdentifier(id)}`, async () => {
-      const draft = this.drafts.get(id)
-      if (!draft) throw new Error("No in-memory draft is available")
-      const existing = await this.loadTradebook(id)
-      if (existing && expectedRevision !== existing.revision) throw new Error("Active tradebook changed; reload before replacing it")
-      if (!existing && expectedRevision !== null) throw new Error("Expected active revision does not exist")
-
-      const checked = validateDraft(draft)
-      const markdown = checked.markdown
-      if (this.sourceRoot && existing && markdown !== existing.markdown) throw new Error("Edit the strategy narrative in the source tradebooks folder before interpreting it")
-      const interpretation = validateInterpretation(checked.interpretation, checked.id, hash(markdown), markdown)
-      const content = JSON.stringify(interpretation, null, 2) + "\n"
-      await mkdir(this.root, { recursive: true })
-      const nonce = randomUUID()
-      const markdownTemp = path.join(this.root, `.${checked.id}.${nonce}.md.tmp`)
-      const interpretationTemp = path.join(this.root, `.${checked.id}.${nonce}.interpretation.tmp`)
-      const markdownTarget = path.join(this.root, `${checked.id}.md`)
-      const interpretationTarget = path.join(this.root, `${checked.id}.interpretation.json`)
-      try {
-        await Promise.all([
-          writeFile(markdownTemp, markdown, { encoding: "utf8", flag: "wx" }),
-          writeFile(interpretationTemp, content, { encoding: "utf8", flag: "wx" }),
-        ])
-        await rename(interpretationTemp, interpretationTarget)
-        await rename(markdownTemp, markdownTarget)
-      } finally {
-        await Promise.all([rm(markdownTemp, { force: true }), rm(interpretationTemp, { force: true })])
-      }
-      this.drafts.delete(id)
-      return (await this.loadTradebook(id))!
-    })
+    let rawInterpretation = ""
+    let interpretation: TradebookInterpretation | null = null
+    try {
+      // Existing reviewed interpretations are read-only and valid only for this source text.
+      rawInterpretation = await readFile(path.join(this.root, `${safeId}.interpretation.json`), "utf8")
+      interpretation = validateInterpretation(JSON.parse(rawInterpretation), safeId, hash(markdown), markdown)
+    } catch { rawInterpretation = "" }
+    return { id: safeId, title: titleFromMarkdown(markdown), markdown, contentHash: hash(markdown), revision: hash(`${markdown}\n${rawInterpretation}`), interpretation }
   }
 
   async loadPlan(): Promise<ActivePlan | null> {
@@ -153,15 +84,6 @@ export class TradebookStore {
     this.operations.set(key, current)
     try { return await current } finally { if (this.operations.get(key) === current) this.operations.delete(key) }
   }
-}
-
-function validateDraft(input: TradebookDraft): TradebookDraft {
-  if (!input || typeof input !== "object") throw new Error("Tradebook draft must be an object")
-  const id = safeIdentifier(input.id)
-  if (typeof input.title !== "string" || !input.title.trim() || typeof input.markdown !== "string" || !input.markdown.trim()) throw new Error("Tradebook draft needs a title and narrative")
-  const markdown = input.markdown
-  const interpretation = validateInterpretation(input.interpretation, id, hash(markdown), markdown)
-  return { id, title: input.title.trim(), markdown, interpretation }
 }
 
 function validateInterpretation(input: unknown, id: string, narrativeHash: string, markdown: string): TradebookInterpretation {

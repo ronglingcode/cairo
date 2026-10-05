@@ -142,7 +142,7 @@ app.whenReady().then(async () => {
   const tradebookPath = path.resolve(process.env.CAIRO_TRADEBOOK_PATH || path.join(homedir(), "code", "Backtest", "tradebooks"))
   const tradebookStore = new TradebookStore(app.getPath("userData"), tradebookPath)
   try { engine.updateSnapshot({ tradebooks: await tradebookStore.list() }) } catch (error) { console.error(`Cannot load tradebooks from ${tradebookPath}`, error) }
-  apiServer.setPolicyReview(new PolicyReview(engine, tradebookStore, guidance, monitor))
+  apiServer.setPolicyReview(new PolicyReview(engine, guidance, monitor))
   const http = new FetchHttpPort()
   const massive = new MassiveRestReader(http, () => configStore.massiveApiKey)
   apiServer.setChartRefresher((symbol, date) => massive.refresh(symbol, date))

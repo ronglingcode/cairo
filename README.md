@@ -30,7 +30,10 @@ The strategy selector reads the top-level `.md` files in
 Set `CAIRO_TRADEBOOK_PATH` before launching to use another directory. Restart
 Cairo to reload source edits. Narratives appear without interpretation files;
 reviewed interpretations stay in Cairo's profile and are used only while their
-hash matches the source narrative. Cairo does not write to the source folder.
+hash matches the source narrative. Cairo tradebooks are read-only: edit their Markdown files in Backtest. Cairo cannot
+create or replace tradebooks, including through AI proposals. Preparation notes
+and reviewed per-position guidance remain editable; attaching preparation guidance
+does not add it to the tradebook library.
 
 ## Coding agent handoff
 
