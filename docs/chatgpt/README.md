@@ -1,6 +1,6 @@
 # Cairo planning package
 
-Updated October 4, 2026. **T01–T16, T21, T23, and T29–T32 are complete (22/50).** The runnable notes/chart/chat milestone is complete. Next is T22 for clause-linked interpretation validation. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
+Updated October 4, 2026. **T01–T16, T21–T23, and T26–T38 are complete (32/50).** The runnable notes/chart/chat milestone is complete. Next is T39 for exact ticket approval. The ten-task batch is complete; remaining work resumes at 11:50 PM Pacific October 4. Bookmap broadcast scope is BID_STEP_UP and BID_REAPPEAR only. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
 
 The target is a personal Windows US-stocks desktop for **premarket preparation and AI-assisted trade management**, with Bookmap signal detection added in the final feature phase. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, and collaboratively authored notes/guidance.
 
@@ -46,3 +46,4 @@ These preserve earlier research. Their SQLite, full-history, replay, journal/res
 Important findings remain: the Bookmap detector currently keeps serializable signals in memory and still needs an observation export/stream; Cairo leaves its heatmap external. ViteApp supplies reusable Massive/Schwab examples. Personal management semantics and the separate 1-minute ORB reference must survive simplification. The engine never waits for model inference.
 
 Planning through the scope decisions was committed locally as `8f7a2d7`. Implementation through T15 and the T01/T02 retries has separate local commits, recorded in HANDOFF.md. The latest OpenCode probe uses synthetic local model responses and no credentials or broker calls. Nothing was pushed remotely.
+

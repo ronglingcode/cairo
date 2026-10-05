@@ -1,6 +1,6 @@
 # Start or resume the Cairo coding checklist
 
-Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **22 of 50 tasks complete (T01–T16, T21, T23, T29–T32); 28 remain.** Each completed task has verification notes and a separate local task commit.
+Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **32 of 50 tasks complete (T01–T16, T21–T23, T26–T38); 18 remain.** Each completed task has verification notes and a separate local task commit.
 
 ## Current check-in
 
@@ -10,7 +10,7 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 - T30's restricted domain plugin is complete; see [verification](T30-VERIFICATION.md).
 - T31's actual per-step context hook is complete; see [verification](T31-VERIFICATION.md).
 - T32 completes the runnable notes/chart/chat milestone; see [verification and launch instructions](T32-VERIFICATION.md).
-- T21's pure predicate evaluator is complete; see [verification](T21-VERIFICATION.md). All five tasks authorized after T23 (T29, T30, T31, T32, T21) are complete. **Next: T22**, clause-linked interpretation validation.
+- T21's pure predicate evaluator is complete; see [verification](T21-VERIFICATION.md). All five tasks authorized after T23 (T29, T30, T31, T32, T21) are complete. **Next: T39**, exact ticket approval; resume at 11:50 PM Pacific October 4.
 - Bookmap T17–T20 and pattern-specific T24–T25 move to the final feature phase after the other features; they remain required for the full MVP. No plugin changes now.
 - No commits were pushed. T01–T16 completion commits are recorded below.
 
@@ -41,14 +41,21 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 
 The [OpenCode probe instructions](opencode-v2-probe/README.md) include optional user verification with `npm run probe:manual`: enter `once`, then `reject`, and expect `ALL CHECKS PASSED`. Tool permission metadata alone did not pause the fake executor; the mock backend explicitly waits for the matching permission reply. Preserve that requirement when implementing production engine-ticket approval in T38–T46. Owned lifecycle is complete in T29; distributed packaging remains T48.
 
+## Latest management batch
+
+Completed T22, T26–T28 and T33–T38 with separate commits; see [management verification](MANAGEMENT-PHASE-VERIFICATION.md). All 78 checks, typecheck and production build pass. Browser synthetic checks confirmed scoped observation, 5-share exact SELL draft, dismissal and explicit artifact acceptance without changing frozen policies.
+
+Current limitations: drafts cannot submit; T39–T46 add approval/checkpoint/writer/recovery. Known standalone NORMAL/DAY closing protection can be staged; OCO/unknown topology stays manual. Completed-action migration is deliberately conservative across edits of matching action kind/order type. Live broker/installed Bookmap verification remains pending.
+
 ## Resume prompt
 
 Give the following prompt to the coding agent:
 
-> Resume Cairo in `C:/Users/lingr/trading/cairo` using CODING-PLAN.md and PREPARATION-MANAGEMENT-PHASE.md. Read applicable AGENTS.md and latest human instructions. T01–T16, T21, T23, and T29–T32 are complete. The requested five-task batch is complete. The next planned task is T22. Follow the revised order thereafter when authorized. The first runnable app supports freeform premarket notes, AI chat, and timestamped one-minute chart knowledge. Bookmap stays in the full MVP at the final feature phase; no plugin changes now. Preserve token ownership. Verify and commit each task separately. ViteApp and Backtest stay read-only.
+> Resume Cairo in `C:/Users/lingr/trading/cairo` using CODING-PLAN.md and PREPARATION-MANAGEMENT-PHASE.md. Read applicable AGENTS.md and latest human instructions. T01–T16, T21–T23, and T26–T38 are complete. The requested ten-task batch is complete. Continue the rest starting 11:50 PM America/Los_Angeles October 4, 2026 (October 5 06:50 UTC). Remaining order: T39–T46, T17–T20, T24–T25, T47–T50. Each task gets its own local commit. The first runnable app supports freeform premarket notes, AI chat, and timestamped one-minute chart knowledge. Bookmap stays in the full MVP at the final feature phase; only BID_STEP_UP and BID_REAPPEAR may be broadcast/consumed. V-shape removal is in a separate Bookmap chat. Preserve token ownership. Verify and commit each task separately. ViteApp and Backtest stay read-only.
 >
 > The confirmed MVP has observer entries, exact-human-approved assistant exits, human-language per-setup management, Embedded OpenCode V2 plus a Cairo plugin, read-only Bookmap-maintained Schwab tokens with direct backend requests, and a stale-tolerant Massive REST one-minute chart. Cairo opens no Massive WebSocket. Keep live state in memory and only essential authored/recovery files. Do not implement assisted entries, automated management, raw-data sharing/live candles, SQLite, journal/research, or a custom model runner.
 >
 > Use fake provider/broker/model data for verification. Do not submit real orders or run paid inference merely to test. Never push commits or branches to any remote. At session end, report completed task IDs/local hashes, checks, blockers, and the next task. Preserve the checklist and task notes so another agent can resume without the previous chat.
 
 If assigning a single task, name its ID explicitly and stop after its verified local commit. If continuing the entire MVP, the agent proceeds task by task; no extra permission is required for the routine local commits requested by this workflow. Required human approval for actual exit orders remains an application behavior, not authorization for a coding agent to place test trades.
+

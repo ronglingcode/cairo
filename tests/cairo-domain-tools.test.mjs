@@ -36,7 +36,7 @@ test("note proposals are revision-bound, expire, and never apply guidance or sub
   assert.deepEqual(engine.getSnapshot().preparation, notes)
   await assert.rejects(tools.execute("propose_notes", { markdown: "Stale", date: null, symbol: null, expectedRevision: null }, "owned-session"), /revision changed/)
   assert.equal((await tools.execute("stage_exit", { intent: "close", symbol: "SPY", quantity: 1 }, "owned-session")).available, false)
-  assert.equal((await tools.execute("propose_guidance", { text: "Review my position" }, "owned-session")).available, false)
+  await assert.rejects(tools.execute("propose_guidance", { text: "Review my position" }, "owned-session"), /Unsupported guidance/)
   await assert.rejects(tools.execute("stage_exit", { intent: "open", symbol: "SPY", quantity: 1 }, "owned-session"), /opening, increasing, and reversing/)
   assert.equal(engine.getSnapshot().tickets.length, 0)
   now += 5 * 60_000 + 1

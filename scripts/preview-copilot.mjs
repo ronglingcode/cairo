@@ -10,6 +10,14 @@ import { CairoDomainTools } from "../src/copilot/CairoDomainTools.mts"
 import { CopilotChat } from "../src/copilot/CopilotChat.mts"
 import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
 import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
+import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
+import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
+import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
+import { ExitTickets } from "../src/engine/ExitTickets.mts"
+import { PolicyReview } from "../src/engine/PolicyReview.mts"
+import { TradebookStore } from "../src/engine/TradebookStore.mts"
+import { GuidanceProposals } from "../src/engine/GuidanceProposals.mts"
+import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 
 // Source preview with synthetic market facts and disposable storage; no real provider/broker.
 const root = await mkdtemp(path.join(os.tmpdir(), "Cairo preview "))
@@ -17,6 +25,25 @@ const engine = new CairoEngine()
 const api = new EngineApiServer(engine)
 api.setPreparationStore(new PreparationStore(root))
 await api.loadPreparation()
+const guidance = new PositionGuidance(engine); const monitor = new ManagementMonitor(engine, guidance)
+const timeline = new ManagementTimeline(engine); const tickets = new ExitTickets(engine)
+tickets.setPreflight(() => { guidance.reconcile(); monitor.cycle() })
+api.setPositionGuidance(guidance); api.setManagementMonitor(monitor); api.setExitTickets(tickets)
+api.setPolicyReview(new PolicyReview(engine, new TradebookStore(root), guidance, monitor))
+if (process.argv.includes("--management")) {
+  const { positionEngine, attachmentRequest } = await import("../tests/fixtures/positions.mjs")
+  const fixture = positionEngine().getSnapshot()
+  engine.updateSnapshot({ positions: fixture.positions, broker: fixture.broker, brokerFacts: fixture.brokerFacts, brokerFactsRevision: fixture.brokerFactsRevision, tradebooks: fixture.tradebooks })
+  guidance.attach(attachmentRequest(engine)); guidance.attach(attachmentRequest(engine, 1, "whole")); monitor.cycle()
+  const book = fixture.tradebooks[1]
+  const preparation = await new PreparationStore(root).save({ markdown: book.markdown, date: null, symbol: "BBB" }, null)
+  engine.updateSnapshot({ preparation })
+  new GuidanceProposals(engine).propose({ tradebookId: "reviewed-whole", expectedPreparationRevision: preparation.revision, expectedTradebookRevision: null, clauses: book.interpretation.clauses, management: book.interpretation.management }, "synthetic-preview")
+}
+const managementTimer = setInterval(() => {
+  if (process.argv.includes("--management")) { const facts = engine.getSnapshot().brokerFacts; facts.asOf = new Date().toISOString(); facts.source.updatedAt = facts.asOf; engine.updateSnapshot({ brokerFacts: facts, broker: facts.source }) }
+  guidance.reconcile(); monitor.cycle(); timeline.capture(); tickets.cycle()
+}, 1000)
 const base = await api.start()
 const provider = new FakeModelServer()
 const selected = modelConfiguration(true, "", await provider.start())
@@ -26,7 +53,10 @@ const sidecar = new OpenCodeSidecar({ binary: path.resolve("node_modules/@openco
 })
 const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true })
 api.setCopilotChat(chat)
-api.setDomainTools(new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace))
+const tools = new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace)
+tools.setExitTickets(tickets); api.setDomainTools(tools)
+const waker = new CopilotWaker(engine, chat); api.setCopilotWaker(waker)
+const wakeTimer = setInterval(() => waker.cycle(), 1000)
 api.setCopilotRestarter(async () => { await chat.stop(); const ok = await sidecar.restart(); if (ok) await chat.connect(); return ok })
 api.setChartRefresher(async symbol => {
   const fetchedAt = new Date().toISOString()
@@ -53,6 +83,7 @@ let stopping = false
 async function stop() {
   if (stopping) return
   stopping = true
+  clearInterval(managementTimer); clearInterval(wakeTimer)
   server.closeAllConnections()
   await new Promise(resolve => server.close(resolve))
   await chat.stop(); await sidecar.stop(); await provider.stop(); await api.stop(); await engine.stop()

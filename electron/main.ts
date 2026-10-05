@@ -1,3 +1,4 @@
+import { ExitTickets } from "../src/engine/ExitTickets.mts"
 import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
@@ -24,13 +25,16 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture(); tickets.cycle(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const monitor = new ManagementMonitor(engine, guidance)
+const tickets = new ExitTickets(engine)
+tickets.setPreflight(() => { guidance.reconcile(); monitor.cycle() })
 const timeline = new ManagementTimeline(engine, text => { if (Notification.isSupported()) new Notification({ title: "Cairo management recommendation", body: text }).show() })
 const apiServer = new EngineApiServer(engine)
 apiServer.setPositionGuidance(guidance)
 apiServer.setManagementMonitor(monitor)
+apiServer.setExitTickets(tickets)
 let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined
@@ -118,12 +122,14 @@ app.whenReady().then(async () => {
   waker = new CopilotWaker(engine, chat)
   apiServer.setCopilotWaker(waker)
   apiServer.setCopilotRestarter(async () => { await chat!.stop(); const ok = await sidecar!.restart(); if (ok) await chat!.connect(); return ok })
-  apiServer.setDomainTools(new CairoDomainTools(engine, async id => {
+  const domainTools = new CairoDomainTools(engine, async id => {
     const client = sidecar?.client
     if (!client || !sidecar) return false
     const session = await client.session.get({ sessionID: id }, { signal: AbortSignal.timeout(5000) })
     return path.resolve(session.location.directory).toLowerCase() === path.resolve(sidecar.workspace).toLowerCase()
-  }))
+  })
+  domainTools.setExitTickets(tickets)
+  apiServer.setDomainTools(domainTools)
   void sidecar.start().then(ok => { if (ok) return chat!.connect() })
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)
@@ -133,6 +139,7 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+
 
 
 

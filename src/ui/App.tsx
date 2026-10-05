@@ -1,3 +1,4 @@
+import { ExitReview } from "./ExitReview"
 import { ProposalReview } from "./ProposalReview"
 import { ManagementPanel } from "./ManagementPanel"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -208,10 +209,7 @@ export function App() {
 
           {snapshot && <ProposalReview snapshot={snapshot} />}
           {snapshot && <ManagementPanel snapshot={snapshot} />}
-          <section className="tickets-card">
-            <div className="card-heading"><div><span className="eyebrow">EXIT REVIEW</span><h2>Tickets</h2></div><span className="count">{snapshot?.tickets.length ?? 0}</span></div>
-            {snapshot?.tickets.length ? snapshot.tickets.map((ticket) => <div className="ticket-row" key={ticket.id}><strong>{ticket.symbol} · {ticket.action}</strong><span>{ticket.quantity} shares · {ticket.reason}</span><small>{ticket.state} · expires {formatTime(ticket.expiresAt)}</small></div>) : <div className="empty-inline">No exit tickets need review.</div>}
-          </section>
+          {snapshot && <ExitReview snapshot={snapshot} />}
         </section>
 
         <aside className="copilot-column">
@@ -261,5 +259,6 @@ function formatMoney(value: number | null): string {
 function supportedOrderType(value: string): boolean {
   return ["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "STOP-LIMIT"].includes(value.toUpperCase())
 }
+
 
 

@@ -9,6 +9,8 @@ import type { PositionGuidance, AttachRequest } from "./PositionGuidance.mts"
 import type { ManagementMonitor } from "./ManagementMonitor.mts"
 import type { PolicyReview } from "./PolicyReview.mts"
 import type { CopilotWaker } from "../copilot/CopilotWaker.mts"
+import type { ExitTickets } from "./ExitTickets.mts"
+import type { ExitIntent } from "./ExitEligibility.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -35,6 +37,8 @@ export class EngineApiServer {
   setPolicyReview(review: PolicyReview): void { this.policyReview = review }
   private waker: CopilotWaker | undefined
   setCopilotWaker(waker: CopilotWaker): void { this.waker = waker }
+  private tickets: ExitTickets | undefined
+  setExitTickets(tickets: ExitTickets): void { this.tickets = tickets }
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -133,6 +137,14 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (["/tickets/stage", "/tickets/dismiss"].includes(url.pathname) && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.readCommand(request).then(value => {
+        if (!this.tickets) throw new Error("Exit staging unavailable")
+        if (url.pathname === "/tickets/stage") this.json(response, 200, { ticket: this.tickets.stage(value as unknown as ExitIntent, "trader") })
+        else { this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
+      }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Ticket request failed" })); return
+    }
     if (url.pathname === "/copilot/events" && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(value => { if (!this.waker || typeof value.enabled !== "boolean") throw new Error("Event settings unavailable"); this.waker.setEnabled(value.enabled); this.json(response, 200, { ok: true }) }).catch(() => this.json(response, 400, { error: "Invalid event setting" })); return

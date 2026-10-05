@@ -32,8 +32,8 @@ export function createCairoPlugin(bridge: Bridge) {
           options: { namespace: "cairo", codemode: false, permission: "cairo_propose" },
           execute: async (input, context) => ({ content: JSON.stringify(await bridge("propose_guidance", input, context)) }),
         })
-        editor.add({ name: "stage_exit", description: "Check availability of exact exit/protection staging. Cannot execute orders; opening/increasing/reversing is prohibited.",
-          input: { type: "object", properties: { intent: { type: "string", enum: ["close", "cancel-protection", "replace-protection"] }, symbol: { type: "string" }, quantity: { type: "integer", minimum: 1 } }, required: ["intent", "symbol"], additionalProperties: false },
+        editor.add({ name: "stage_exit", description: "Stage an exact review-only exit from a current evidenced management recommendation. Read current facts, include its recommendationId and exact action fields. No submission or approval is granted. Explicit trader exits without a recommendation use the review controls. Opening/increasing/reversing is prohibited.",
+          input: { type: "object", properties: { intent: { type: "string", enum: ["close", "cancel-protection", "replace-protection"] }, accountId: { type: "string" }, positionId: { type: "string" }, symbol: { type: "string" }, positionSide: { type: "string", enum: ["long", "short"] }, factsRevision: { type: "integer" }, quantity: { type: "integer", minimum: 1 }, orderType: { type: "string", enum: ["market", "limit", "stop", "stop-limit"] }, limitPrice: { type: ["number", "null"] }, stopPrice: { type: ["number", "null"] }, orderId: { type: "string" }, recommendationId: { type: "string" }, reason: { type: "string", maxLength: 4000 }, commandId: { type: "string" } }, required: ["intent", "accountId", "positionId", "symbol", "positionSide", "factsRevision", "quantity", "recommendationId", "reason", "commandId"], additionalProperties: false },
           options: { namespace: "cairo", codemode: false, permission: "cairo_propose" },
           execute: async (input, context) => ({ content: JSON.stringify(await bridge("stage_exit", input, context)) }),
         })
@@ -52,4 +52,5 @@ export default createCairoPlugin(async (operation, input, context) => {
   if (!response.ok) throw new Error("Cairo rejected the tool request; refresh context before continuing")
   return response.json()
 })
+
 

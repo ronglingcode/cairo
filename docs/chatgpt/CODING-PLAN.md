@@ -1,6 +1,6 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. **T01–T16, T21, T23, T29–T32 complete: 22/50 complete, 28 remaining. T22 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 4, 2026. **T01–T16, T21–T23, T26–T38 complete: 32/50 complete, 18 remaining. T39 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
@@ -28,7 +28,7 @@ These are practical defaults selected for this final handoff. Change a default o
 | --- | --- |
 | Engine process | An independent asynchronous TypeScript module inside Electron main. Renderer reload does not restart it. No utility-process framework initially. |
 | OpenCode hosting | Pinned bundled local headless server sidecar, with a Cairo-owned location/config and client adapter. T01 proves the actual Windows/server/plugin combination before depending on it. |
-| Bookmap observation work | Deferred: T17–T20. No plugin source changes, observation client, or pattern selection is needed for the current phase. T16 remains a future contract. |
+| Bookmap observation work | Deferred: T17–T20. Bookmap follows T46; only BID_STEP_UP and BID_REAPPEAR may be broadcast/consumed. T16 remains a future contract. |
 | Preparation authoring | Freeform Markdown notes with optional date/symbol context, saved as a small current artifact. Save/reopen works without AI or a reviewed interpretation. AI changes are proposals. |
 | Tradebook authoring | Human-language Markdown edited directly or through chat. Cairo maintains a small reviewed JSON interpretation next to the narrative; users never need to author JSON/YAML/rules. |
 | Artifact activation | Explicit review/accept and per-position attachment. Editing files/chat drafts proposes a change; it does not hot-swap a live attachment. |
@@ -73,7 +73,7 @@ docs/chatgpt/             This checklist, task notes, compatibility and user gui
 
 The final task layout may differ, but the engine imports no DOM/chart/React globals. Do not import entire ViteApp runtime modules or their Firebase/strategy behavior. Vendor-copy only the relevant pure functions with source/license attribution. ViteApp and Backtest are read-only reference repositories.
 
-All current-phase changes belong in Cairo. T17–T19 are deferred sibling `bookmap-plugin` tasks; do not implement them until the user resumes observation work after choosing the required patterns. The existing read-only token handoff continues without plugin changes. ViteApp and Backtest remain read-only references.
+All current-phase changes belong in Cairo. T17–T19 are deferred sibling `bookmap-plugin` tasks; implement them after T46 with the user-selected BID_STEP_UP/BID_REAPPEAR allowlist. The existing read-only token handoff continues without plugin changes. ViteApp and Backtest remain read-only references.
 
 ### Local reuse map
 
@@ -303,7 +303,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 ### Bookmap observation bridge — T16–T20
 
-**T17–T20 move to the final feature phase by the October 4 scope revision.** They remain required for the full MVP. T16 stays completed design work. Initial chart/notes/chat and trade-management features do not depend on this bridge; select required observations before implementing it.
+**T17–T20 move to the final feature phase by the October 4 scope revision.** They remain required for the full MVP. T16 stays completed design work. Initial chart/notes/chat and trade-management features do not depend on this bridge; The only selected broadcasts are BID_STEP_UP and BID_REAPPEAR.
 
 - [x] **T16 — Specify the observation envelope from installed APIs**
 
@@ -319,7 +319,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Depends:** T16. **Repository:** bookmap-plugin, followed by Cairo progress commit.
 
-**Deliver:** Additive export at the existing pattern-update/store path to the existing WebSocket server. Preserve badges/sounds/detector behavior and episode identity/revision. Use existing price normalization; leave the Massive connection untouched. No JSONL persistence.
+**Deliver:** Broadcast only BID_STEP_UP and BID_REAPPEAR. Additive export at the existing pattern-update/store path to the existing WebSocket server. Preserve badges/sounds/detector behavior and episode identity/revision. Use existing price normalization; leave the Massive connection untouched. No JSONL persistence.
 
 **Verify:** Relevant Java tests show exported create/update observations and no routing into native execution. **Commit:** `feat(T17): export Bookmap pattern observations`; Cairo note records the sibling hash.
 
@@ -343,7 +343,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Depends:** T05, T16, T19. **Repository:** Cairo.
 
-**Deliver:** WebSocket receiver, bounded episode projection, heartbeat age/readiness, source reset/reconnect handling, and alias/price normalization. Deduplicate by source/symbol/episode; bootstrap snapshots restore context without fresh alerts. No file-tail fallback or raw market-data feed.
+**Deliver:** Accept only BID_STEP_UP and BID_REAPPEAR pattern observations. WebSocket receiver, bounded episode projection, heartbeat age/readiness, source reset/reconnect handling, and alias/price normalization. Deduplicate by source/symbol/episode; bootstrap snapshots restore context without fresh alerts. No file-tail fallback or raw market-data feed.
 
 **Verify:** Fake server exercises duplicate UUID-changing updates, snapshot/live overlap, missing heartbeat, replay/unknown, malformed units, and reset. **Commit:** `feat(T20): ingest Bookmap observations with source status`.
 
@@ -495,7 +495,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Wrong account/symbol, zero/excess/opposite-side actions, unavailable condition evidence, external fills, and generic tool permission bypass attempts. **Commit:** `feat(T37): enforce exit-only broker action eligibility`.
 
-- [ ] **T38 — Stage exact exit tickets in memory**
+- [x] **T38 — Stage exact exit tickets in memory**
 
 **Depends:** T27, T30, T37. **Repository:** Cairo.
 
@@ -611,7 +611,8 @@ Do not mark tasks complete because time/context is running out. Leave precise ne
 
 ## 8. Prompt to give the implementation agent
 
-> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16, T21, T23, and T29–T32 are complete. Resume at T22. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; no plugin changes now. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
+> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16, T21–T23 and T26–T38 are complete. Resume at T39 after 11:50 PM Pacific October 4, 2026. Continue the remaining authorized tasks, each separately committed. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; broadcast only BID_STEP_UP and BID_REAPPEAR when that phase begins. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
+
 
 
 

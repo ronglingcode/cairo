@@ -20,3 +20,5 @@ Start with [CODING-PLAN.md](docs/chatgpt/CODING-PLAN.md), the complete MVP hando
 Use [HANDOFF.md](docs/chatgpt/HANDOFF.md) for the ready-to-copy prompt to start or resume work with another coding agent.
 
 The [planning index](docs/chatgpt/README.md) links the architecture, agreed decisions, and supporting research.
+
+Reviewed per-position management, AI interpretation proposals, optional account-event updates, and exact exit/protection drafts are now available. Drafts cannot submit orders yet. The next task adds exact ticket approval; only bid step up and bid reappear are selected for the later Bookmap broadcast phase.

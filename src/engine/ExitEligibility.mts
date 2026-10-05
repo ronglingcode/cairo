@@ -11,7 +11,8 @@ export function validateExit(snapshot: CairoSnapshot, input: ExitIntent, origin:
   if (!["close", "cancel-protection", "replace-protection"].includes(input.intent)) throw new Error("Opening, increasing and reversing are prohibited")
   if (typeof input.reason !== "string" || !input.reason.trim() || input.reason.length > 4000 || typeof input.commandId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(input.commandId)) throw new Error("Bounded reason and request identity required")
   const facts = snapshot.brokerFacts; const age = facts ? now - Date.parse(facts.asOf) : Infinity
-  if (!facts || facts.accountId !== input.accountId || snapshot.brokerFactsRevision !== input.factsRevision || snapshot.broker.state !== "connected" || facts.source.state !== "connected" || !Number.isFinite(age) || age < 0 || age > 60_000 || !facts.ordersComplete) throw new Error("Fresh complete matching broker facts required")
+  const sourceAge = facts?.source.updatedAt ? now - Date.parse(facts.source.updatedAt) : Infinity
+  if (!facts || facts.accountId !== input.accountId || snapshot.brokerFactsRevision !== input.factsRevision || snapshot.broker.state !== "connected" || facts.source.state !== "connected" || !Number.isFinite(age) || age < 0 || age > 60_000 || !Number.isFinite(sourceAge) || sourceAge < 0 || sourceAge > 60_000 || !facts.ordersComplete) throw new Error("Fresh complete matching broker facts required")
   const positions = facts.positions.filter(item => item.positionId === input.positionId && item.symbol === input.symbol && item.side === input.positionSide)
   if (positions.length !== 1 || !Number.isSafeInteger(positions[0]!.quantity) || positions[0]!.quantity <= 0) throw new Error("Exact current whole-share holding and side required")
   const position = positions[0]!

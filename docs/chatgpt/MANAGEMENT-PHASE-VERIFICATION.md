@@ -45,3 +45,6 @@ Pure SINGLE equity market/limit/stop/stop-limit close payloads derive SELL or BU
 
 ## T37
 Authoritative exit validation binds account, position, symbol, side, current fact revision, fresh complete reads, available whole shares and exact rule evidence. Explicit trader closes use broker facts without live candles. Working protection blocks additional closes; only exact known standalone closing NORMAL/DAY protection qualifies for cancel/replace staging. Unknown/OCO/entry topology stays manual. Generic permission/approval fields are rejected. Three eligibility fixtures and typecheck pass.
+
+## T38
+Exact in-memory tickets contain engine-built payload/affected protection, source, origin, runtime, meaningful facts fingerprint and 60-second expiry. Rule staging requires current scoped evidence; explicit trader staging uses capability-protected controls. Repeated command/episode staging deduplicates. Material changes, stale reads, expiry or dismissal cannot authorize requests. Timestamp-only availability polls no longer change the broker fact revision. All 78 checks, typecheck and production build pass; synthetic browser checks confirmed observation readback, exact 5-share SELL draft, dismissal and artifact acceptance. The disposable management preview is available with npm run preview:fake -- --management. No broker writer exists.

@@ -165,6 +165,16 @@ export interface ExitOrderShape {
 }
 
 export interface ExitTicket {
+  positionId?: string
+  createdAt?: string
+  runtimeInstanceId?: string
+  factsRevision?: number
+  factsFingerprint?: string
+  recommendationId?: string | null
+  attachmentRevision?: string | null
+  origin?: "trader" | "copilot"
+  exactPayload?: import("../engine/ExitPayload.mts").EquityExitPayload | null
+  affectedOrders?: BrokerWorkingOrder[]
   id: string
   accountId: string
   symbol: string

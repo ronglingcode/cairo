@@ -1,4 +1,6 @@
 import { GuidanceProposals } from "../engine/GuidanceProposals.mts"
+import type { ExitTickets } from "../engine/ExitTickets.mts"
+import type { ExitIntent } from "../engine/ExitEligibility.mts"
 import { randomUUID } from "node:crypto"
 import { CairoEngine } from "../engine/CairoEngine.mts"
 import { validateContent, type PreparationContent } from "../engine/PreparationStore.mts"
@@ -16,6 +18,8 @@ export class CairoDomainTools {
   private readonly engine: CairoEngine
   private readonly verifySession: (id: string) => Promise<boolean>
   private readonly now: () => number
+  private tickets: ExitTickets | undefined
+  setExitTickets(tickets: ExitTickets): void { this.tickets = tickets }
 
   constructor(engine: CairoEngine, verifySession: (id: string) => Promise<boolean>, now: () => number = Date.now) {
     this.engine = engine
@@ -54,8 +58,8 @@ export class CairoDomainTools {
     }
     if (operation === "propose_guidance") return { available: true, applied: false, proposal: new GuidanceProposals(this.engine, this.now).propose(value, sessionId) }
     if (operation === "stage_exit") {
-      if (!Object.keys(value).every(key => ["intent", "symbol", "quantity"].includes(key))) throw new Error("Unexpected exit proposal field")
       if (!["close", "cancel-protection", "replace-protection"].includes(String(value.intent))) throw new Error("Cairo permits exit/protection proposals only; opening, increasing, and reversing are rejected")
+      if (this.tickets) return { available: true, submitted: false, ticket: this.tickets.stage(value as unknown as ExitIntent, "copilot") }
       if (typeof value.symbol !== "string" || !/^[A-Z][A-Z0-9.-]{0,15}$/.test(value.symbol)) throw new Error("Exit symbol is invalid")
       if (value.quantity !== undefined && (typeof value.quantity !== "number" || !Number.isSafeInteger(value.quantity) || value.quantity <= 0)) throw new Error("Exit quantity must be positive whole shares")
       return { available: false, reason: "Exact exit tickets and approvals are not implemented yet. No broker request was staged or sent." }
@@ -95,7 +99,7 @@ export class CairoDomainTools {
         markdown: attachment.markdown?.slice(0, 4000), interpretation: attachment.interpretation,
       })),
       recommendations: snapshot.recommendations.slice(-20),
-      capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: false, brokerWrites: false, bookmap: "planned-final-phase" },
+      capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: Boolean(this.tickets), brokerWrites: false, bookmap: "planned-final-phase" },
     }
   }
 }
