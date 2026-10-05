@@ -11,11 +11,11 @@ export function ChartView({ bars, symbol }: { bars: ChartBar[]; symbol: string }
   useEffect(() => {
     if (!host.current) return
     const instance = createChart(host.current, {
-    layout: { background: { color: "#10151b" }, textColor: "#aab4c0", fontFamily: "Inter, sans-serif", attributionLogo: true },
-      grid: { vertLines: { color: "#202833" }, horzLines: { color: "#202833" } },
-      rightPriceScale: { borderColor: "#2a333e" },
-      timeScale: { borderColor: "#2a333e", timeVisible: true, secondsVisible: false },
-      crosshair: { vertLine: { color: "#607080" }, horzLine: { color: "#607080" } },
+    layout: { background: { color: "#f7faff" }, textColor: "#294569", fontFamily: "Inter, sans-serif", attributionLogo: true },
+      grid: { vertLines: { color: "#dce8f7" }, horzLines: { color: "#dce8f7" } },
+      rightPriceScale: { borderColor: "#c9dbf2" },
+      timeScale: { borderColor: "#c9dbf2", timeVisible: true, secondsVisible: false },
+      crosshair: { vertLine: { color: "#4388ed" }, horzLine: { color: "#4388ed" } },
     })
     const candleSeries = instance.addSeries(CandlestickSeries, {
       upColor: "#37c99a", downColor: "#e76672", borderVisible: false,
