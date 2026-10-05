@@ -585,7 +585,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Build from the lockfile; inspect resource layout/launch paths including spaces and a missing sidecar; no global Bun/Node dependency at runtime. **Commit:** `build(T48): package private Windows Cairo desktop`.
 
-- [ ] **T49 — Smoke-test the packaged app across failures and reconnects**
+- [x] **T49 — Smoke-test the packaged app across failures and reconnects**
 
 **Depends:** T48. **Repository:** Cairo.
 

@@ -96,3 +96,6 @@ Complete synthetic workflow covers notes/context, live-mode fake observation, ex
 
 ## T48
 Private unpacked Windows x64 package build 6c471624650b includes Electron 44.5.1, external OpenCode 2.0.22/plugin resources, built engine/renderer, references, lockfile/file manifest and third-party notices. Actual packaged launch with a spaced isolated profile loads renderer, synthetic broker and bundled sidecar; renderer reload preserves runtime. No keys/user artifacts or global runtime required. NSIS/Inno are unavailable, so no installer. T49 continues the broader smoke scenarios.
+
+## T49
+Actual packaged build 6c471624650b passes two isolated fake-network launch runs: minimize, renderer reload, token rotation, Bookmap reset/reconnect/bootstrap, chart failure, sidecar loss/restart, missing runtime recovery, saved notes after application restart, zero external mutations and clean exit. PATH excludes global Node/Bun. Screenshot inspected and owned-process inventory is empty. See PACKAGED-SMOKE.md; installed live Bookmap/real-account verification is unavailable.
