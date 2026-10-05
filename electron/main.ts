@@ -10,6 +10,7 @@ import { BookmapTokenProvider } from "../src/engine/BookmapTokenProvider.mts"
 import { SchwabAccountReader } from "../src/engine/SchwabAccountReader.mts"
 import { SchwabOrderReader } from "../src/engine/SchwabOrderReader.mts"
 import { BrokerRefreshCoordinator } from "../src/engine/BrokerRefreshCoordinator.mts"
+import { PreparationStore } from "../src/engine/PreparationStore.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
@@ -54,6 +55,8 @@ function createWindow(apiBaseUrl: string, config: PublicConfiguration): void {
 app.whenReady().then(async () => {
   const configStore = new LocalConfiguration(app.getPath("userData"))
   const config = await configStore.load()
+  apiServer.setPreparationStore(new PreparationStore(app.getPath("userData")))
+  await apiServer.loadPreparation()
   const http = new FetchHttpPort()
   const massive = new MassiveRestReader(http, () => configStore.massiveApiKey)
   apiServer.setChartRefresher((symbol, date) => massive.refresh(symbol, date))

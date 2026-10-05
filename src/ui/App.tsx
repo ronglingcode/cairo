@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { CairoSnapshot, SourceStatus } from "../shared/contracts.mts"
 import { EngineConnection, type RendererConnectionState } from "../renderer/EngineConnection.mts"
 import { ChartView } from "./ChartView"
+import { PreparationEditor } from "./PreparationEditor"
 
 const EMPTY_STATUS: SourceStatus = { source: "chart", state: "unknown", updatedAt: null, detail: "Engine snapshot unavailable" }
 
@@ -106,7 +107,7 @@ export function App() {
 
         <section className="main-column">
           <div className="page-heading">
-            <div><p className="eyebrow">{sessionDate}</p><h1>Trading workspace</h1></div>
+            <div><p className="eyebrow">{sessionDate}</p><h1>Preparation &amp; trading</h1></div>
             <span className="market-pill"><span className={`status-dot ${connectionTone(connectionState)}`} />Engine {connectionLabel(connectionState)}</span>
           </div>
 
@@ -117,6 +118,8 @@ export function App() {
             <Source status={copilotStatus} name="Cairo AI" />
           </div>
           {window.cairo?.config?.setupRequired && <div className="setup-notice" role="status">Setup needed · choose a Schwab account and review local source settings in {window.cairo.config.configPath}</div>}
+
+          <PreparationEditor apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} preparation={snapshot?.preparation ?? null} loadError={snapshot?.preparationError ?? null} loaded={snapshot !== null} />
 
           <section className="chart-card">
             <div className="card-heading">
@@ -154,6 +157,7 @@ export function App() {
               <div className="setup-detail">
                 <strong>{selectedTradebook.title}</strong>
                 <span>Revision {selectedTradebook.revision} · {selectedTradebook.interpretation ? `${selectedTradebook.interpretation.clauses.length} reviewed clauses` : "Interpretation not reviewed"}</span>
+                <details><summary>Original narrative and coverage</summary><pre className="narrative-text">{selectedTradebook.markdown}</pre>{selectedTradebook.interpretation?.clauses.map(clause => <div className="clause-readback" key={clause.clauseId}><strong>{clause.coverage}</strong><blockquote>{clause.sourceText}</blockquote><p>{clause.explanation}</p></div>) ?? <p>Guidance needs interpretation and review before attachment.</p>}</details>
               </div>
             ) : <div className="empty-inline">No setup selected. Tradebooks you author will appear here.</div>}
             <p className="chart-footnote">Selection changes focus only; it does not attach or activate a plan.</p>
@@ -197,7 +201,7 @@ export function App() {
           <div className="copilot-body">
             <div className="assistant-avatar">C</div>
             <h3>Your trading copilot</h3>
-            <p>I’ll help interpret your setup rules and monitor open positions. Entry decisions stay with you.</p>
+            <p>Save your preparation notes, then discuss your scenarios and one-minute chart context with Cairo. Copilot chat is coming in the next milestone.</p>
             <div className="source-detail">Cairo AI: {sourceLabel(copilotStatus.state)}{copilotStatus.detail ? ` · ${copilotStatus.detail}` : ""}</div>
             <div className="suggestion">“What should I watch on this setup?” <span>↗</span></div>
             <div className="suggestion">“Review my attached tradebook” <span>↗</span></div>

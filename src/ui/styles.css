@@ -70,3 +70,19 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; }
 .chart-loaded { display: flex; justify-content: space-between; gap: 12px; padding-top: 10px; color: #8995a3; font-size: 10px; }
 .chart-loaded strong { color: #c5cdd5; font-weight: 550; }
 .chart-footnote a { color: #9eb9df; text-decoration: none; }
+.preparation-card { margin-bottom: 14px; padding: 18px; background: #11161c; border: 1px solid #242b34; border-radius: 11px; }
+.notes-state { font-size: 11px; color: #a8d77c; }
+.notes-intro { margin: 13px 0; color: #99a5b3; font-size: 12px; line-height: 1.5; }
+.notes-context { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px; }
+.notes-context label { display: grid; gap: 6px; color: #bac3cf; font-size: 11px; }
+.notes-context label span { color: #7c8795; }
+.notes-context input { width: 170px; padding: 8px; border: 1px solid #303843; border-radius: 6px; background: #0d1218; color: #d8dee8; color-scheme: dark; font: inherit; }
+.notes-label { display: block; margin-bottom: 7px; color: #bac3cf; font-size: 11px; }
+.preparation-card textarea { display: block; width: 100%; min-height: 190px; resize: vertical; padding: 12px; background: #0d1218; color: #d8dee8; border: 1px solid #303843; border-radius: 7px; font: 13px/1.6 'Segoe UI', sans-serif; }
+.preparation-card textarea:focus,.notes-context input:focus { outline: 2px solid #83aa56; outline-offset: 2px; }
+.notes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.notes-actions button:not(:disabled) { color: #d3dce7; cursor: pointer; }
+.notes-message { margin: 8px 0 12px; color: #b4d89b; font-size: 12px; }
+.narrative-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 'Segoe UI', sans-serif; color: #c5cdd5; }
+.clause-readback { border-top: 1px solid #303843; padding: 10px 0; font-size: 12px; }
+.clause-readback blockquote { margin: 8px 0; padding-left: 10px; border-left: 2px solid #83aa56; }

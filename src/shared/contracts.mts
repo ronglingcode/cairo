@@ -166,12 +166,22 @@ export interface ExitTicket {
   state: "staged" | "dismissed" | "invalidated" | "approved"
 }
 
+export interface PreparationNotes {
+  markdown: string
+  date: string | null
+  symbol: string | null
+  revision: string
+  savedAt: IsoTimestamp
+}
+
 export interface CairoSnapshot {
   runtimeInstanceId: string
   sequence: number
   brokerFactsRevision: number
   brokerRefreshSequence: number
   chart: ChartSnapshot | null
+  preparation: PreparationNotes | null
+  preparationError: string | null
   bookmap: SourceStatus
   broker: SourceStatus
   brokerFacts: BrokerFacts | null

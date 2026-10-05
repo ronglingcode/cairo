@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes } from "node:crypto"
 import type { ChartSnapshot, EngineEvent } from "../shared/contracts.mts"
 import { CairoEngine } from "./CairoEngine.mts"
+import { PreparationConflictError, PreparationStore, PreparationValidationError } from "./PreparationStore.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -17,11 +18,35 @@ export class EngineApiServer {
   private clients = new Set<EventClient>()
   private starting: Promise<string> | undefined
   private readonly engine: CairoEngine
+  private preparationStore: PreparationStore | undefined
+  private preparationOperation: Promise<unknown> = Promise.resolve()
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
 
   constructor(engine: CairoEngine) { this.engine = engine }
+
+  setPreparationStore(store: PreparationStore): void { this.preparationStore = store }
+
+  async loadPreparation(): Promise<boolean> {
+    if (!this.preparationStore) return false
+    return this.serialPreparation(async () => {
+      try {
+        const preparation = await this.preparationStore!.load()
+        this.engine.updateSnapshot({ preparation, preparationError: null })
+        return true
+      } catch {
+        this.engine.updateSnapshot({ preparationError: "Saved preparation could not be read. Resolve the file issue before saving." })
+        return false
+      }
+    })
+  }
+
+  private serialPreparation<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.preparationOperation.catch(() => undefined).then(operation)
+    this.preparationOperation = next
+    return next
+  }
 
   setChartRefresher(refresher: (symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>): void {
     this.chartRefresher = refresher
@@ -87,6 +112,20 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (url.pathname === "/preparation" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.preparationStore) { this.json(response, 503, { error: "preparation-store-unavailable" }); return }
+      void this.savePreparation(request, response)
+      return
+    }
+    if (url.pathname === "/preparation" && request.method === "GET") {
+      if (!this.preparationStore) { this.json(response, 503, { error: "preparation-store-unavailable" }); return }
+      void this.loadPreparation().then((ok) => this.json(response, ok ? 200 : 503, {
+        preparation: this.engine.getSnapshot().preparation,
+        error: this.engine.getSnapshot().preparationError,
+      }))
+      return
+    }
     if (request.method === "POST" && url.pathname === "/chart/refresh") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) {
         this.json(response, 403, { error: "forbidden" })
@@ -138,6 +177,34 @@ export class EngineApiServer {
       this.json(response, result.error ? 503 : 200, { ok: !result.error, status: result.status })
     } catch {
       this.json(response, 502, { error: "broker-refresh-failed" })
+    }
+  }
+
+  private async savePreparation(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const chunks: Buffer[] = []
+      let bytes = 0
+      for await (const chunk of request) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        bytes += buffer.length
+        if (bytes > 512 * 1024) { this.json(response, 413, { error: "request-too-large" }); return }
+        chunks.push(buffer)
+      }
+      let value: unknown
+      try { value = JSON.parse(Buffer.concat(chunks).toString("utf8")) }
+      catch { this.json(response, 400, { error: "Notes request must be valid JSON" }); return }
+      if (!value || typeof value !== "object" || Array.isArray(value)) { this.json(response, 400, { error: "invalid-request" }); return }
+      const { content, expectedRevision } = value as Record<string, unknown>
+      const preparation = await this.serialPreparation(async () => {
+        const saved = await this.preparationStore!.save(content, expectedRevision)
+        this.engine.updateSnapshot({ preparation: saved, preparationError: null })
+        return saved
+      })
+      this.json(response, 200, { preparation })
+    } catch (error) {
+      if (error instanceof PreparationConflictError) { this.json(response, 409, { error: error.message }); return }
+      if (error instanceof PreparationValidationError) { this.json(response, 400, { error: error.message }); return }
+      this.json(response, 503, { error: "Preparation could not be saved. Your edits are still in the editor." })
     }
   }
 

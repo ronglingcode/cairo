@@ -1,6 +1,6 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. **T01–T16 complete: 16/50 complete, 34 remaining. T23 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 4, 2026. **T01–T16 and T23 complete: 17/50 complete, 33 remaining. T29 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
@@ -367,13 +367,15 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Two distinct example styles validate differently; ambiguous “some”, undefined “weakness”, invalid quantities, and missing fresh data cannot be silently filled with defaults. **Commit:** `feat(T22): validate clause-linked management interpretations`.
 
-- [ ] **T23 — Save premarket notes and edit narrative preparation**
+- [x] **T23 — Save premarket notes and edit narrative preparation**
 
 **Depends:** T06, T08. **Repository:** Cairo.
 
 **Deliver:** Freeform preparation editor with explicit Save/reopen, revision protection, and optional date/symbol context. Store original Markdown in a small current `preparation.json` artifact, independently of AI or an interpretation. Preserve narrative tradebooks as separate artifacts; show existing interpretations when available and unresolved coverage otherwise. AI edits remain proposals. No JSON/rule-language input or mandatory setup template. Saving notes does not attach guidance or approve an action.
 
 **Verify:** Save/reopen preserves wording; stale concurrent saves are rejected; AI absence does not prevent note editing; preparation changes leave reviewed position attachments intact. Inspect editor and unresolved coverage. **Commit:** `feat(T23): add premarket preparation notes workspace`.
+
+**Verified (2026-10-04):** Added a freeform notes editor with optional date/symbol context, explicit save/reload, original narrative/coverage readback, and a revision-checked small preparation file. The loopback write requires the preload capability; notes are separate from attachments and approvals. Synthetic tests cover exact wording (including CRLF/Unicode), reopen, concurrent saves, malformed/corrupt files, and attachment/ticket isolation. All 40 tests, typecheck, and build passed (existing nonfatal Vite/Electron option warnings remain). Browser inspection with a temporary synthetic backend verified edit/save/page reload and unchanged notes; no provider/broker or real credential access occurred.
 
 - [ ] **T24 — Import the personal reference and separate ORB example**
 

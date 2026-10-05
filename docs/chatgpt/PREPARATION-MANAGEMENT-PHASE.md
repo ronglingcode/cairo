@@ -78,7 +78,7 @@ these tasks after the initial notes/chat and trade-management features, with the
 required observations chosen before pattern-specific implementation. Revisit
 T21/T28/T31/T35 to add the Bookmap capabilities once the bridge exists.
 
-Of the existing 50 tasks, 16 are complete and 34 remain; 6 move to the final
+Of the existing 50 tasks, 17 are complete and 33 remain; 6 move to the final
 feature phase. The first app milestone (T23, T29–T32, using completed T10) runs
 with preparation and one-minute chart context without a Bookmap observation
 stream. Full completion still includes the postponed Bookmap work.

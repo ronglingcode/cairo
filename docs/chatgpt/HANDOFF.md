@@ -1,12 +1,13 @@
 # Start or resume the Cairo coding checklist
 
-Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **16 of 50 tasks complete (T01–T16); 34 remain.** Each completed task has verification notes and a separate local task commit.
+Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **17 of 50 tasks complete (T01–T16 and T23); 33 remain.** Each completed task has verification notes and a separate local task commit.
 
 ## Current check-in
 
 - T01 and T02 blockers are resolved. The pinned OpenCode Windows integration probe and Electron development-window smoke passed.
 - T03–T16 are implemented and checked off. T16 defines and parses the normalized Bookmap observation contract; the producer stream is not implemented until T17–T19.
-- **Next: T23 — Save premarket notes and edit narrative preparation.** Then T29–T32 deliver the first runnable app with notes/chat and existing one-minute chart snapshots. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
+- T23's notes workspace is complete; commit subject: `feat(T23): add premarket preparation notes workspace`.
+- **Next five authorized tasks: T29, T30, T31, T32, T21**, each in its own commit. T29–T32 deliver the first runnable notes/chart copilot. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
 - Bookmap T17–T20 and pattern-specific T24–T25 move to the final feature phase after the other features; they remain required for the full MVP. No plugin changes now.
 - No commits were pushed. T01–T16 completion commits are recorded below.
 
@@ -35,7 +36,7 @@ The [OpenCode probe instructions](opencode-v2-probe/README.md) include optional 
 
 Give the following prompt to the coding agent:
 
-> Resume Cairo in `C:/Users/lingr/trading/cairo` using CODING-PLAN.md and PREPARATION-MANAGEMENT-PHASE.md. Read applicable AGENTS.md and latest human instructions. T01–T16 are complete. Next is T23. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. The first runnable app supports freeform premarket notes, AI chat, and timestamped one-minute chart knowledge. Bookmap remains required for the full MVP but moves to the final feature phase; no plugin changes now. Preserve current token ownership. Verify and commit each task separately. ViteApp and Backtest stay read-only.
+> Resume Cairo in `C:/Users/lingr/trading/cairo` using CODING-PLAN.md and PREPARATION-MANAGEMENT-PHASE.md. Read applicable AGENTS.md and latest human instructions. T01–T16 and T23 are complete. The next five authorized tasks are T29, T30, T31, T32, and T21. Follow the revised order thereafter. The first runnable app supports freeform premarket notes, AI chat, and timestamped one-minute chart knowledge. Bookmap stays in the full MVP at the final feature phase; no plugin changes now. Preserve token ownership. Verify and commit each task separately. ViteApp and Backtest stay read-only.
 >
 > The confirmed MVP has observer entries, exact-human-approved assistant exits, human-language per-setup management, Embedded OpenCode V2 plus a Cairo plugin, read-only Bookmap-maintained Schwab tokens with direct backend requests, and a stale-tolerant Massive REST one-minute chart. Cairo opens no Massive WebSocket. Keep live state in memory and only essential authored/recovery files. Do not implement assisted entries, automated management, raw-data sharing/live candles, SQLite, journal/research, or a custom model runner.
 >
