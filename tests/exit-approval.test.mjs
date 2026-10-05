@@ -13,7 +13,7 @@ test("approval binds exact details, repeats once, and is consumed only once", ()
 })
 test("expired, dismissed, changed facts or changed payload never approve", () => {
   for (const mode of ["expired", "dismissed", "facts", "payload"]) {
-    let now = Date.now(); const engine = positionEngine(); const tickets = new ExitTickets(engine, () => now); const ticket = tickets.stage(request(), "trader")
+    const engine = positionEngine(); let now = Date.now(); const tickets = new ExitTickets(engine, () => now); const ticket = tickets.stage(request(), "trader")
     if (mode === "expired") now += 61_000
     if (mode === "dismissed") tickets.dismiss(ticket.id)
     if (mode === "facts") { const facts = engine.getSnapshot().brokerFacts; facts.positions[0].quantity = 9; engine.updateSnapshot({ brokerFacts: facts }) }
