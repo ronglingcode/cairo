@@ -78,3 +78,6 @@ Sibling bookmap-plugin commit 772b754 exports only BID_STEP_UP and BID_REAPPEAR 
 
 ## T18
 Sibling e5c25cb adds separate local enable/symbol/detector settings and observerOnly attachment without native runtime startup or secret reads. Missing/invalid settings disable export. Native eligibility remains independent. Twelve Java config/export/detector checks pass; preexisting unreachable replay fixture corrected separately in 5aa7cd0. Reattach applies configuration changes.
+
+## T19
+Sibling 2e1ca50 publishes bounded 30-second bootstrap episodes, heartbeat, depth readiness and symbol reset on a bounded background sender. Source instances differ after restart. Thirteen targeted Java checks pass. Installed callback evidence proves readiness only; mode stays unknown and source-dependent proposals remain blocked. No live integration claim. Queue overflow clears episode context and sends resets.

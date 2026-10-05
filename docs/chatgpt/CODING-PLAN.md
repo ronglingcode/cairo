@@ -331,7 +331,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verify:** A locally enabled observer receives patterns with native execution disabled; legacy native behavior remains unchanged. **Commit:** `feat(T18): separate observation eligibility from native execution`; record sibling hash.
 
-- [ ] **T19 — Send source status, heartbeat, reset, and connection snapshot**
+- [x] **T19 — Send source status, heartbeat, reset, and connection snapshot**
 
 **Depends:** T17, T18. **Repository:** bookmap-plugin, followed by Cairo progress commit.
 
