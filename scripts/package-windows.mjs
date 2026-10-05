@@ -8,7 +8,7 @@ for (const [name, version] of Object.entries({ ...pkg.dependencies, ...pkg.devDe
 if (!process.argv.includes('--skip-build')) { const result = spawnSync('npm.cmd', ['run', 'build'], { shell: true, stdio: 'inherit' }); if (result.status !== 0) process.exit(result.status ?? 1) }
 const digest = createHash('sha256'); const built = []
 async function visit(directory) { for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a,b) => a.name.localeCompare(b.name))) { const file = path.join(directory, entry.name); if (entry.isDirectory()) await visit(file); else { const bytes = await readFile(file); digest.update(file).update(bytes); built.push({ path: file.replaceAll('\\', '/'), sha256: createHash('sha256').update(bytes).digest('hex') }) } } }
-for (const directory of ['dist', 'dist-electron', 'dist-copilot', 'resources/references']) await visit(directory)
+for (const directory of ['dist', 'dist-electron', 'dist-copilot', 'resources/references', 'skills']) await visit(directory)
 digest.update(await readFile('package-lock.json')); const buildId = digest.digest('hex').slice(0, 12)
 const destination = path.resolve(root, 'release', `Cairo ${pkg.version} ${buildId}`)
 if (!destination.startsWith(path.resolve(root, 'release') + path.sep)) throw new Error('Invalid package output')
@@ -16,7 +16,7 @@ await mkdir(path.dirname(destination), { recursive: true }); await mkdir(destina
 await rename(path.join(destination, 'electron.exe'), path.join(destination, 'Cairo.exe'))
 const appRoot = path.join(destination, 'resources', 'app'); await mkdir(appRoot, { recursive: true })
 await writeFile(path.join(appRoot, 'package.json'), JSON.stringify({ name: pkg.name, version: pkg.version, main: 'dist-electron/main.js' }, null, 2))
-for (const directory of ['dist', 'dist-electron', 'resources/references']) await cp(directory, path.join(appRoot, directory), { recursive: true })
+for (const directory of ['dist', 'dist-electron', 'resources/references', 'skills']) await cp(directory, path.join(appRoot, directory), { recursive: true })
 await mkdir(path.join(destination, 'resources', 'opencode'), { recursive: true }); await mkdir(path.join(destination, 'resources', 'copilot'), { recursive: true })
 await cp('node_modules/@opencode/cli/bin/opencode.exe', path.join(destination, 'resources', 'opencode', 'opencode.exe'))
 await cp('dist-copilot/cairo-plugin.js', path.join(destination, 'resources', 'copilot', 'cairo-plugin.js'))

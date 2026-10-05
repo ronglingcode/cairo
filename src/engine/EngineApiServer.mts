@@ -187,6 +187,13 @@ export class EngineApiServer {
       void this.managementCommand(url.pathname, request, response)
       return
     }
+    if (url.pathname === "/copilot/skills" && request.method === "GET") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.chat) { this.json(response, 503, { error: "Chat is unavailable" }); return }
+      response.setHeader("Cache-Control", "no-store")
+      void this.chat.listSkills().then(skills => this.json(response, 200, { skills })).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Skill library unavailable" }))
+      return
+    }
     if (["/copilot/send", "/copilot/cancel", "/copilot/connect"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.chat) { this.json(response, 503, { error: "Chat is unavailable" }); return }

@@ -10,6 +10,7 @@ import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
 import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
 import { build } from "esbuild"
 import { createServer } from "node:http"
+import { isBuiltin } from "node:module"
 
 test("domain reads are bounded, preserve snapshot coverage, and reject unrelated sessions", async () => {
   const engine = new CairoEngine()
@@ -72,7 +73,7 @@ test("self-contained Cairo plugin bundle loads in the actual pinned runtime", { 
   const root = await mkdtemp(path.join(os.tmpdir(), "Cairo plugin "))
   const pluginPath = path.join(root, "bundled-plugin.js")
   const bundle = await build({ entryPoints: ["src/copilot/cairo-plugin.mts"], bundle: true, platform: "node", format: "esm", outfile: pluginPath, metafile: true })
-  assert.ok(Object.values(bundle.metafile.outputs).every(output => output.imports.length === 0))
+  assert.ok(Object.values(bundle.metafile.outputs).every(output => output.imports.every(entry => entry.external && isBuiltin(entry.path))))
   let exposed = []
   const engine = new CairoEngine()
   const api = new EngineApiServer(engine)

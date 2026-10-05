@@ -29,6 +29,7 @@ import { PreparationStore } from "../src/engine/PreparationStore.mts"
 import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
 import { CairoDomainTools } from "../src/copilot/CairoDomainTools.mts"
 import { CopilotChat } from "../src/copilot/CopilotChat.mts"
+import { SkillLibrary } from "../src/copilot/SkillLibrary.mts"
 import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
 import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
@@ -199,17 +200,19 @@ app.whenReady().then(async () => {
   const fake = configStore.values.provider === "fake"
   fakeModel = fake ? new FakeModelServer() : undefined
   const selectedModel = modelConfiguration(fake, configStore.values.model || "unconfigured", fakeModel ? await fakeModel.start() : "")
+  const skills = new SkillLibrary(process.env.CAIRO_SKILLS_DIRECTORY || path.join(app.getAppPath(), "skills"))
   sidecar = new OpenCodeSidecar({
     binary: app.isPackaged ? path.join(process.resourcesPath, "opencode", "opencode.exe") : path.join(app.getAppPath(), "node_modules", "@opencode", "cli", "bin", "opencode.exe"),
     userDataPath: app.getPath("userData"),
     pluginPath: app.isPackaged ? path.join(process.resourcesPath, "copilot", "cairo-plugin.js") : path.join(app.getAppPath(), "dist-copilot", "cairo-plugin.js"),
     config: selectedModel.config,
-    environment: { CAIRO_TOOL_ENDPOINT: `${apiBaseUrl}/copilot/tools`, CAIRO_TOOL_TOKEN: apiServer.toolToken,
+    environment: { CAIRO_TOOL_ENDPOINT: `${apiBaseUrl}/copilot/tools`, CAIRO_TOOL_TOKEN: apiServer.toolToken, CAIRO_SKILLS_DIRECTORY: skills.directory,
       ...(!fake && configStore.openAiApiKey ? { CAIRO_OPENAI_API_KEY: configStore.openAiApiKey } : {}),
     },
     onStatus: copilot => engine.updateSnapshot({ copilot }),
   })
   chat = new CopilotChat({ engine, client: () => sidecar?.client, workspace: sidecar.workspace, model: selectedModel.model, fake,
+    skills,
     configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
   })
   apiServer.setCopilotChat(chat)

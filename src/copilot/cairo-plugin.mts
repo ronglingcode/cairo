@@ -1,14 +1,38 @@
 import { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { injectTradingContext } from "./TradingContext.mts"
+import type { Skill } from "@opencode/schema/skill"
+import { SkillLibrary, resolveSkills, type CairoSkill } from "./SkillLibrary.mts"
+import { skillMentions } from "../shared/SkillCommands.mts"
 
 type Bridge = (operation: string, input: unknown, context: Pick<ToolContext, "sessionID" | "signal"> & Partial<Pick<ToolContext, "messageID" | "id" | "agent">>) => Promise<unknown>
 const empty = { type: "object", properties: {}, additionalProperties: false } as const
 
-export function createCairoPlugin(bridge: Bridge) {
+export function createCairoPlugin(bridge: Bridge, skillsDirectory = process.env.CAIRO_SKILLS_DIRECTORY) {
   return Plugin.define({
     id: "cairo.domain",
     async setup(ctx) {
+      if (skillsDirectory) {
+        const library = new SkillLibrary(skillsDirectory)
+        let catalog: CairoSkill[] = []
+        await ctx.skill.transform(editor => {
+          for (const skill of editor.list()) if (String(skill.id).startsWith("cairo-skill-")) editor.remove(String(skill.id))
+          for (const skill of catalog) editor.add({ id: skill.id as Skill.Info["id"], name: skill.name as Skill.Info["name"],
+            path: skill.path as Skill.Info["path"], description: skill.description, content: skill.content })
+        })
+        await ctx.session.hook("prompt", async input => {
+          const mentions = skillMentions(input.prompt.text)
+          if (!mentions.length) return
+          catalog = await library.load()
+          const selected = resolveSkills(catalog, mentions.map(mention => mention.name))
+          await ctx.skill.reload()
+          input.prompt.skills = [...(input.prompt.skills ?? []), ...selected.map(skill => {
+            const mention = mentions.find(mention => mention.name === skill.name)
+            return { id: skill.id as Skill.Info["id"], ...(mention ? { mention: { start: mention.start, end: mention.end, text: mention.text } } : {}) }
+          })]
+          input.metadata = { ...input.metadata, cairoSkills: selected.map(skill => ({ name: skill.name, revision: skill.id })) }
+        })
+      }
       await ctx.session.hook("context", input => injectTradingContext(input, sessionID => bridge("read_context", {}, {
         sessionID: sessionID as ToolContext["sessionID"], signal: AbortSignal.timeout(5000),
       })))

@@ -8,6 +8,7 @@ import { PreparationStore } from "../src/engine/PreparationStore.mts"
 import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
 import { CairoDomainTools } from "../src/copilot/CairoDomainTools.mts"
 import { CopilotChat } from "../src/copilot/CopilotChat.mts"
+import { SkillLibrary } from "../src/copilot/SkillLibrary.mts"
 import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
 import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
@@ -46,11 +47,12 @@ const managementTimer = setInterval(() => {
 const base = await api.start()
 const provider = new FakeModelServer()
 const selected = modelConfiguration(true, "", await provider.start())
+const skills = new SkillLibrary(path.resolve("skills"))
 const sidecar = new OpenCodeSidecar({ binary: path.resolve("node_modules/@opencode/cli/bin/opencode.exe"), userDataPath: root,
   pluginPath: path.resolve("dist-copilot/cairo-plugin.js"), config: selected.config,
-  environment: { CAIRO_TOOL_ENDPOINT: `${base}/copilot/tools`, CAIRO_TOOL_TOKEN: api.toolToken }, onStatus: copilot => engine.updateSnapshot({ copilot }),
+  environment: { CAIRO_TOOL_ENDPOINT: `${base}/copilot/tools`, CAIRO_TOOL_TOKEN: api.toolToken, CAIRO_SKILLS_DIRECTORY: skills.directory }, onStatus: copilot => engine.updateSnapshot({ copilot }),
 })
-const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true })
+const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true, skills })
 api.setCopilotChat(chat)
 const tools = new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace)
 tools.setExitTickets(tickets); api.setDomainTools(tools)

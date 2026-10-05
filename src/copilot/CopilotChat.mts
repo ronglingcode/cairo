@@ -2,6 +2,8 @@ import path from "node:path"
 import type { CopilotChat as ChatState, CopilotChatMessage } from "../shared/contracts.mts"
 import type { CairoEngine } from "../engine/CairoEngine.mts"
 import type { OpenCodeClient } from "./OpenCodeSidecar.mts"
+import type { SkillLibrary } from "./SkillLibrary.mts"
+import type { SkillSummary } from "../shared/SkillCommands.mts"
 
 export interface ChatOptions {
   engine: CairoEngine
@@ -10,6 +12,7 @@ export interface ChatOptions {
   model: { providerID: string; id: string }
   fake: boolean
   configured(): boolean
+  skills?: SkillLibrary
 }
 
 export class CopilotChat {
@@ -33,6 +36,7 @@ export class CopilotChat {
     this.publish()
   }
   get snapshot(): ChatState { return structuredClone(this.state) }
+  async listSkills(): Promise<SkillSummary[]> { return this.options.skills?.list() ?? [] }
   private serial<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.operations.catch(() => {}).then(operation)
     this.operations = result
@@ -92,6 +96,8 @@ export class CopilotChat {
         return
       }
       if (!this.client || !this.state.connected || !this.state.sessionId || this.state.busy) throw new Error("Reconnect chat or wait for the current reply")
+      // Catch misspelled commands and invalid files before recording/delivering the request.
+      await this.options.skills?.forMessage(text)
       this.commands.set(commandId, text)
       if (this.commands.size > 500) this.commands.delete(this.commands.keys().next().value!)
       this.awaitingCommand = commandId
