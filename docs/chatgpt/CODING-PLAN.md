@@ -1,6 +1,6 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. This is the coding plan for the agreed MVP, organized as 50 small tasks. **T01–T15 are complete: 15/50 completed, 35 remaining. Work is paused before T16 pending the user's Bookmap-phase review.** [HANDOFF.md](HANDOFF.md) records the current check-in, local completion commits, and resume instructions. Planning through the user's latest chart correction was committed locally in Cairo as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 4, 2026. This is the coding plan for the agreed MVP, organized as 50 small tasks. **T01–T16 are complete: 16/50 completed, 34 remaining. T17 is next.** [HANDOFF.md](HANDOFF.md) records the current check-in and local completion commits. Planning through the user's latest chart correction was committed locally in Cairo as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
@@ -303,13 +303,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 ### Bookmap observation bridge — T16–T20
 
-- [ ] **T16 — Specify the observation envelope from installed APIs**
+- [x] **T16 — Specify the observation envelope from installed APIs**
 
 **Depends:** T03. **Repository:** Cairo; read Bookmap source only.
 
 **Deliver:** A concise bridge contract/fixtures covering episodes, real-dollar prices, source instance/sequence, symbol mapping, detector/config revision, mode/readiness, heartbeat/reset, and snapshot versus live update. Inspect installed API metadata and existing local detector eligibility. Document exact missing fields and how unknown mode is handled.
 
 **Verify:** Contract examples parse; no timestamp-based live-mode guess, raw depth relay, token broadcast, or inbound trading command is part of the design. **Commit:** `docs(T16): define verified Bookmap observation contract`.
+
+**Verified (2026-10-04):** Audited the sibling plugin's Bookmap 7.8.0.13 callback declarations, pattern signal serializer/store, price normalizer, WebSocket behavior, and detector eligibility. Added the normalized observation contract and three fixtures for snapshot, live episode revision, and source reset. Added explicit `delivery` parsing so bootstrap context cannot be confused with a live update. Fixtures preserve USD prices and nanosecond strings and leave mode/readiness/detector/config revisions unknown where the current producer cannot prove them. `npm run test` passed (35 checks); `npm run typecheck` passed. No Bookmap or broker runtime was launched and no plugin files were changed.
 
 - [ ] **T17 — Broadcast pattern observations without executing trades**
 
@@ -599,4 +601,4 @@ Do not mark tasks complete because time/context is running out. Leave precise ne
 
 ## 8. Prompt to give the implementation agent
 
-> Resume Cairo using `C:/Users/lingr/trading/cairo/docs/chatgpt/CODING-PLAN.md` as the authoritative MVP coding checklist. Read applicable AGENTS.md, HANDOFF.md, and latest human instructions first. T01–T15 are complete; work is paused before T16 pending the user's Bookmap-phase review. Proceed only when the user resumes that phase and follow their authorized task limit. Then start at the first unchecked task with satisfied dependencies, implement it, run its verification, record results and check it off, and make its separate local task-ID commit before proceeding. Record real blockers and do independent work without silently changing scope. T17–T19 need separate scoped commits in bookmap-plugin plus Cairo progress commits; ViteApp and Backtest stay read-only. The product has observer entries, exact-human-approved assistant exits, per-setup human-language management, OpenCode V2 plus a Cairo plugin, and a stale-tolerant Massive REST one-minute chart with no Cairo Massive WebSocket. Keep live state in memory and only essential authored/recovery files. Do not implement assisted entries, automated management, raw-data sharing/live candles, SQLite, journal/research, or a custom LLM runner. Use fake provider/broker/model data for checks; send no real orders or paid inference merely to test. Never push to any remote. Report completed IDs/local commits, validation, blockers, and the next task when stopping.
+> Resume Cairo using `C:/Users/lingr/trading/cairo/docs/chatgpt/CODING-PLAN.md` as the authoritative MVP coding checklist. Read applicable AGENTS.md, HANDOFF.md, and latest human instructions first. T01–T16 are complete. Start at the first unchecked task with satisfied dependencies, implement that task, run its verification, record results and check it off, and make its separate local task-ID commit before proceeding. Record real blockers and do independent work without silently changing scope. T17–T19 need separate scoped commits in bookmap-plugin plus Cairo progress commits; ViteApp and Backtest stay read-only. The product has observer entries, exact-human-approved assistant exits, per-setup human-language management, OpenCode V2 plus a Cairo plugin, and a stale-tolerant Massive REST one-minute chart with no Cairo Massive WebSocket. Keep live state in memory and only essential authored/recovery files. Do not implement assisted entries, automated management, raw-data sharing/live candles, SQLite, journal/research, or a custom LLM runner. Use fake provider/broker/model data for checks; send no real orders or paid inference merely to test. Never push to any remote. Report completed IDs/local commits, validation, blockers, and the next task when stopping.

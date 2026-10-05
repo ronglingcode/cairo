@@ -1,0 +1,18 @@
+{
+  "sourceInstanceId": "bm-session-example-1",
+  "sequence": 42,
+  "symbol": { "source": "AAPL.US", "canonical": "AAPL" },
+  "priceUnit": "USD",
+  "episodeId": "AAPL.US:BID_REAPPEAR:wall-17",
+  "revision": 2,
+  "pattern": "bid-reappear",
+  "price": 244.25,
+  "eventTime": "1791158400123000000",
+  "receivedAt": "1791158402123000000",
+  "detectorRevision": null,
+  "configRevision": null,
+  "mode": "unknown",
+  "readiness": "unknown",
+  "delivery": "live",
+  "kind": "episode"
+}

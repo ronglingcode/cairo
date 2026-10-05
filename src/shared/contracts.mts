@@ -32,6 +32,7 @@ export interface ChartSnapshot {
 
 export type ObservationMode = "live" | "replay" | "unknown"
 export type ObservationReadiness = "ready" | "not-ready" | "unknown"
+export type ObservationDelivery = "snapshot" | "live"
 
 export interface BookmapObservation {
   sourceInstanceId: string
@@ -48,6 +49,7 @@ export interface BookmapObservation {
   configRevision: string | null
   mode: ObservationMode
   readiness: ObservationReadiness
+  delivery: ObservationDelivery
   kind: "episode" | "heartbeat" | "reset"
 }
 
@@ -327,6 +329,7 @@ export function parseBookmapObservation(value: unknown): BookmapObservation {
     configRevision: nullableText(item.configRevision, "observation.configRevision"),
     mode: enumValue(item.mode, ["live", "replay", "unknown"] as const, "observation.mode"),
     readiness: enumValue(item.readiness, ["ready", "not-ready", "unknown"] as const, "observation.readiness"),
+    delivery: enumValue(item.delivery, ["snapshot", "live"] as const, "observation.delivery"),
     kind: enumValue(item.kind, ["episode", "heartbeat", "reset"] as const, "observation.kind"),
   }
   if (!Number.isInteger(observation.sequence) || !Number.isInteger(observation.revision)) {

@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import {
   FakeBroker,
   FakeClock,
@@ -31,7 +32,7 @@ test("Bookmap observations preserve nanoseconds and reject unknown enum values",
     sourceInstanceId: "bm-instance", sequence: 12, symbol: { source: "AAPL.US", canonical: "AAPL" },
     priceUnit: "USD", episodeId: "episode-1", revision: 2, pattern: "bid-reappear", price: 244.25,
     eventTime: "1791158400123000000", receivedAt, detectorRevision: "d1", configRevision: "c1",
-    mode: "unknown", readiness: "unknown", kind: "episode",
+    mode: "unknown", readiness: "unknown", delivery: "live", kind: "episode",
   })
   assert.equal(observation.receivedAt, receivedAt)
   assert.equal(typeof observation.receivedAt, "string")
@@ -39,6 +40,26 @@ test("Bookmap observations preserve nanoseconds and reject unknown enum values",
   assert.throws(() => parseBookmapObservation({ ...observation, mode: "maybe-live" }), /expected one of live, replay, unknown/)
   assert.throws(() => parseBookmapObservation({ ...observation, price: Infinity }), /finite number/)
   assert.throws(() => parseBookmapObservation({ ...observation, receivedAt: 1791158400123456789 }), /nanoseconds as a digit string/)
+})
+
+test("Bookmap observation contract fixtures distinguish bootstrap context from live updates", async () => {
+  const fixture = async name => JSON.parse(await readFile(new URL(`./fixtures/bookmap/${name}.json`, import.meta.url), "utf8"))
+  const snapshot = parseBookmapObservation(await fixture("episode-snapshot"))
+  const update = parseBookmapObservation(await fixture("episode-update"))
+  const reset = parseBookmapObservation(await fixture("source-reset"))
+
+  assert.equal(snapshot.delivery, "snapshot")
+  assert.equal(snapshot.mode, "unknown")
+  assert.equal(snapshot.priceUnit, "USD")
+  assert.equal(snapshot.symbol.source, "AAPL.US")
+  assert.equal(snapshot.symbol.canonical, "AAPL")
+  assert.equal(update.delivery, "live")
+  assert.equal(update.episodeId, snapshot.episodeId)
+  assert.ok(update.revision > snapshot.revision)
+  assert.equal(typeof update.eventTime, "string")
+  assert.equal(reset.kind, "reset")
+  assert.equal(reset.delivery, "live")
+  assert.equal(reset.readiness, "not-ready")
 })
 
 test("broker facts and exit tickets reject absent or malformed boundaries", () => {
@@ -96,7 +117,7 @@ test("fakes are deterministic and make no network or broker writes", async () =>
   source.emit({
     sourceInstanceId: "bm-instance", sequence: 1, symbol: { source: "AAPL", canonical: "AAPL" },
     priceUnit: "USD", episodeId: "ep1", revision: 1, pattern: "test", price: null, eventTime: null,
-    receivedAt: "1", detectorRevision: null, configRevision: null, mode: "unknown", readiness: "unknown", kind: "heartbeat",
+    receivedAt: "1", detectorRevision: null, configRevision: null, mode: "unknown", readiness: "unknown", delivery: "live", kind: "heartbeat",
   })
   assert.equal(received, 1)
   unsubscribe()

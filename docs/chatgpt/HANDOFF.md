@@ -1,13 +1,13 @@
 # Start or resume the Cairo coding checklist
 
-Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **15 of 50 tasks complete (T01–T15); 35 remain.** Each completed task has verification notes and separate local commits.
+Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative checklist: **16 of 50 tasks complete (T01–T16); 34 remain.** Each completed task has verification notes and a separate local task commit.
 
 ## Current check-in
 
 - T01 and T02 blockers are resolved. The pinned OpenCode Windows integration probe and Electron development-window smoke passed.
-- T03–T15 are implemented and checked off. Provider/broker behavior was checked with fixtures; this is not a completed live trading integration.
-- Work is paused before **T16 — Specify the observation envelope from installed APIs**, pending the user's review before the Bookmap phase. Do not start T16 or later tasks until the user resumes that phase.
-- No commits were pushed. The working tree was clean after the T01 completion commit.
+- T03–T16 are implemented and checked off. T16 defines and parses the normalized Bookmap observation contract; the producer stream is not implemented until T17–T19.
+- **Next: T17 — Broadcast pattern observations without executing trades** in `bookmap-plugin`, after reading that repository's instructions. Commit the plugin change and Cairo progress separately.
+- No commits were pushed. T01–T15 are recorded below; T16's commit subject is `docs(T16): define verified Bookmap observation contract`.
 
 | Completed task | Local completion commit |
 | --- | --- |

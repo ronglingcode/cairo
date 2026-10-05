@@ -1,0 +1,18 @@
+{
+  "sourceInstanceId": "bm-session-example-2",
+  "sequence": 1,
+  "symbol": { "source": "AAPL.US", "canonical": "AAPL" },
+  "priceUnit": "USD",
+  "episodeId": "source-reset-2",
+  "revision": 0,
+  "pattern": "source-reset",
+  "price": null,
+  "eventTime": null,
+  "receivedAt": "1791158403123000000",
+  "detectorRevision": null,
+  "configRevision": null,
+  "mode": "unknown",
+  "readiness": "not-ready",
+  "delivery": "live",
+  "kind": "reset"
+}

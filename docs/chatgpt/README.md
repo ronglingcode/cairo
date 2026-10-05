@@ -1,6 +1,6 @@
 # Cairo planning package
 
-Updated October 4, 2026. **T01–T15 are implemented and checked off (15/50).** Work is paused before T16 for the user's Bookmap-phase review. [HANDOFF.md](HANDOFF.md) records local completion commits and resume instructions; task verification and limitations are in [CODING-PLAN.md](CODING-PLAN.md). Live integration and the complete packaged MVP remain later work.
+Updated October 4, 2026. **T01–T16 are implemented and checked off (16/50).** T17 starts the Bookmap observation producer work. [HANDOFF.md](HANDOFF.md) records local completion commits and resume instructions; task verification and limitations are in [CODING-PLAN.md](CODING-PLAN.md). Live integration and the complete packaged MVP remain later work.
 
 The target is a personal Windows US-stocks desktop for **live signal detection and open-trade management**. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, existing Bookmap observations, and collaboratively authored tradebooks.
 
