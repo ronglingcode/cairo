@@ -13,3 +13,14 @@ policy defaults or generated code are installed.
 Typecheck and five targeted checks passed: two distinct authored styles, exact
 wording, stable action identity across rule renames, invalid/ambiguous inputs,
 unavailable current sources and existing artifact persistence compatibility.
+
+## T26
+
+Added capability-protected explicit attach/pause/reconfirm commands. Attachments
+freeze original narrative and interpretation, reviewed initial filled quantity,
+current account/position and allocations. Missing review, stale facts/revisions,
+fractional holdings and mismatched allocation sums are rejected. Engine polling
+reconciles outside quantity/basis/side/fill changes to paused or closed state.
+Source edits and chart focus cannot replace a position's frozen guidance.
+Typecheck and two targeted lifecycle/style checks passed. Review UI follows in
+T28/T34; persistence/restart reactivation follows in the recovery tasks.

@@ -393,7 +393,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Duplicate/updated episodes, reset, missing hard gates, and inactive attempts; instrument fake broker to assert zero writes. **Commit:** `feat(T25): observe entries without order submission`.
 
-- [ ] **T26 — Attach setup-specific guidance to broker positions**
+- [x] **T26 — Attach setup-specific guidance to broker positions**
 
 **Depends:** T14, T22, T23. **Repository:** Cairo.
 

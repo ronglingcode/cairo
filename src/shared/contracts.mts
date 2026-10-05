@@ -141,6 +141,12 @@ export interface PositionAttachment {
   narrativeHash: string
   interpretation: TradebookInterpretation
   state: "pending-confirmation" | "active" | "paused" | "closed"
+  markdown?: string
+  revision?: string
+  initialQuantity?: number
+  baseline?: { quantity: number; averagePrice: number; side: "long" | "short"; fillIds: string[] }
+  pauseReason?: string | null
+  reviewedAt?: string
 }
 
 export type ExitAction = "close" | "cancel-protection" | "replace-protection"

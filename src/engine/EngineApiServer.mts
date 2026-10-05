@@ -5,6 +5,7 @@ import { CairoEngine } from "./CairoEngine.mts"
 import { PreparationConflictError, PreparationStore, PreparationValidationError } from "./PreparationStore.mts"
 import type { CairoDomainTools } from "../copilot/CairoDomainTools.mts"
 import type { CopilotChat } from "../copilot/CopilotChat.mts"
+import type { PositionGuidance, AttachRequest } from "./PositionGuidance.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -25,6 +26,7 @@ export class EngineApiServer {
   private copilotRestarter: (() => Promise<boolean>) | undefined
   private domainTools: CairoDomainTools | undefined
   private chat: CopilotChat | undefined
+  private guidance: PositionGuidance | undefined
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -36,6 +38,7 @@ export class EngineApiServer {
   setCopilotRestarter(restart: () => Promise<boolean>): void { this.copilotRestarter = restart }
   setDomainTools(tools: CairoDomainTools): void { this.domainTools = tools }
   setCopilotChat(chat: CopilotChat): void { this.chat = chat }
+  setPositionGuidance(guidance: PositionGuidance): void { this.guidance = guidance }
 
   async loadPreparation(): Promise<boolean> {
     if (!this.preparationStore) return false
@@ -121,6 +124,12 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (["/management/attach", "/management/pause", "/management/reconfirm"].includes(url.pathname) && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.guidance) { this.json(response, 503, { error: "Guidance service unavailable" }); return }
+      void this.managementCommand(url.pathname, request, response)
+      return
+    }
     if (["/copilot/send", "/copilot/cancel", "/copilot/connect"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.chat) { this.json(response, 503, { error: "Chat is unavailable" }); return }
@@ -216,6 +225,22 @@ export class EngineApiServer {
       }
       this.json(response, 200, { chat: this.chat!.snapshot })
     } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Chat request failed" }) }
+  }
+  private async readCommand(request: IncomingMessage, maximum = 128 * 1024): Promise<Record<string, unknown>> {
+    const chunks: Buffer[] = []; let bytes = 0
+    for await (const chunk of request) { const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); bytes += buffer.length; if (bytes > maximum) throw new Error("Request is too large"); chunks.push(buffer) }
+    const value = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid command")
+    return value
+  }
+  private async managementCommand(route: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const value = await this.readCommand(request)
+      if (route === "/management/attach") this.guidance!.attach(value as unknown as AttachRequest)
+      if (route === "/management/pause") this.guidance!.pause(String(value.id), String(value.expectedRevision))
+      if (route === "/management/reconfirm") this.guidance!.reconfirm(String(value.id), String(value.expectedRevision), Number(value.factsRevision), Number(value.initialQuantity), value.reviewed === true)
+      this.json(response, 200, { ok: true })
+    } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Guidance request failed" }) }
   }
 
   private async refreshBroker(response: ServerResponse): Promise<void> {
