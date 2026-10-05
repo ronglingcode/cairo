@@ -13,15 +13,22 @@ import { BrokerRefreshCoordinator } from "../src/engine/BrokerRefreshCoordinator
 import { PreparationStore } from "../src/engine/PreparationStore.mts"
 import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
 import { CairoDomainTools } from "../src/copilot/CairoDomainTools.mts"
+import { CopilotChat } from "../src/copilot/CopilotChat.mts"
+import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
+import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
 const apiServer = new EngineApiServer(engine)
 let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
+let chat: CopilotChat | undefined
+let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
+    await chat?.stop()
     await sidecar?.stop()
+    await fakeModel?.stop()
     await brokerCoordinator?.stop()
     await apiServer.stop()
     await engine.stop()
@@ -76,26 +83,31 @@ app.whenReady().then(async () => {
   engine.start()
   brokerCoordinator.start()
   createWindow(apiBaseUrl, config)
+  const fake = configStore.values.provider === "fake"
+  fakeModel = fake ? new FakeModelServer() : undefined
+  const selectedModel = modelConfiguration(fake, configStore.values.model || "unconfigured", fakeModel ? await fakeModel.start() : "")
   sidecar = new OpenCodeSidecar({
     binary: app.isPackaged ? path.join(process.resourcesPath, "opencode", "opencode.exe") : path.join(app.getAppPath(), "node_modules", "@opencode", "cli", "bin", "opencode.exe"),
     userDataPath: app.getPath("userData"),
     pluginPath: app.isPackaged ? path.join(process.resourcesPath, "copilot", "cairo-plugin.js") : path.join(app.getAppPath(), "dist-copilot", "cairo-plugin.js"),
-    config: { snapshots: false, permissions: [
-      { action: "*", resource: "*", effect: "deny" },
-      { action: "cairo_read", resource: "*", effect: "allow" },
-      { action: "cairo_propose", resource: "*", effect: "allow" },
-    ] },
-    environment: { CAIRO_TOOL_ENDPOINT: `${apiBaseUrl}/copilot/tools`, CAIRO_TOOL_TOKEN: apiServer.toolToken },
+    config: selectedModel.config,
+    environment: { CAIRO_TOOL_ENDPOINT: `${apiBaseUrl}/copilot/tools`, CAIRO_TOOL_TOKEN: apiServer.toolToken,
+      ...(!fake && configStore.openAiApiKey ? { CAIRO_OPENAI_API_KEY: configStore.openAiApiKey } : {}),
+    },
     onStatus: copilot => engine.updateSnapshot({ copilot }),
   })
-  apiServer.setCopilotRestarter(() => sidecar!.restart())
+  chat = new CopilotChat({ engine, client: () => sidecar?.client, workspace: sidecar.workspace, model: selectedModel.model, fake,
+    configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
+  })
+  apiServer.setCopilotChat(chat)
+  apiServer.setCopilotRestarter(async () => { await chat!.stop(); const ok = await sidecar!.restart(); if (ok) await chat!.connect(); return ok })
   apiServer.setDomainTools(new CairoDomainTools(engine, async id => {
     const client = sidecar?.client
     if (!client || !sidecar) return false
-    const session = await client.session.get({ sessionID: id })
+    const session = await client.session.get({ sessionID: id }, { signal: AbortSignal.timeout(5000) })
     return path.resolve(session.location.directory).toLowerCase() === path.resolve(sidecar.workspace).toLowerCase()
   }))
-  void sidecar.start()
+  void sidecar.start().then(ok => { if (ok) return chat!.connect() })
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)
   })

@@ -54,6 +54,7 @@ export class CairoEngine {
       broker: this.waiting("broker", "Broker source has not started"),
       brokerFacts: null,
       copilot: this.waiting("copilot", "Copilot has not started"),
+      copilotChat: null,
       positions: [],
       tradebooks: [],
       attachments: [],

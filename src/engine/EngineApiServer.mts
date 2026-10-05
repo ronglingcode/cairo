@@ -4,6 +4,7 @@ import type { ChartSnapshot, EngineEvent } from "../shared/contracts.mts"
 import { CairoEngine } from "./CairoEngine.mts"
 import { PreparationConflictError, PreparationStore, PreparationValidationError } from "./PreparationStore.mts"
 import type { CairoDomainTools } from "../copilot/CairoDomainTools.mts"
+import type { CopilotChat } from "../copilot/CopilotChat.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -23,6 +24,7 @@ export class EngineApiServer {
   private preparationOperation: Promise<unknown> = Promise.resolve()
   private copilotRestarter: (() => Promise<boolean>) | undefined
   private domainTools: CairoDomainTools | undefined
+  private chat: CopilotChat | undefined
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -33,6 +35,7 @@ export class EngineApiServer {
   setPreparationStore(store: PreparationStore): void { this.preparationStore = store }
   setCopilotRestarter(restart: () => Promise<boolean>): void { this.copilotRestarter = restart }
   setDomainTools(tools: CairoDomainTools): void { this.domainTools = tools }
+  setCopilotChat(chat: CopilotChat): void { this.chat = chat }
 
   async loadPreparation(): Promise<boolean> {
     if (!this.preparationStore) return false
@@ -118,6 +121,12 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (["/copilot/send", "/copilot/cancel", "/copilot/connect"].includes(url.pathname) && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.chat) { this.json(response, 503, { error: "Chat is unavailable" }); return }
+      void this.chatCommand(url.pathname, request, response)
+      return
+    }
     if (url.pathname === "/copilot/tools" && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.toolToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.domainTools) { this.json(response, 503, { error: "copilot-tools-unavailable" }); return }
@@ -186,6 +195,27 @@ export class EngineApiServer {
       return
     }
     this.json(response, 404, { error: "not-found" })
+  }
+
+  private async chatCommand(route: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      if (route === "/copilot/connect") await this.chat!.connect()
+      else if (route === "/copilot/cancel") await this.chat!.cancel()
+      else {
+        const chunks: Buffer[] = []
+        let bytes = 0
+        for await (const chunk of request) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+          bytes += buffer.length
+          if (bytes > 64 * 1024) { this.json(response, 413, { error: "Message is too large" }); return }
+          chunks.push(buffer)
+        }
+        const value = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid message")
+        await this.chat!.send(value.text, value.commandId)
+      }
+      this.json(response, 200, { chat: this.chat!.snapshot })
+    } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Chat request failed" }) }
   }
 
   private async refreshBroker(response: ServerResponse): Promise<void> {

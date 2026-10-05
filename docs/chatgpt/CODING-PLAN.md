@@ -445,7 +445,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** A tool continuation after an outside fill sees the new broker facts; stale chat summaries/chart bars do not become current authority. **Commit:** `feat(T31): refresh bounded trading context for copilot runs`.
 
-- [ ] **T32 — Add streaming chat, cancellation, and reconnect**
+- [x] **T32 — Add streaming chat, cancellation, and reconnect**
 
 **Depends:** T06, T29, T31. **Repository:** Cairo.
 

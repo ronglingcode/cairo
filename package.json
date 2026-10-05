@@ -4,6 +4,7 @@
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
+    "preview:fake": "node --experimental-strip-types scripts/preview-copilot.mjs",
     "dev": "node scripts/build-copilot.mjs && vite",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",

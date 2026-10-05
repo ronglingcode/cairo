@@ -3,6 +3,7 @@ import type { CairoSnapshot, SourceStatus } from "../shared/contracts.mts"
 import { EngineConnection, type RendererConnectionState } from "../renderer/EngineConnection.mts"
 import { ChartView } from "./ChartView"
 import { PreparationEditor } from "./PreparationEditor"
+import { CopilotPanel } from "./CopilotPanel"
 
 const EMPTY_STATUS: SourceStatus = { source: "chart", state: "unknown", updatedAt: null, detail: "Engine snapshot unavailable" }
 
@@ -130,7 +131,7 @@ export function App() {
             <Source status={chartStatus} name="Chart data" />
             <Source status={copilotStatus} name="Cairo AI" />
           </div>
-          {window.cairo?.config?.setupRequired && <div className="setup-notice" role="status">Setup needed · choose a Schwab account and review local source settings in {window.cairo.config.configPath}</div>}
+          {window.cairo?.config?.setupRequired && <div className="setup-notice" role="status">Review local source settings in {window.cairo.config.configPath}. A Schwab account is optional for preparation and chart discussion.</div>}
 
           <PreparationEditor apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} preparation={snapshot?.preparation ?? null} loadError={snapshot?.preparationError ?? null} loaded={snapshot !== null} />
 
@@ -211,20 +212,11 @@ export function App() {
 
         <aside className="copilot-column">
           <div className="copilot-heading"><div><span className="eyebrow">CAIRO COPILOT</span><h2>Trade assistant</h2></div><span className={`online-tag ${connectionTone(copilotStatus.state)}`}>{sourceLabel(copilotStatus.state).toUpperCase()}</span></div>
-          <div className="copilot-body">
-            <div className="assistant-avatar">C</div>
-            <h3>Your trading copilot</h3>
-            <p>Save your preparation notes, then discuss your scenarios and one-minute chart context with Cairo. Copilot chat is coming in the next milestone.</p>
-            <div className="source-detail">Cairo AI: {sourceLabel(copilotStatus.state)}{copilotStatus.detail ? ` · ${copilotStatus.detail}` : ""}</div>
+          <div className="chat-runtime">
             <button className="quiet-button" disabled={!apiBaseUrl || restartingCopilot} onClick={() => void restartCopilot()}>{restartingCopilot ? "Restarting…" : "Restart AI"}</button>
             {copilotRestartError && <p className="chart-error" role="status">{copilotRestartError}</p>}
-            <div className="suggestion">“What should I watch on this setup?” <span>↗</span></div>
-            <div className="suggestion">“Review my attached tradebook” <span>↗</span></div>
           </div>
-          <div className="composer-wrap">
-            <div className="composer-placeholder">Ask Cairo about a setup…</div>
-            <div className="composer-tools"><span>{connectionState === "connected" ? "Fake mode · no model connected" : "Engine connection unavailable"}</span><button disabled aria-label="Send message">↑</button></div>
-          </div>
+          <CopilotPanel apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} chat={snapshot?.copilotChat ?? null} />
         </aside>
       </section>
       <footer className="statusbar"><span><span className="status-dot muted" />Observer-only entries</span><span>{snapshot ? `Runtime ${snapshot.runtimeInstanceId.slice(0, 8)} · sequence ${snapshot.sequence}` : connectionLabel(connectionState)}</span></footer>

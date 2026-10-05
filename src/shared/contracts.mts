@@ -174,6 +174,25 @@ export interface PreparationNotes {
   savedAt: IsoTimestamp
 }
 
+export interface CopilotChatMessage {
+  id: string
+  role: "user" | "assistant"
+  text: string
+  tools: Array<{ name: string; state: string }>
+}
+
+export interface CopilotChat {
+  sessionId: string | null
+  model: string
+  fake: boolean
+  connected: boolean
+  busy: boolean
+  error: string | null
+  outcome: string | null
+  messages: CopilotChatMessage[]
+  truncated: boolean
+}
+
 export interface CairoSnapshot {
   runtimeInstanceId: string
   sequence: number
@@ -186,6 +205,7 @@ export interface CairoSnapshot {
   broker: SourceStatus
   brokerFacts: BrokerFacts | null
   copilot: SourceStatus
+  copilotChat: CopilotChat | null
   positions: BrokerPosition[]
   tradebooks: Tradebook[]
   attachments: PositionAttachment[]

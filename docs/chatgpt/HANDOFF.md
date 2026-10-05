@@ -9,7 +9,8 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 - T23's notes workspace and T29's owned runtime lifecycle are complete. T29 commit subject: `feat(T29): manage Cairo OpenCode sidecar lifecycle`.
 - T30's restricted domain plugin is complete; see [verification](T30-VERIFICATION.md).
 - T31's actual per-step context hook is complete; see [verification](T31-VERIFICATION.md).
-- **Remaining authorized tasks: T32, T21**, each in its own commit. T32 finishes the first runnable notes/chart copilot. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
+- T32 completes the runnable notes/chart/chat milestone; see [verification and launch instructions](T32-VERIFICATION.md).
+- **Remaining authorized task: T21**, in its own commit. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
 - Bookmap T17–T20 and pattern-specific T24–T25 move to the final feature phase after the other features; they remain required for the full MVP. No plugin changes now.
 - No commits were pushed. T01–T16 completion commits are recorded below.
 
