@@ -93,3 +93,6 @@ Reviewed scoped observation attempts freeze narrative, confirmations, account an
 
 ## T47
 Complete synthetic workflow covers notes/context, live-mode fake observation, external entry, two independent management styles, partial close approval/fill, separately reviewed PUT protection change and unknown restart recovery. Companion tests exercise the actual pinned runtime fake chat/tool loop and renderer disconnects. All 123 Cairo checks, typecheck/build and the full Java test task pass. Focused repairs 2b71121 and ef9ab9d address partial cancellation and fixture clock ordering. No live writes or paid inference. Producer mode remains unknown in the installed-metadata adapter.
+
+## T48
+Private unpacked Windows x64 package build 6c471624650b includes Electron 44.5.1, external OpenCode 2.0.22/plugin resources, built engine/renderer, references, lockfile/file manifest and third-party notices. Actual packaged launch with a spaced isolated profile loads renderer, synthetic broker and bundled sidecar; renderer reload preserves runtime. No keys/user artifacts or global runtime required. NSIS/Inno are unavailable, so no installer. T49 continues the broader smoke scenarios.

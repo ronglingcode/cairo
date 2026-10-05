@@ -577,7 +577,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** No entry/automatic writes; exact approved exits only; no duplicate episode/ticket/submission; no stale-chart triggers; fills and protection remain consistent; AI/renderer outages preserve monitoring. Fix failures in focused commits. **Commit:** `test(T47): verify complete observer and exit-assistant workflow`.
 
-- [ ] **T48 — Package the private Windows desktop and pinned runtime**
+- [x] **T48 — Package the private Windows desktop and pinned runtime**
 
 **Depends:** T29, T47. **Repository:** Cairo.
 

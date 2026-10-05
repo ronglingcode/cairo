@@ -33,6 +33,9 @@ import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
+// Optional isolated profile for private portable use and synthetic package verification.
+if (process.env.CAIRO_USER_DATA) app.setPath("userData", path.resolve(process.env.CAIRO_USER_DATA))
+
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
