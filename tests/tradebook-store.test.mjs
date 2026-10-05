@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { createHash } from "node:crypto"
@@ -10,6 +10,37 @@ const digest = (value) => createHash("sha256").update(value).digest("hex")
 const draft = (markdown = "# Gap Give and Go\n\nWait for a bid to reappear.") => ({
   id: "gap-give-go", title: "Gap Give and Go", markdown,
   interpretation: { tradebookId: "gap-give-go", narrativeHash: digest(markdown), clauses: [{ clauseId: "bid-reappears", sourceText: "Wait for a bid to reappear.", coverage: "human", explanation: "Trader confirms the pattern." }] },
+})
+
+test("source library includes only top-level strategies, without requiring interpretations", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "cairo source "))
+  try {
+    const source = path.join(root, "strategies")
+    await mkdir(path.join(source, "patterns"), { recursive: true })
+    await writeFile(path.join(source, "gap-give-go.md"), draft().markdown)
+    await writeFile(path.join(source, "another.md"), "# Another setup\nOriginal strategy")
+    await writeFile(path.join(source, "index.md"), "# Index")
+    await writeFile(path.join(source, "notes.txt"), "Not a strategy")
+    await writeFile(path.join(source, "patterns", "bid.md"), "# Bid")
+    const store = new TradebookStore(root, source)
+    const books = await store.list()
+    assert.deepEqual(books.map(book => book.id), ["another", "gap-give-go"])
+    assert.equal(books[1].title, "Gap Give and Go")
+    assert.equal(books[1].interpretation, null)
+    store.stageDraft(draft())
+    const reviewed = await store.activateDraft("gap-give-go", books[1].revision)
+    assert.equal(reviewed.interpretation.clauses.length, 1)
+    assert.equal(await readFile(path.join(source, "gap-give-go.md"), "utf8"), draft().markdown)
+    const updated = draft().markdown + "\nNew authored rule."
+    await writeFile(path.join(source, "gap-give-go.md"), updated)
+    const changed = await store.loadTradebook("gap-give-go")
+    assert.equal(changed.markdown, updated)
+    assert.equal(changed.interpretation, null)
+    assert.notEqual(changed.revision, reviewed.revision)
+    store.stageDraft(draft())
+    await assert.rejects(store.activateDraft("gap-give-go", reviewed.revision), /changed/)
+    await assert.rejects(store.activateDraft("gap-give-go", changed.revision), /source tradebooks folder/)
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test("tradebook pair activates only when the narrative and interpretation match, then reopens", async () => {

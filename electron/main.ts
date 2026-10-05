@@ -1,6 +1,6 @@
 import { TicketPermissions } from "../src/copilot/TicketPermissions.mts"
 import { BookmapReceiver } from "../src/engine/BookmapReceiver.mts"
-import { seedPersonalReferences } from "../src/engine/PersonalReferences.mts"
+import { homedir } from "node:os"
 import { EntryObserver } from "../src/engine/EntryObserver.mts"
 import { RecoveryBootstrap } from "../src/engine/RecoveryBootstrap.mts"
 import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
@@ -110,9 +110,9 @@ app.whenReady().then(async () => {
   bookmapReceiver.start(config.bookmapEndpoint)
   apiServer.setPreparationStore(new PreparationStore(app.getPath("userData")))
   await apiServer.loadPreparation()
-  const tradebookStore = new TradebookStore(app.getPath("userData"))
-  await seedPersonalReferences(tradebookStore, path.join(app.getAppPath(), "resources/references")).catch(() => { /* Missing/corrupt references remain unavailable. */ })
-  try { engine.updateSnapshot({ tradebooks: await tradebookStore.list() }) } catch { /* Invalid artifacts remain inactive. */ }
+  const tradebookPath = path.resolve(process.env.CAIRO_TRADEBOOK_PATH || path.join(homedir(), "code", "Backtest", "tradebooks"))
+  const tradebookStore = new TradebookStore(app.getPath("userData"), tradebookPath)
+  try { engine.updateSnapshot({ tradebooks: await tradebookStore.list() }) } catch (error) { console.error(`Cannot load tradebooks from ${tradebookPath}`, error) }
   apiServer.setPolicyReview(new PolicyReview(engine, tradebookStore, guidance, monitor))
   const http = new FetchHttpPort()
   const massive = new MassiveRestReader(http, () => configStore.massiveApiKey)

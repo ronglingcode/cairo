@@ -18,11 +18,25 @@ export interface TradebookDraft {
 
 export class TradebookStore {
   readonly root: string
+  readonly sourceRoot?: string
   private drafts = new Map<string, TradebookDraft>()
   private operations = new Map<string, Promise<unknown>>()
 
-  constructor(userDataPath: string) { this.root = path.join(userDataPath, "tradebooks") }
+  constructor(userDataPath: string, sourceRoot?: string) {
+    this.root = path.join(userDataPath, "tradebooks")
+    this.sourceRoot = sourceRoot
+  }
   async list(): Promise<Tradebook[]> {
+    if (this.sourceRoot) {
+      const entries = await readdir(this.sourceRoot, { withFileTypes: true })
+      const books: Tradebook[] = []
+      for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.toLowerCase() === "index.md") continue
+        const book = await this.loadTradebook(entry.name.slice(0, -3))
+        if (book) books.push(book)
+      }
+      return books
+    }
     await mkdir(this.root, { recursive: true })
     const names = (await readdir(this.root)).filter(name => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\.md$/.test(name)).slice(0, 100)
     const books: Tradebook[] = []
@@ -42,6 +56,21 @@ export class TradebookStore {
 
   async loadTradebook(id: string): Promise<Tradebook | null> {
     const safeId = safeIdentifier(id)
+    if (this.sourceRoot) {
+      if (safeId.toLowerCase() === "index") return null
+      try {
+        const markdown = await readFile(path.join(this.sourceRoot, `${safeId}.md`), "utf8")
+        let rawInterpretation = ""
+        let interpretation: TradebookInterpretation | null = null
+        try {
+          rawInterpretation = await readFile(path.join(this.root, `${safeId}.interpretation.json`), "utf8")
+          interpretation = validateInterpretation(JSON.parse(rawInterpretation), safeId, hash(markdown), markdown)
+        } catch { rawInterpretation = "" } // Missing/stale interpretations do not hide authored strategies.
+        return { id: safeId, title: titleFromMarkdown(markdown), markdown, contentHash: hash(markdown), revision: hash(`${markdown}\n${rawInterpretation}`), interpretation }
+      } catch (error) {
+        if (!isMissing(error)) throw error
+      }
+    }
     const markdownPath = path.join(this.root, `${safeId}.md`)
     const interpretationPath = path.join(this.root, `${safeId}.interpretation.json`)
     try {
@@ -66,6 +95,7 @@ export class TradebookStore {
 
       const checked = validateDraft(draft)
       const markdown = checked.markdown
+      if (this.sourceRoot && existing && markdown !== existing.markdown) throw new Error("Edit the strategy narrative in the source tradebooks folder before interpreting it")
       const interpretation = validateInterpretation(checked.interpretation, checked.id, hash(markdown), markdown)
       const content = JSON.stringify(interpretation, null, 2) + "\n"
       await mkdir(this.root, { recursive: true })

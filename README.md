@@ -13,6 +13,13 @@ model by default. Preparation notes, one-minute chart snapshots and streaming ch
 are implemented. See [model/chart setup and verification](docs/chatgpt/T32-VERIFICATION.md).
 For a synthetic browser demo, run `npm run build` then `npm run preview:fake`.
 
+The strategy selector reads the top-level `.md` files in
+`%USERPROFILE%\code\Backtest\tradebooks`, excluding `index.md` and subfolders.
+Set `CAIRO_TRADEBOOK_PATH` before launching to use another directory. Restart
+Cairo to reload source edits. Narratives appear without interpretation files;
+reviewed interpretations stay in Cairo's profile and are used only while their
+hash matches the source narrative. Cairo does not write to the source folder.
+
 ## Coding agent handoff
 
 Start with [CODING-PLAN.md](docs/chatgpt/CODING-PLAN.md), the complete MVP handoff with 50 small tasks, dependencies, verification steps, checkboxes, and separate local commits for each completed task.
