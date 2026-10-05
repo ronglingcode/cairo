@@ -6,7 +6,8 @@ declare global {
       runtime: "desktop"
       mode: "fake"
       apiBaseUrl: string | null
-    config: PublicConfiguration | null
+      commandToken: string | null
+      config: PublicConfiguration | null
     }
   }
 }

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
-import type { EngineEvent } from "../shared/contracts.mts"
+import { randomBytes } from "node:crypto"
+import type { ChartSnapshot, EngineEvent } from "../shared/contracts.mts"
 import { CairoEngine } from "./CairoEngine.mts"
 
 const MAX_EVENT_CLIENTS = 16
@@ -16,8 +17,14 @@ export class EngineApiServer {
   private clients = new Set<EventClient>()
   private starting: Promise<string> | undefined
   private readonly engine: CairoEngine
+  private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
+  readonly commandToken = randomBytes(32).toString("hex")
 
   constructor(engine: CairoEngine) { this.engine = engine }
+
+  setChartRefresher(refresher: (symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>): void {
+    this.chartRefresher = refresher
+  }
 
   get isListening(): boolean { return this.server?.listening === true }
 
@@ -66,11 +73,25 @@ export class EngineApiServer {
 
   private handle(request: IncomingMessage, response: ServerResponse): void {
     response.setHeader("Access-Control-Allow-Origin", "*")
-    response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
-    response.setHeader("Access-Control-Allow-Headers", "Content-Type, Last-Event-ID")
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID")
     response.setHeader("X-Content-Type-Options", "nosniff")
     if (request.method === "OPTIONS") {
       response.writeHead(204).end()
+      return
+    }
+    const base = this.baseUrl()
+    const url = new URL(request.url ?? "/", base)
+    if (request.method === "POST" && url.pathname === "/chart/refresh") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) {
+        this.json(response, 403, { error: "forbidden" })
+        return
+      }
+      if (!this.chartRefresher) {
+        this.json(response, 503, { error: "chart-source-unavailable" })
+        return
+      }
+      void this.refreshChart(request, response)
       return
     }
     if (request.method !== "GET") {
@@ -78,8 +99,6 @@ export class EngineApiServer {
       return
     }
 
-    const base = this.baseUrl()
-    const url = new URL(request.url ?? "/", base)
     if (url.pathname === "/health") {
       const snapshot = this.engine.getSnapshot()
       this.json(response, 200, {
@@ -99,6 +118,41 @@ export class EngineApiServer {
       return
     }
     this.json(response, 404, { error: "not-found" })
+  }
+
+  private async refreshChart(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const chunks: Buffer[] = []
+      let bytes = 0
+      for await (const chunk of request) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        bytes += buffer.length
+        if (bytes > 4096) { this.json(response, 413, { error: "request-too-large" }); return }
+        chunks.push(buffer)
+      }
+      const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      if (!value || typeof value !== "object" || Array.isArray(value)) { this.json(response, 400, { error: "invalid-request" }); return }
+      const { symbol, date } = value as Record<string, unknown>
+      if (typeof symbol !== "string" || typeof date !== "string") { this.json(response, 400, { error: "expected-symbol-and-date" }); return }
+      const result = await this.chartRefresher!(symbol, date)
+      if (response.destroyed) return
+      if (result.snapshot) {
+        const chart = result.ok ? result.snapshot : {
+          ...result.snapshot,
+          source: { ...result.snapshot.source, state: "stale" as const, updatedAt: new Date().toISOString(), detail: result.error ?? "Refresh failed; showing prior snapshot" },
+        }
+        this.engine.updateSnapshot({ chart })
+      } else if (!result.ok) {
+        const current = this.engine.getSnapshot().chart
+        if (current) this.engine.updateSnapshot({ chart: {
+          ...current,
+          source: { ...current.source, state: "stale", updatedAt: new Date().toISOString(), detail: result.error ?? "Refresh failed; showing prior snapshot" },
+        } })
+      }
+      this.json(response, result.ok ? 200 : 502, { ok: result.ok, snapshot: result.snapshot, error: result.error ?? null })
+    } catch {
+      this.json(response, 400, { error: "invalid-chart-refresh" })
+    }
   }
 
   private events(request: IncomingMessage, response: ServerResponse, url: URL): void {

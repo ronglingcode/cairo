@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { CairoSnapshot, SourceStatus } from "../shared/contracts.mts"
 import { EngineConnection, type RendererConnectionState } from "../renderer/EngineConnection.mts"
+import { ChartView } from "./ChartView"
 
 const EMPTY_STATUS: SourceStatus = { source: "chart", state: "unknown", updatedAt: null, detail: "Engine snapshot unavailable" }
 
@@ -9,6 +10,11 @@ export function App() {
   const [snapshot, setSnapshot] = useState<CairoSnapshot | null>(null)
   const [connectionState, setConnectionState] = useState<RendererConnectionState>(apiBaseUrl ? "connecting" : "disconnected")
   const [selectedTradebookId, setSelectedTradebookId] = useState("")
+  const [chartSymbol, setChartSymbol] = useState(window.cairo?.config?.chartSymbol ?? "SPY")
+  const [chartDate, setChartDate] = useState(window.cairo?.config?.chartDate ?? new Date().toISOString().slice(0, 10))
+  const [refreshing, setRefreshing] = useState(false)
+  const [chartError, setChartError] = useState<string | null>(null)
+  const refreshAbort = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!apiBaseUrl) return
@@ -19,6 +25,34 @@ export function App() {
     void connection.connect()
     return () => connection.close()
   }, [apiBaseUrl])
+
+  useEffect(() => {
+    refreshAbort.current?.abort()
+    setRefreshing(false)
+    return () => refreshAbort.current?.abort()
+  }, [chartSymbol, chartDate])
+
+  async function refreshChart() {
+    if (!apiBaseUrl || !window.cairo?.commandToken || refreshing) return
+    refreshAbort.current?.abort()
+    const controller = new AbortController()
+    refreshAbort.current = controller
+    setRefreshing(true)
+    setChartError(null)
+    try {
+      const response = await fetch(`${apiBaseUrl}/chart/refresh`, {
+        method: "POST", signal: controller.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo.commandToken}` },
+        body: JSON.stringify({ symbol: chartSymbol, date: chartDate }),
+      })
+      const result = await response.json() as { error?: string | null }
+      if (!response.ok) setChartError(result.error ?? `Refresh failed (${response.status})`)
+    } catch (error) {
+      if (!controller.signal.aborted) setChartError(error instanceof Error ? error.message : "Refresh failed")
+    } finally {
+      if (!controller.signal.aborted) setRefreshing(false)
+    }
+  }
 
   const selectedTradebook = useMemo(
     () => snapshot?.tradebooks.find((tradebook) => tradebook.id === selectedTradebookId) ?? snapshot?.tradebooks[0] ?? null,
@@ -65,22 +99,26 @@ export function App() {
           <section className="chart-card">
             <div className="card-heading">
               <div><span className="eyebrow">FOCUS CHART</span><h2>{snapshot?.chart?.symbol ?? "Chart context"}</h2></div>
-              <button className="quiet-button" disabled>Refresh</button>
+              <div className="chart-controls">
+                <input aria-label="Chart symbol" value={chartSymbol} maxLength={16} onChange={(event) => setChartSymbol(event.target.value.toUpperCase())} />
+                <input aria-label="Chart date" type="date" value={chartDate} onChange={(event) => setChartDate(event.target.value)} />
+                <button className="quiet-button" onClick={() => void refreshChart()} disabled={!apiBaseUrl || refreshing || !chartSymbol || !chartDate}>{refreshing ? "Loading…" : "Refresh"}</button>
+              </div>
             </div>
             {snapshot?.chart?.bars.length ? (
-              <div className="chart-loaded">
-                <strong>{snapshot.chart.bars.length} one-minute bars loaded</strong>
-                <span>Fetched {formatTime(snapshot.chart.fetchedAt)} · latest bar {snapshot.chart.latestBarAt ? formatTime(snapshot.chart.latestBarAt) : "unknown"}</span>
-                <p>Snapshot context only · bars do not trigger live entries or exits</p>
-              </div>
+              <>
+                <ChartView bars={snapshot.chart.bars} symbol={snapshot.chart.symbol} />
+                <div className="chart-loaded"><strong>{snapshot.chart.bars.length} one-minute bars · {snapshot.chart.source.state}</strong><span>Fetched {formatTime(snapshot.chart.fetchedAt)} · latest bar {snapshot.chart.latestBarAt ? formatTime(snapshot.chart.latestBarAt) : "unknown"}</span></div>
+              </>
             ) : (
               <div className="empty-chart">
                 <div className="chart-glyph">⌁</div>
-                <strong>No chart snapshot</strong>
-                <span>Select a symbol to load one-minute context.</span>
+                <strong>{snapshot?.chart ? "No bars for this date" : "No chart snapshot"}</strong>
+                <span>{chartError ?? (apiBaseUrl ? "Select a symbol and date, then refresh for one-minute context." : "Desktop app required to load a chart snapshot.")}</span>
               </div>
             )}
-            <p className="chart-footnote">Snapshot data only · no live chart updates</p>
+            {chartError && snapshot?.chart?.bars.length ? <p className="chart-error" role="status">{chartError} · showing the last snapshot</p> : null}
+            <p className="chart-footnote">Snapshot data only · no live chart updates · charting by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a></p>
           </section>
 
           <section className="setup-card">

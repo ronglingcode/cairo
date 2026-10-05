@@ -39,6 +39,28 @@ test("loopback API exposes health and snapshot as read-only JSON", async (t) => 
   assert.equal((await fetch(`${baseUrl}/snapshot`, { method: "POST" })).status, 405)
 })
 
+test("chart refresh requires the preload capability and publishes timestamped snapshot state", async (t) => {
+  const engine = new CairoEngine()
+  const { api, baseUrl } = await startApi(engine)
+  t.after(() => api.stop())
+  let reads = 0
+  api.setChartRefresher(async (symbol, date) => {
+    reads++
+    assert.equal(symbol, "SPY")
+    assert.equal(date, "2026-10-04")
+    return { ok: true, snapshot: { symbol, interval: "1m", fetchedAt: "2026-10-04T16:00:00.000Z", latestBarAt: null, bars: [], source: { source: "chart", state: "connected", updatedAt: "2026-10-04T16:00:00.000Z", detail: "fake" } } }
+  })
+  assert.equal((await fetch(`${baseUrl}/chart/refresh`, { method: "POST" })).status, 403)
+  assert.equal(reads, 0)
+  const response = await fetch(`${baseUrl}/chart/refresh`, {
+    method: "POST", headers: { Authorization: `Bearer ${api.commandToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol: "SPY", date: "2026-10-04" }),
+  })
+  assert.equal(response.status, 200)
+  assert.equal(engine.getSnapshot().chart.symbol, "SPY")
+  assert.equal(engine.getSnapshot().sequence, 1)
+})
+
 test("snapshot cursor catches an update in the snapshot-subscription gap exactly once", async (t) => {
   const engine = new CairoEngine()
   const { api, baseUrl } = await startApi(engine)

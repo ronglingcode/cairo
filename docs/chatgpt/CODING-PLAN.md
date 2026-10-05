@@ -241,13 +241,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added an HTTPS-only Massive aggregate reader with bearer-header auth, one-minute OHLCV validation, same-host pagination, symbol/date cache, overlap replacement, explicit empty snapshots, and failed-refresh retention. Fake HTTP tests assert pages, no query-string credential, no trades/WebSocket requests, and no volume accumulation. The key is supplied through the backend-only environment getter; no actual key or provider call was used. `npm run test` passed (21 checks) and typecheck passed. Auth and endpoint shape follow [Massive REST docs](https://massive.com/docs/rest) and [stocks aggregate docs](https://www.massive.com/docs/rest/stocks/aggregates/custom-bars).
 
-- [ ] **T10 — Render the basic one-minute snapshot chart**
+- [x] **T10 — Render the basic one-minute snapshot chart**
 
 **Depends:** T06, T09. **Repository:** Cairo.
 
 **Deliver:** Official Lightweight Charts candles/volume, symbol/date selection, manual Refresh, and snapshot/no-live-updates label with fetch/latest-bar time. Essential plan/order overlays can be added as their data arrives. Create/dispose the chart once per view; no five-minute view or chart polish prerequisite.
 
 **Verify:** Inspect fresh/aged/error/empty states; stale data is visible, refresh does not sum volume, switching symbols cancels stale results. **Commit:** `feat(T10): display timestamped one-minute chart context`.
+
+**Verified (2026-10-04):** Added pinned Lightweight Charts 5.2.1 candlesticks and volume, symbol/date fields, a manual refresh button, and fetched/latest-bar timestamps with explicit snapshot-only language. A preload capability protects the loopback refresh command; provider requests remain in the main process. Renderer refresh cancellation and server-side response checks prevent a canceled request from overwriting focus; failed refreshes preserve bars and label them stale. API fake test checks capability enforcement and snapshot publication; Massive fakes cover fresh/empty/overlap/error behavior. `npm run test` passed (22 checks), typecheck and production build passed. Electron/browser visual state inspection remains unavailable because the T02 Electron binary download and preview navigation are still blocked. Added required TradingView attribution and notice. Sources: [official series API](https://tradingview.github.io/lightweight-charts/docs/series-types), [migration guide](https://tradingview.github.io/lightweight-charts/docs/migrations/from-v4-to-v5), [license attribution](https://tradingview.github.io/lightweight-charts/docs/5.0).
 
 - [ ] **T11 — Consume the Bookmap Schwab token read-only**
 
