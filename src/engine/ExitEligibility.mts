@@ -23,6 +23,7 @@ export function validateExit(snapshot: CairoSnapshot, input: ExitIntent, origin:
     if (input.orderId) throw new Error("Close cannot replace or cancel an existing order")
     if (working.length) throw new Error("Resolve working orders/protection before staging another close; combined coverage is unsafe")
   } else {
+    if (input.intent === "cancel-protection" && [input.orderType, input.limitPrice, input.stopPrice].some(value => value !== undefined)) throw new Error("Cancellation cannot include a new order shape")
     const orders = working.filter(order => order.orderId === input.orderId)
     if (orders.length !== 1) throw new Error("Exact current protection order required")
     const order = orders[0]!

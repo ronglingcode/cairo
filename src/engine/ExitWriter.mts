@@ -22,7 +22,7 @@ export class ExitWriter {
     if (existing) return Promise.resolve(existing)
     const command = this.commands.get(id); if (command) return command
     const ticket = this.options.engine.getSnapshot().tickets.find(item => item.id === id)
-    if (!ticket || ticket.action !== "close") return Promise.reject(new Error("Only approved closes are connected at this phase"))
+    if (!ticket) return Promise.reject(new Error("Exact current exit ticket required"))
     const key = `${ticket.accountId}:${ticket.symbol}`
     const task = (this.queues.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.send(id, hash))
     this.queues.set(key, task); this.commands.set(id, task)
@@ -30,7 +30,7 @@ export class ExitWriter {
     return task
   }
   reserved(accountId: string, symbol: string): number {
-    return this.options.recovery.snapshot.attempts.filter(item => item.ticket.accountId === accountId && item.ticket.symbol === symbol && !["filled", "rejected", "canceled"].includes(item.state)).reduce((sum, item) => sum + Math.max(0, item.ticket.quantity - item.filledQuantity), 0)
+    return this.options.recovery.snapshot.attempts.filter(item => item.ticket.accountId === accountId && item.ticket.symbol === symbol && item.ticket.action !== "cancel-protection" && !["filled", "rejected", "canceled"].includes(item.state)).reduce((sum, item) => sum + Math.max(0, item.ticket.quantity - item.filledQuantity), 0)
   }
   private async send(id: string, hash: string): Promise<BrokerAttempt> {
     const o = this.options
@@ -47,6 +47,7 @@ export class ExitWriter {
     if (!freshAuthorization || freshAuthorization.accountId !== ticket.accountId) throw new Error("Authorization changed before send")
     const reservation = this.reserved(ticket.accountId, ticket.symbol)
     if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && ["unknown", "checkpointed"].includes(item.state))) throw new Error("Uncertain prior attempt blocks new actions until reconciliation")
+    if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && item.ticket.action !== "close" && !["filled", "rejected", "canceled"].includes(item.state))) throw new Error("Prior protection change awaits broker confirmation")
     const approved = o.tickets.consumeApproval(id, hash, reservation)
     const attempt: BrokerAttempt = { id, ticket: approved.ticket, attemptedAt: new Date().toISOString(), brokerOrderId: null, state: "checkpointed", filledQuantity: 0, detail: "Checkpointed before broker request", accountHash: matches[0].hashValue }
     await o.recovery.checkpoint(attempt, o.engine.getSnapshot().attachments, o.monitor.checkpointState())
@@ -57,12 +58,14 @@ export class ExitWriter {
       if (exitFactsFingerprint(snapshot) !== approved.ticket.factsFingerprint || Date.parse(approved.ticket.expiresAt) <= Date.now()) throw new Error("Facts changed during checkpoint; no order sent")
       validateExit(snapshot, { ...approved.intent, factsRevision: snapshot.brokerFactsRevision }, approved.origin, Date.now(), reservation)
       sent = true
-      const result = await o.http.request(`https://api.schwabapi.com/trader/v1/accounts/${encodeURIComponent(attempt.accountHash!)}/orders`, { method: "POST", headers: { Authorization: `Bearer ${freshAuthorization.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(approved.ticket.exactPayload) })
+      const action = approved.ticket.action
+      const suffix = action === "close" ? "" : `/${encodeURIComponent(approved.ticket.orderId!)}`
+      const result = await o.http.request(`https://api.schwabapi.com/trader/v1/accounts/${encodeURIComponent(attempt.accountHash!)}/orders${suffix}`, { method: action === "close" ? "POST" : action === "cancel-protection" ? "DELETE" : "PUT", headers: { Authorization: `Bearer ${freshAuthorization.accessToken}`, "Content-Type": "application/json" }, ...(action === "cancel-protection" ? {} : { body: JSON.stringify(approved.ticket.exactPayload) }) })
       const location = result.headers?.location
-      const brokerOrderId = location && /\/orders\/([0-9]+)\/?$/.exec(location)?.[1] || null
+      const brokerOrderId = action === "cancel-protection" ? approved.ticket.orderId : location && /\/orders\/([0-9]+)\/?$/.exec(location)?.[1] || null
       // After an attempted write, errors may follow acceptance. Only explicit broker rejection is terminal.
       const rejection = [400, 422].includes(result.status) && result.body && typeof result.body === "object" && (result.body as Record<string, unknown>).error
-      const state = result.status === 201 && brokerOrderId ? "accepted" : rejection ? "rejected" : "unknown"
+      const state = (action === "cancel-protection" ? result.status === 200 || result.status === 204 : result.status === 201) && brokerOrderId ? "accepted" : rejection ? "rejected" : "unknown"
       if (result.status === 401 || result.status === 403) o.tokens.invalidate()
       await o.recovery.updateAttempt(id, { state, brokerOrderId, detail: state === "accepted" ? "Broker acknowledged; waiting for working/fill facts" : state === "rejected" ? "Broker explicitly rejected request" : "Attempted write outcome uncertain; never resend" })
       if (state === "accepted" && approved.ticket.recommendationId) o.monitor.bindSubmittedOrder(approved.ticket.recommendationId, brokerOrderId!)
@@ -78,6 +81,11 @@ export class ExitWriter {
     for (const attempt of o.recovery.snapshot.attempts) {
       if (!attempt.brokerOrderId || attempt.ticket.accountId !== facts.accountId || ["filled", "rejected", "canceled"].includes(attempt.state)) continue
       const order = facts.workingOrders.find(item => item.orderId === attempt.brokerOrderId && item.symbol === attempt.ticket.symbol)
+      if (attempt.ticket.action === "cancel-protection") {
+        const state = order?.status === "canceled" || order?.status === "expired" ? "canceled" : order?.status === "filled" ? "filled" : order?.status === "rejected" ? "rejected" : attempt.state
+        if (state !== attempt.state) void o.recovery.updateAttempt(attempt.id, { state, detail: state === "filled" ? "Protection filled before cancellation completed; review the holding" : `Cancellation broker facts: ${state}` }).then(() => this.publish()).catch(() => this.publish("Recovery update failed"))
+        continue
+      }
       const fills = new Map(facts.recentFills.filter(item => item.orderId === attempt.brokerOrderId && item.symbol === attempt.ticket.symbol && item.side === (attempt.ticket.positionSide === "long" ? "sell" : "buy") && Date.parse(item.filledAt) >= Date.parse(attempt.attemptedAt) && Date.parse(item.filledAt) <= Date.now()).map(item => [item.fillId, item]))
       const filledQuantity = Math.min(attempt.ticket.quantity, [...fills.values()].reduce((sum, item) => sum + item.quantity, 0))
       const state = filledQuantity >= attempt.ticket.quantity ? "filled" : filledQuantity > 0 ? "partial" : order?.status === "rejected" ? "rejected" : order?.status === "canceled" || order?.status === "expired" ? "canceled" : order?.status === "working" ? "working" : attempt.state

@@ -57,3 +57,6 @@ Serialized atomic bounded recovery saves exact attempted requests, account/symbo
 
 ## T41
 Direct Schwab close writer requires exact consumed engine approval, fresh read-only authorization/account mapping, refreshed facts, serialized account/symbol queue, and successful checkpoint before POST. Pending quantities remain reserved. Accepted/working/partial/filled/rejected/unknown are distinct; timeout-after-send never retries. Three synthetic writer fixtures and typecheck pass; no real HTTP broker writes were made.
+
+## T42
+Exact standalone closing protection DELETE/PUT use the same current approval/checkpoint/queue path. Cancellation acknowledgement is not final cancellation. Replacement records the returned broker identity; uncertain outcomes retain blocking state without resend. OCO/entry/unknown relationships stay manual. Five synthetic writer/protection checks pass; no live mutations.
