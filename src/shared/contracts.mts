@@ -221,6 +221,7 @@ export interface CopilotChat {
 }
 
 export interface CairoSnapshot {
+  observationAttempts: import("../engine/EntryObserver.mts").ObservationAttempt[]
   bookmapProjection: import("../engine/BookmapReceiver.mts").BookmapProjection
   protectionReadback: import("../engine/ProtectionCoordinator.mts").ProtectionReadback[]
   brokerAttempts: import("../engine/RecoveryStore.mts").BrokerAttempt[]

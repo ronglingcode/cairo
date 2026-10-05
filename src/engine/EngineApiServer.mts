@@ -25,6 +25,8 @@ interface EventClient {
 }
 
 export class EngineApiServer {
+  private entryObserver?: import("./EntryObserver.mts").EntryObserver
+  setEntryObserver(observer: import("./EntryObserver.mts").EntryObserver): void { this.entryObserver = observer }
   private server: Server | undefined
   private clients = new Set<EventClient>()
   private starting: Promise<string> | undefined
@@ -175,7 +177,11 @@ export class EngineApiServer {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.reviewProposal(url.pathname, request, response); return
     }
-    if (["/management/attach", "/management/pause", "/management/reconfirm", "/management/confirm", "/management/rearm"].includes(url.pathname) && request.method === "POST") {
+      if (["/observation/activate", "/observation/deactivate"].includes(url.pathname) && request.method === "POST") {
+        if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+        void this.readCommand(request).then(value => { if (!this.entryObserver) throw new Error("Observation unavailable"); if (url.pathname === "/observation/activate") this.entryObserver.activate(value as unknown as Parameters<import("./EntryObserver.mts").EntryObserver["activate"]>[0]); else this.entryObserver.deactivate(String(value.id)); this.json(response, 200, { ok: true }) }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Invalid observation request" })); return
+      }
+      if (["/management/attach", "/management/pause", "/management/reconfirm", "/management/confirm", "/management/rearm"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.guidance) { this.json(response, 503, { error: "Guidance service unavailable" }); return }
       void this.managementCommand(url.pathname, request, response)

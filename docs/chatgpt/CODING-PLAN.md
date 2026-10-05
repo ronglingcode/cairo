@@ -385,7 +385,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Readback retains the cited personal semantics; no mandatory generic VWAP/breakeven/tier policy appears; live ORB remains unavailable. **Commit:** `feat(T24): seed personal narrative and ORB reference`.
 
-- [ ] **T25 — Detect one observer entry signal per active attempt**
+- [x] **T25 — Detect one observer entry signal per active attempt**
 
 **Depends:** T20, T21, T24. **Repository:** Cairo.
 

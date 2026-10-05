@@ -105,6 +105,7 @@ export class CairoDomainTools {
       })),
       recommendations: snapshot.recommendations.slice(-20),
       bookmap: { status: snapshot.bookmap, ...snapshot.bookmapProjection, episodes: snapshot.bookmapProjection.episodes.slice(-20) },
+      observationAttempts: snapshot.observationAttempts.slice(-5),
       capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: Boolean(this.tickets), brokerWrites: false, bookmap: "observations-only; proven live mode required" },
     }
   }

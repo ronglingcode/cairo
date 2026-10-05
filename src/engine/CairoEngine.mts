@@ -68,6 +68,7 @@ export class CairoEngine {
       managementTimeline: [],
       guidanceProposals: [],
       noteProposals: [],
+      observationAttempts: [],
     }
   }
 

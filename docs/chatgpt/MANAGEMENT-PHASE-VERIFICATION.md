@@ -87,3 +87,6 @@ Additive loopback receiver validates the two-pattern allowlist, aliases, dollar 
 
 ## T24
 Exact personal Backtest references are bundled with attribution and seeded once as an unattached current artifact. Key-level/either-side-of-VWAP/patient low-of-day stop/management language survives unchanged. Placeholder tiers and discretionary targets remain unsupported/advisory, with no installed management. ORB is a separate synthetic narrative only. Import/preservation/no-overwrite fixture and typecheck pass.
+
+## T25
+Reviewed scoped observation attempts freeze narrative, confirmations, account and source instance for five minutes. Fresh eligible episodes create one entry recommendation; revisions amend its evidence. Bootstrap/history/old episodes, unknown mode, inactive attempts and missing fresh flat account gates cannot alert. Reset invalidates attempts; rearm requires new review. UI and capability-protected commands expose activation/deactivation. Three synthetic receiver/observer checks and typecheck pass; no entry writer or ticket is created.

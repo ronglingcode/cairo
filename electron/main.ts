@@ -1,6 +1,7 @@
 import { TicketPermissions } from "../src/copilot/TicketPermissions.mts"
 import { BookmapReceiver } from "../src/engine/BookmapReceiver.mts"
 import { seedPersonalReferences } from "../src/engine/PersonalReferences.mts"
+import { EntryObserver } from "../src/engine/EntryObserver.mts"
 import { RecoveryBootstrap } from "../src/engine/RecoveryBootstrap.mts"
 import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
 import { ProtectionCoordinator } from "../src/engine/ProtectionCoordinator.mts"
@@ -33,14 +34,16 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const bookmapReceiver = new BookmapReceiver(engine)
+const entryObserver = new EntryObserver(engine)
 const monitor = new ManagementMonitor(engine, guidance)
 const tickets = new ExitTickets(engine)
 tickets.setPreflight(() => { protection?.cycle(); guidance.reconcile(); monitor.cycle() })
 const timeline = new ManagementTimeline(engine, text => { if (Notification.isSupported()) new Notification({ title: "Cairo management recommendation", body: text }).show() })
 const apiServer = new EngineApiServer(engine)
+apiServer.setEntryObserver(entryObserver)
 apiServer.setPositionGuidance(guidance)
 apiServer.setManagementMonitor(monitor)
 apiServer.setExitTickets(tickets)
