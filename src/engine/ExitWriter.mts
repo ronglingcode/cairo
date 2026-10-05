@@ -49,7 +49,7 @@ export class ExitWriter {
     if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && ["unknown", "checkpointed"].includes(item.state))) throw new Error("Uncertain prior attempt blocks new actions until reconciliation")
     if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && item.ticket.action !== "close" && !["filled", "rejected", "canceled"].includes(item.state))) throw new Error("Prior protection change awaits broker confirmation")
     const approved = o.tickets.consumeApproval(id, hash, reservation)
-    const attempt: BrokerAttempt = { id, ticket: approved.ticket, attemptedAt: new Date().toISOString(), brokerOrderId: null, state: "checkpointed", filledQuantity: 0, detail: "Checkpointed before broker request", accountHash: matches[0].hashValue }
+    const attempt: BrokerAttempt = { id, ticket: approved.ticket, attemptedAt: new Date().toISOString(), brokerOrderId: approved.ticket.action === "cancel-protection" ? approved.ticket.orderId : null, state: "checkpointed", filledQuantity: 0, detail: "Checkpointed before broker request", accountHash: matches[0].hashValue }
     await o.recovery.checkpoint(attempt, o.engine.getSnapshot().attachments, o.monitor.checkpointState())
     this.publish()
     let sent = false

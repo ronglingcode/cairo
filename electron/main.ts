@@ -1,3 +1,4 @@
+import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
 import { ProtectionCoordinator } from "../src/engine/ProtectionCoordinator.mts"
 import { ExitTickets } from "../src/engine/ExitTickets.mts"
 import { RecoveryStore } from "../src/engine/RecoveryStore.mts"
@@ -28,7 +29,7 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const monitor = new ManagementMonitor(engine, guidance)
 const tickets = new ExitTickets(engine)
@@ -44,11 +45,13 @@ let chat: CopilotChat | undefined
 let waker: CopilotWaker | undefined
 let writer: ExitWriter | undefined
 let protection: ProtectionCoordinator | undefined
+let uncertainty: UnknownReconciler | undefined
 let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
     await chat?.stop()
     await writer?.stop()
+    await uncertainty?.stop()
     await sidecar?.stop()
     await fakeModel?.stop()
     await brokerCoordinator?.stop()
@@ -104,6 +107,8 @@ app.whenReady().then(async () => {
   try { await recovery.load() } catch { engine.updateSnapshot({ recoveryError: "Recovery file needs manual resolution before broker writes" }) }
   if (recovery.available) {
     protection = new ProtectionCoordinator(engine, recovery)
+    uncertainty = new UnknownReconciler(engine, recovery, http, tokenProvider)
+    apiServer.setUnknownReconciler(uncertainty)
     writer = new ExitWriter({ engine, tickets, recovery, monitor, http, tokens: tokenProvider, refresh: async () => { await brokerCoordinator!.refresh() } })
     apiServer.setExitWriter(writer)
   }
@@ -152,6 +157,7 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+
 
 
 

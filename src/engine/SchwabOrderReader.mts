@@ -109,6 +109,13 @@ function recordOrder(raw: unknown, output: Map<string, Record<string, unknown>>)
   if (id === undefined || id === null || String(id).length === 0) throw new Error("Schwab order is missing its identity")
   output.set(String(id), order)
 }
+export function normalizeSingleSchwabOrder(raw: unknown): { orders: BrokerWorkingOrder[]; fills: BrokerFill[]; complete: boolean } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid single order response")
+  const orders = new Map<string, BrokerWorkingOrder>(); const fills = new Map<string, BrokerFill>(); let complete = true
+  visitOrder(raw as Record<string, unknown>, null, null, orders, fills, -Infinity, () => { complete = false })
+  if (orders.size > 100 || fills.size > 500) throw new Error("Single order response exceeds bounds")
+  return { orders: [...orders.values()], fills: [...fills.values()], complete }
+}
 
 function visitOrder(
   raw: Record<string, unknown>, parentId: string | null, ocoGroupId: string | null,

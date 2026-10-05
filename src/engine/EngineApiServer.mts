@@ -12,6 +12,7 @@ import type { CopilotWaker } from "../copilot/CopilotWaker.mts"
 import type { ExitTickets } from "./ExitTickets.mts"
 import type { ExitIntent } from "./ExitEligibility.mts"
 import type { ExitWriter } from "./ExitWriter.mts"
+import type { UnknownReconciler } from "./UnknownReconciler.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -42,6 +43,8 @@ export class EngineApiServer {
   setExitTickets(tickets: ExitTickets): void { this.tickets = tickets }
   private writer: ExitWriter | undefined
   setExitWriter(writer: ExitWriter): void { this.writer = writer }
+  private reconciler: UnknownReconciler | undefined
+  setUnknownReconciler(reconciler: UnknownReconciler): void { this.reconciler = reconciler }
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -140,6 +143,10 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (url.pathname === "/recovery/identity" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.readCommand(request).then(async value => { if (!this.reconciler) throw new Error("Reconciliation unavailable"); await this.reconciler.confirmIdentity(String(value.id), String(value.brokerOrderId), value.reviewed === true); this.json(response, 200, { ok: true }) }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Identity review failed" })); return
+    }
     if (["/tickets/stage", "/tickets/dismiss", "/tickets/approve"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(async value => {

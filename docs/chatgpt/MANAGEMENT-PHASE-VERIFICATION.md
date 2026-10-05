@@ -63,3 +63,6 @@ Exact standalone closing protection DELETE/PUT use the same current approval/che
 
 ## T43
 Only actual matching approved fills reconcile remaining shares/identified allocations. Unknown outside changes retain manual review. Initial-share fractions keep their initial basis while allocation availability caps them. Excess standalone protection offers a separately staged replacement; OCO stays manual. A previously reviewed canceled stop can supply a separately approved follow-up price. Pending/unknown transitions block subsequent proposals. Seven synthetic allocation/protection/policy checks and typecheck pass.
+
+## T44
+Read-only reconciliation checks known broker IDs first. Missing IDs use bounded exact recent-order matching; even a single candidate requires explicit identity review because an outside order may look identical. Ambiguous/absent/delayed results retain uncertainty and quantity blocking. Reviewed binding verifies current account, exact shape and attempt time. Five synthetic reconciliation/writer checks and typecheck pass; no resend path exists.
