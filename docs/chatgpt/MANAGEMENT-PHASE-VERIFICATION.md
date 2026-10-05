@@ -90,3 +90,6 @@ Exact personal Backtest references are bundled with attribution and seeded once 
 
 ## T25
 Reviewed scoped observation attempts freeze narrative, confirmations, account and source instance for five minutes. Fresh eligible episodes create one entry recommendation; revisions amend its evidence. Bootstrap/history/old episodes, unknown mode, inactive attempts and missing fresh flat account gates cannot alert. Reset invalidates attempts; rearm requires new review. UI and capability-protected commands expose activation/deactivation. Three synthetic receiver/observer checks and typecheck pass; no entry writer or ticket is created.
+
+## T47
+Complete synthetic workflow covers notes/context, live-mode fake observation, external entry, two independent management styles, partial close approval/fill, separately reviewed PUT protection change and unknown restart recovery. Companion tests exercise the actual pinned runtime fake chat/tool loop and renderer disconnects. All 123 Cairo checks, typecheck/build and the full Java test task pass. Focused repairs 2b71121 and ef9ab9d address partial cancellation and fixture clock ordering. No live writes or paid inference. Producer mode remains unknown in the installed-metadata adapter.

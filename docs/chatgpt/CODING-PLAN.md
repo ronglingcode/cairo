@@ -569,7 +569,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 ### Integration and private Windows delivery — T47–T50
 
-- [ ] **T47 — Run the complete fake trading workflow**
+- [x] **T47 — Run the complete fake trading workflow**
 
 **Depends:** T20, T25, T28, T34, T35, T43, T45, T46. **Repository:** Cairo.
 
