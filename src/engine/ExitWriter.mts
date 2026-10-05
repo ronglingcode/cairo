@@ -29,8 +29,8 @@ export class ExitWriter {
     void task.finally(() => { if (this.queues.get(key) === task) this.queues.delete(key); if (this.commands.size > 500) this.commands.delete(this.commands.keys().next().value!) }).catch(() => {})
     return task
   }
-  reserved(accountId: string, symbol: string): number {
-    return this.options.recovery.snapshot.attempts.filter(item => item.ticket.accountId === accountId && item.ticket.symbol === symbol && item.ticket.action !== "cancel-protection" && !["filled", "rejected", "canceled"].includes(item.state)).reduce((sum, item) => sum + Math.max(0, item.ticket.quantity - item.filledQuantity), 0)
+  reserved(accountId: string, symbol: string, replacingOrderId?: string | null): number {
+    return this.options.recovery.snapshot.attempts.filter(item => item.ticket.accountId === accountId && item.ticket.symbol === symbol && item.ticket.action !== "cancel-protection" && !(item.state === "working" && item.brokerOrderId === replacingOrderId) && !["filled", "rejected", "canceled"].includes(item.state)).reduce((sum, item) => sum + Math.max(0, item.ticket.quantity - item.filledQuantity), 0)
   }
   private async send(id: string, hash: string): Promise<BrokerAttempt> {
     const o = this.options
@@ -45,9 +45,9 @@ export class ExitWriter {
     if (matches.length !== 1 || typeof matches[0].hashValue !== "string" || !matches[0].hashValue) throw new Error("Account mapping missing or ambiguous")
     const freshAuthorization = await o.tokens.readForSelectedAccount()
     if (!freshAuthorization || freshAuthorization.accountId !== ticket.accountId) throw new Error("Authorization changed before send")
-    const reservation = this.reserved(ticket.accountId, ticket.symbol)
+    const reservation = this.reserved(ticket.accountId, ticket.symbol, ticket.action !== "close" ? ticket.orderId : null)
     if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && ["unknown", "checkpointed"].includes(item.state))) throw new Error("Uncertain prior attempt blocks new actions until reconciliation")
-    if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && item.ticket.action !== "close" && !["filled", "rejected", "canceled"].includes(item.state))) throw new Error("Prior protection change awaits broker confirmation")
+    if (o.recovery.snapshot.attempts.some(item => item.ticket.accountId === ticket.accountId && item.ticket.symbol === ticket.symbol && item.ticket.action !== "close" && !(item.state === "working" && item.brokerOrderId === ticket.orderId) && !["filled", "rejected", "canceled"].includes(item.state))) throw new Error("Prior protection change awaits broker confirmation")
     const approved = o.tickets.consumeApproval(id, hash, reservation)
     const attempt: BrokerAttempt = { id, ticket: approved.ticket, attemptedAt: new Date().toISOString(), brokerOrderId: approved.ticket.action === "cancel-protection" ? approved.ticket.orderId : null, state: "checkpointed", filledQuantity: 0, detail: "Checkpointed before broker request", accountHash: matches[0].hashValue }
     await o.recovery.checkpoint(attempt, o.engine.getSnapshot().attachments, o.monitor.checkpointState())
@@ -89,7 +89,7 @@ export class ExitWriter {
       }
       const fills = new Map(facts.recentFills.filter(item => item.orderId === attempt.brokerOrderId && item.symbol === attempt.ticket.symbol && item.side === (attempt.ticket.positionSide === "long" ? "sell" : "buy") && Date.parse(item.filledAt) >= Date.parse(attempt.attemptedAt) && Date.parse(item.filledAt) <= Date.now()).map(item => [item.fillId, item]))
       const filledQuantity = Math.min(attempt.ticket.quantity, [...fills.values()].reduce((sum, item) => sum + item.quantity, 0))
-      const state = filledQuantity >= attempt.ticket.quantity ? "filled" : filledQuantity > 0 ? "partial" : order?.status === "rejected" ? "rejected" : order?.status === "canceled" || order?.status === "expired" ? "canceled" : order?.status === "working" ? "working" : attempt.state
+      const state = filledQuantity >= attempt.ticket.quantity ? "filled" : order?.status === "rejected" ? "rejected" : order?.status === "canceled" || order?.status === "expired" || order?.status === "replaced" ? "canceled" : filledQuantity > 0 ? "partial" : order?.status === "working" ? "working" : attempt.state
       if (state !== attempt.state || filledQuantity !== attempt.filledQuantity) void o.recovery.updateAttempt(attempt.id, { state, filledQuantity, detail: `Broker facts: ${state}` }).then(() => this.publish()).catch(() => this.publish("Recovery update failed; unresolved reservations retained"))
     }
   }
