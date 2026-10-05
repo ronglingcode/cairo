@@ -3,6 +3,7 @@ import path from "node:path"
 import { CairoEngine } from "../src/engine/CairoEngine.mts"
 import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
 import { installShutdownHook } from "../src/engine/installShutdownHook.mts"
+import { LocalConfiguration, type PublicConfiguration } from "../src/engine/LocalConfiguration.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
@@ -14,7 +15,7 @@ installShutdownHook(app, {
   },
 })
 
-function createWindow(apiBaseUrl: string): void {
+function createWindow(apiBaseUrl: string, config: PublicConfiguration): void {
   const window = new BrowserWindow({
     width: 1440,
     height: 940,
@@ -27,7 +28,7 @@ function createWindow(apiBaseUrl: string): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [`--cairo-api-url=${apiBaseUrl}`],
+    additionalArguments: [`--cairo-api-url=${apiBaseUrl}`, `--cairo-public-config=${encodeURIComponent(JSON.stringify(config))}`],
     },
   })
 
@@ -39,11 +40,13 @@ function createWindow(apiBaseUrl: string): void {
 }
 
 app.whenReady().then(async () => {
+  const configStore = new LocalConfiguration(app.getPath("userData"))
+  const config = await configStore.load()
   const apiBaseUrl = await apiServer.start()
   engine.start()
-  createWindow(apiBaseUrl)
+  createWindow(apiBaseUrl, config)
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl)
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)
   })
 })
 

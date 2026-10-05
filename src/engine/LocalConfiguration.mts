@@ -1,0 +1,116 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import path from "node:path"
+
+export type ProviderSelection = "openai" | "fake"
+
+export interface CairoConfig {
+  selectedAccountId: string
+  bookmapEndpoint: string
+  schwabTokenFile: string
+  chartSymbol: string
+  chartDate: string
+  brokerPollIntervalMs: number
+  provider: ProviderSelection
+  model: string
+}
+
+export interface PublicConfiguration {
+  configPath: string
+  selectedAccountId: string | null
+  bookmapEndpoint: string
+  schwabTokenFile: string
+  chartSymbol: string
+  chartDate: string
+  brokerPollIntervalMs: number
+  provider: ProviderSelection
+  model: string
+  setupRequired: boolean
+}
+
+const DEFAULTS: CairoConfig = {
+  selectedAccountId: "",
+  bookmapEndpoint: "ws://127.0.0.1:8765",
+  schwabTokenFile: path.join(process.env.USERPROFILE ?? process.env.HOME ?? ".", "bmtrader", "secrets.json"),
+  chartSymbol: "SPY",
+  chartDate: new Date().toISOString().slice(0, 10),
+  brokerPollIntervalMs: 30_000,
+  provider: "fake",
+  model: "",
+}
+
+export class LocalConfiguration {
+  readonly configPath: string
+  private current: CairoConfig = { ...DEFAULTS }
+
+  constructor(userDataPath: string) {
+    this.configPath = path.join(userDataPath, "config.json")
+  }
+
+  async load(): Promise<PublicConfiguration> {
+    try {
+      const raw: unknown = JSON.parse(await readFile(this.configPath, "utf8"))
+      this.current = validateConfig(raw)
+    } catch (error) {
+      if (!isMissingFile(error)) throw error
+      await this.save(this.current)
+    }
+    return this.publicView()
+  }
+
+  get values(): Readonly<CairoConfig> { return { ...this.current } }
+
+  get massiveApiKey(): string | null { return process.env.CAIRO_MASSIVE_API_KEY?.trim() || null }
+  get openAiApiKey(): string | null { return process.env.CAIRO_OPENAI_API_KEY?.trim() || null }
+
+  async save(next: CairoConfig): Promise<PublicConfiguration> {
+    const valid = validateConfig(next)
+    await mkdir(path.dirname(this.configPath), { recursive: true })
+    await writeFile(this.configPath, `${JSON.stringify(valid, null, 2)}\n`, { encoding: "utf8", mode: 0o600 })
+    this.current = valid
+    return this.publicView()
+  }
+
+  private publicView(): PublicConfiguration {
+    return {
+      configPath: this.configPath,
+      selectedAccountId: this.current.selectedAccountId || null,
+      bookmapEndpoint: this.current.bookmapEndpoint,
+      schwabTokenFile: this.current.schwabTokenFile,
+      chartSymbol: this.current.chartSymbol,
+      chartDate: this.current.chartDate,
+      brokerPollIntervalMs: this.current.brokerPollIntervalMs,
+      provider: this.current.provider,
+      model: this.current.model,
+      setupRequired: !this.current.selectedAccountId || (this.current.provider === "openai" && !this.current.model),
+    }
+  }
+}
+
+function validateConfig(input: unknown): CairoConfig {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Cairo config must be an object")
+  const value = input as Record<string, unknown>
+  const result: CairoConfig = {
+    selectedAccountId: optionalString(value.selectedAccountId, DEFAULTS.selectedAccountId),
+    bookmapEndpoint: optionalString(value.bookmapEndpoint, DEFAULTS.bookmapEndpoint),
+    schwabTokenFile: optionalString(value.schwabTokenFile, DEFAULTS.schwabTokenFile),
+    chartSymbol: optionalString(value.chartSymbol, DEFAULTS.chartSymbol).toUpperCase(),
+    chartDate: optionalString(value.chartDate, DEFAULTS.chartDate),
+    brokerPollIntervalMs: value.brokerPollIntervalMs === undefined ? DEFAULTS.brokerPollIntervalMs : Number(value.brokerPollIntervalMs),
+    provider: value.provider === undefined ? DEFAULTS.provider : value.provider as ProviderSelection,
+    model: optionalString(value.model, DEFAULTS.model),
+  }
+  if (!result.bookmapEndpoint.startsWith("ws://127.0.0.1:") && !result.bookmapEndpoint.startsWith("wss://127.0.0.1:")) throw new Error("Bookmap endpoint must use loopback")
+  if (!result.chartSymbol || !/^[A-Z0-9.\-]{1,16}$/.test(result.chartSymbol)) throw new Error("chartSymbol is invalid")
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result.chartDate) || !Number.isFinite(Date.parse(`${result.chartDate}T00:00:00Z`))) throw new Error("chartDate must use YYYY-MM-DD")
+  if (!Number.isFinite(result.brokerPollIntervalMs) || result.brokerPollIntervalMs < 5_000 || result.brokerPollIntervalMs > 300_000) throw new Error("brokerPollIntervalMs must be between 5000 and 300000")
+  if (result.provider !== "openai" && result.provider !== "fake") throw new Error("provider must be openai or fake")
+  return result
+}
+
+function optionalString(value: unknown, fallback: string): string {
+  if (value === undefined) return fallback
+  if (typeof value !== "string") throw new Error("configuration string field is invalid")
+  return value.trim()
+}
+
+function isMissingFile(error: unknown): boolean { return (error as NodeJS.ErrnoException)?.code === "ENOENT" }

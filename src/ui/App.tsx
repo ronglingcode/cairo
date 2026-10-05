@@ -36,7 +36,7 @@ export function App() {
     <main className="shell">
       <header className="topbar">
         <div className="brand"><span className="brand-mark">C</span><span>Cairo</span></div>
-        <div className="environment"><span className={`status-dot ${connectionTone(connectionState)}`} />LOCAL · {apiBaseUrl ? "FAKE MODE" : "PREVIEW"}</div>
+        <div className="environment"><span className={`status-dot ${connectionTone(connectionState)}`} />LOCAL · {apiBaseUrl ? (window.cairo?.config?.provider ?? "fake").toUpperCase() : "PREVIEW"}</div>
         <button className="profile" aria-label="Local profile">LR</button>
       </header>
 
@@ -60,6 +60,7 @@ export function App() {
             <Source status={chartStatus} name="Chart data" />
             <Source status={copilotStatus} name="Cairo AI" />
           </div>
+          {window.cairo?.config?.setupRequired && <div className="setup-notice" role="status">Setup needed · choose a Schwab account and review local source settings in {window.cairo.config.configPath}</div>}
 
           <section className="chart-card">
             <div className="card-heading">
