@@ -559,7 +559,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Restart after checkpoint-before-send, timeout, partial fill, outside position change, closed trade, and corrupted recovery; no submission/approval resumes automatically. **Commit:** `feat(T45): recover current state without restoring approvals`.
 
-- [ ] **T46 — Bind OpenCode permissions to exact engine tickets**
+- [x] **T46 — Bind OpenCode permissions to exact engine tickets**
 
 **Depends:** T01, T30, T38, T39, T41. **Repository:** Cairo.
 

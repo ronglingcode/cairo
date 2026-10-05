@@ -9,6 +9,7 @@ export function modelConfiguration(fake: boolean, model: string, fakeBaseUrl: st
         { action: "provider.use", resource: "cairo-model", effect: "allow" },
         { action: "cairo_read", resource: "*", effect: "allow" },
         { action: "cairo_propose", resource: "*", effect: "allow" },
+        { action: "cairo_exit", resource: "*", effect: "ask" },
       ],
       model: `cairo-model/${id}`,
       providers: { "cairo-model": {

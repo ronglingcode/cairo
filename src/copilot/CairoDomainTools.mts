@@ -1,6 +1,7 @@
 import { GuidanceProposals } from "../engine/GuidanceProposals.mts"
 import type { ExitTickets } from "../engine/ExitTickets.mts"
 import type { ExitIntent } from "../engine/ExitEligibility.mts"
+import type { TicketPermissions, ToolSource } from "./TicketPermissions.mts"
 import { randomUUID } from "node:crypto"
 import { CairoEngine } from "../engine/CairoEngine.mts"
 import { validateContent, type PreparationContent } from "../engine/PreparationStore.mts"
@@ -20,6 +21,9 @@ export class CairoDomainTools {
   private readonly now: () => number
   private tickets: ExitTickets | undefined
   setExitTickets(tickets: ExitTickets): void { this.tickets = tickets }
+  private permissions: TicketPermissions | undefined
+  setTicketPermissions(permissions: TicketPermissions): void { this.permissions = permissions }
+  cancelSession(sessionId: string): Promise<void> { return this.permissions?.cancelSession(sessionId) ?? Promise.resolve() }
 
   constructor(engine: CairoEngine, verifySession: (id: string) => Promise<boolean>, now: () => number = Date.now) {
     this.engine = engine
@@ -33,7 +37,7 @@ export class CairoDomainTools {
   }
   removeProposal(id: string): void { this.drafts = this.drafts.filter(item => item.id !== id); this.engine.updateSnapshot({ noteProposals: this.proposals }) }
 
-  async execute(operation: unknown, input: unknown, sessionId: unknown): Promise<unknown> {
+  async execute(operation: unknown, input: unknown, sessionId: unknown, source?: ToolSource): Promise<unknown> {
     if (typeof sessionId !== "string" || !sessionId || sessionId.length > 200 || !await this.verifySession(sessionId)) {
       throw new Error("Cairo tool session is unavailable or belongs to another location")
     }
@@ -59,6 +63,7 @@ export class CairoDomainTools {
     if (operation === "propose_guidance") return { available: true, applied: false, proposal: new GuidanceProposals(this.engine, this.now).propose(value, sessionId) }
     if (operation === "stage_exit") {
       if (!["close", "cancel-protection", "replace-protection"].includes(String(value.intent))) throw new Error("Cairo permits exit/protection proposals only; opening, increasing, and reversing are rejected")
+      if (this.permissions) return this.permissions.stage(value as unknown as ExitIntent, sessionId, source!)
       if (this.tickets) return { available: true, submitted: false, ticket: this.tickets.stage(value as unknown as ExitIntent, "copilot") }
       if (typeof value.symbol !== "string" || !/^[A-Z][A-Z0-9.-]{0,15}$/.test(value.symbol)) throw new Error("Exit symbol is invalid")
       if (value.quantity !== undefined && (typeof value.quantity !== "number" || !Number.isSafeInteger(value.quantity) || value.quantity <= 0)) throw new Error("Exit quantity must be positive whole shares")

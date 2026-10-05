@@ -1,3 +1,4 @@
+import { TicketPermissions } from "../src/copilot/TicketPermissions.mts"
 import { RecoveryBootstrap } from "../src/engine/RecoveryBootstrap.mts"
 import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
 import { ProtectionCoordinator } from "../src/engine/ProtectionCoordinator.mts"
@@ -48,9 +49,11 @@ let writer: ExitWriter | undefined
 let protection: ProtectionCoordinator | undefined
 let uncertainty: UnknownReconciler | undefined
 let startupRecovery: RecoveryBootstrap | undefined
+let ticketPermissions: TicketPermissions | undefined
 let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
+    await ticketPermissions?.stop()
     await chat?.stop()
     await writer?.stop()
     await uncertainty?.stop()
@@ -147,7 +150,7 @@ app.whenReady().then(async () => {
   apiServer.setCopilotChat(chat)
   waker = new CopilotWaker(engine, chat)
   apiServer.setCopilotWaker(waker)
-  apiServer.setCopilotRestarter(async () => { await chat!.stop(); const ok = await sidecar!.restart(); if (ok) await chat!.connect(); return ok })
+  apiServer.setCopilotRestarter(async () => { await ticketPermissions?.stop(); await chat!.stop(); const ok = await sidecar!.restart(); if (ok) await chat!.connect(); return ok })
   const domainTools = new CairoDomainTools(engine, async id => {
     const client = sidecar?.client
     if (!client || !sidecar) return false
@@ -155,6 +158,9 @@ app.whenReady().then(async () => {
     return path.resolve(session.location.directory).toLowerCase() === path.resolve(sidecar.workspace).toLowerCase()
   })
   domainTools.setExitTickets(tickets)
+  ticketPermissions = new TicketPermissions(tickets, () => sidecar?.client)
+  domainTools.setTicketPermissions(ticketPermissions)
+  apiServer.setTicketPermissions(ticketPermissions)
   apiServer.setDomainTools(domainTools)
   void sidecar.start().then(ok => { if (ok) return chat!.connect() })
   app.on("activate", () => {
@@ -165,6 +171,7 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+
 
 
 

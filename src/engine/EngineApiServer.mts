@@ -13,6 +13,7 @@ import type { ExitTickets } from "./ExitTickets.mts"
 import type { ExitIntent } from "./ExitEligibility.mts"
 import type { ExitWriter } from "./ExitWriter.mts"
 import type { UnknownReconciler } from "./UnknownReconciler.mts"
+import type { TicketPermissions } from "../copilot/TicketPermissions.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -45,6 +46,8 @@ export class EngineApiServer {
   setExitWriter(writer: ExitWriter): void { this.writer = writer }
   private reconciler: UnknownReconciler | undefined
   setUnknownReconciler(reconciler: UnknownReconciler): void { this.reconciler = reconciler }
+  private permissions: TicketPermissions | undefined
+  setTicketPermissions(permissions: TicketPermissions): void { this.permissions = permissions }
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -153,11 +156,15 @@ export class EngineApiServer {
         if (!this.tickets) throw new Error("Exit staging unavailable")
         if (url.pathname === "/tickets/stage") this.json(response, 200, { ticket: this.tickets.stage(value as unknown as ExitIntent, "trader") })
         else if (url.pathname === "/tickets/approve") {
+          if (this.permissions?.has(String(value.id))) {
+            const result = await this.permissions.approve(String(value.id), String(value.expectedHash), async () => this.writer ? this.writer.submit(String(value.id), String(value.expectedHash)) : null)
+            this.json(response, 200, result); return
+          }
           const ticket = this.tickets.approve(String(value.id), String(value.expectedHash))
           const attempt = this.writer ? await this.writer.submit(ticket.id, String(value.expectedHash)) : null
           this.json(response, 200, { ticket, attempt, submitted: attempt !== null })
         }
-        else { this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
+        else { if (this.permissions?.has(String(value.id))) await this.permissions.reject(String(value.id)); else this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
       }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Ticket request failed" })); return
     }
     if (url.pathname === "/copilot/events" && request.method === "POST") {
@@ -253,7 +260,7 @@ export class EngineApiServer {
   private async chatCommand(route: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
     try {
       if (route === "/copilot/connect") await this.chat!.connect()
-      else if (route === "/copilot/cancel") await this.chat!.cancel()
+      else if (route === "/copilot/cancel") { const session = this.chat!.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await this.chat!.cancel() }
       else {
         const chunks: Buffer[] = []
         let bytes = 0
@@ -360,7 +367,8 @@ export class EngineApiServer {
       }
       const value = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid tool request")
-      const result = await this.domainTools!.execute(value.operation, value.input, value.sessionId)
+      response.once("close", () => { if (!response.writableEnded && value.operation === "stage_exit" && typeof value.sessionId === "string") void this.domainTools?.cancelSession(value.sessionId) })
+      const result = await this.domainTools!.execute(value.operation, value.input, value.sessionId, value.source as import("../copilot/TicketPermissions.mts").ToolSource | undefined)
       this.json(response, 200, result)
     } catch { this.json(response, 400, { error: "Cairo tool request was rejected. Read current context before continuing." }) }
   }

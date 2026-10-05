@@ -41,6 +41,7 @@ export class ExitTickets {
     if (!ticket) throw new Error("Current staged ticket required")
     this.engine.updateSnapshot({ tickets: snapshot.tickets.map(item => item.id === id ? { ...item, state: "dismissed" } : item) })
   }
+  invalidate(id: string): void { this.approvals.delete(id); this.engine.updateSnapshot({ tickets: this.engine.getSnapshot().tickets.map(item => item.id === id && ["staged", "approved"].includes(item.state) ? { ...item, state: "invalidated" } : item) }) }
   approve(id: string, expectedHash: string): ExitTicket {
     this.preflight(); this.cycle()
     const snapshot = this.engine.getSnapshot(); const ticket = snapshot.tickets.find(item => item.id === id)

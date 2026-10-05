@@ -55,6 +55,7 @@ export class ExitWriter {
     let sent = false
     try {
       const snapshot = o.engine.getSnapshot()
+      if (!snapshot.tickets.some(item => item.id === id && item.state === "approved" && item.reviewHash === hash)) throw new Error("Approval canceled before send")
       if (exitFactsFingerprint(snapshot) !== approved.ticket.factsFingerprint || Date.parse(approved.ticket.expiresAt) <= Date.now()) throw new Error("Facts changed during checkpoint; no order sent")
       validateExit(snapshot, { ...approved.intent, factsRevision: snapshot.brokerFactsRevision }, approved.origin, Date.now(), reservation)
       sent = true

@@ -2,7 +2,7 @@ import { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { injectTradingContext } from "./TradingContext.mts"
 
-type Bridge = (operation: string, input: unknown, context: Pick<ToolContext, "sessionID" | "signal">) => Promise<unknown>
+type Bridge = (operation: string, input: unknown, context: Pick<ToolContext, "sessionID" | "signal"> & Partial<Pick<ToolContext, "messageID" | "id" | "agent">>) => Promise<unknown>
 const empty = { type: "object", properties: {}, additionalProperties: false } as const
 
 export function createCairoPlugin(bridge: Bridge) {
@@ -47,7 +47,7 @@ export default createCairoPlugin(async (operation, input, context) => {
   const token = process.env.CAIRO_TOOL_TOKEN
   if (!endpoint || !token || new URL(endpoint).hostname !== "127.0.0.1" || new URL(endpoint).protocol !== "http:") throw new Error("Cairo tool bridge is unavailable")
   const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ operation, input, sessionId: context.sessionID }), signal: AbortSignal.any([context.signal, AbortSignal.timeout(10_000)]),
+    body: JSON.stringify({ operation, input, sessionId: context.sessionID, source: context.messageID && context.id ? { messageID: context.messageID, id: context.id, agent: context.agent } : undefined }), signal: AbortSignal.any([context.signal, AbortSignal.timeout(operation === "stage_exit" ? 65_000 : 10_000)]),
   })
   if (!response.ok) throw new Error("Cairo rejected the tool request; refresh context before continuing")
   return response.json()
