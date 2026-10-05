@@ -1,5 +1,13 @@
 # Trader-authored management guidelines
 
+**Current build priority:** freeform premarket preparation can be saved and
+discussed with AI before a rule interpretation exists. The first app uses
+one-minute chart snapshots as market context. Notes become active management
+only after explicit review and position attachment. Bookmap-based clauses stay
+unavailable until the final observation feature phase; broker facts and scoped
+trader confirmations support earlier management. See
+[scope revision](PREPARATION-MANAGEMENT-PHASE.md).
+
 October 4, 2026. Planning only. The user confirmed that traders provide management guidelines in human language and Cairo enforces them, with different styles for different setups. This replaces choosing between personal scalp/core/runner presets and generic partial/breakeven presets. Read [PLAN-DECISIONS.md](PLAN-DECISIONS.md) for other confirmed and pending choices.
 
 Use [CODING-PLAN.md](CODING-PLAN.md) for the final artifact/activation defaults and ordered implementation tasks. The discussion-stage format questions below are resolved there as Markdown narrative plus a reviewed internal JSON interpretation and explicit per-position attachment.

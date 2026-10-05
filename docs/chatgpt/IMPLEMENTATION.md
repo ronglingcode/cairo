@@ -1,5 +1,11 @@
 # Cairo simplified implementation checkpoints
 
+**October 4 revision:** use the reordered checklist: T23 → T29–T32 for the
+first notes/chat app with one-minute chart knowledge; then management features;
+then Bookmap T17–T20/T24–T25; then full acceptance and delivery. Bookmap remains
+required for the full MVP. The coarse order below predates this revision and is
+background only. See [revised workflow](PREPARATION-MANAGEMENT-PHASE.md).
+
 Updated October 4, 2026. Planning only. **Use [CODING-PLAN.md](CODING-PLAN.md) for implementation:** its 50 checkbox tasks and task-ID commits supersede the coarse milestone order below. This document remains a high-level scope explanation, replacing the earlier database/history-heavy sequence. Previously pending details now have explicit handoff defaults or early compatibility tasks.
 
 ## Proposed order

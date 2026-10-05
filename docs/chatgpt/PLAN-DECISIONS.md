@@ -1,10 +1,18 @@
 # Cairo MVP decisions
 
+**Latest user revision (October 4, 2026):** Prioritize premarket notes to AI,
+then AI help managing live trades. Build the first runnable Cairo app with
+one-minute chart snapshot knowledge. Bookmap remains in the full plan but moves
+to the final feature phase because the user has not chosen patterns yet. This
+supersedes the earlier Bookmap-first ordering below. Existing read-only token
+ownership and exact approval for broker actions remain. See
+[the revised workflow](PREPARATION-MANAGEMENT-PHASE.md).
+
 Discussion record, October 4, 2026. Planning only. This document records confirmed user choices and the differences between [the original comparison](PLAN-COMPARISON.md) and [the other plan](../opencode/README.md). [CODING-PLAN.md](CODING-PLAN.md) is now the authoritative final handoff requested by the user. It selects explicit implementation defaults for previously pending details; the discussion below preserves their earlier status rather than claiming the user individually chose every default.
 
 | Topic | Status | Decision |
 | --- | --- | --- |
-| Product priority | Confirmed | Prioritize live signal detection and open-trade management for a personal Windows US-stocks MVP. |
+| Product priority | Confirmed, revised | Premarket notes/chat first, AI help managing open trades next, Bookmap detection in the final feature phase. First app uses one-minute chart snapshot knowledge. |
 | Agent runtime | Confirmed | Embedded OpenCode V2 with a Cairo plugin. The custom OpenAI loop and OpenAI Agents SDK are no longer the preferred implementation. |
 | Desktop UI | Confirmed | React + TypeScript + Vite. User explicitly selected React; state/styling libraries remain small implementation choices. |
 | Schwab connection | Confirmed | Consume a current valid Schwab token produced/maintained by `bookmap-plugin` (bmtrader), read-only; call Schwab directly from Cairo's backend. No ProxyServer dependency for Cairo. |

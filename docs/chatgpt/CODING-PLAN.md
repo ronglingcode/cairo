@@ -1,14 +1,14 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. This is the coding plan for the agreed MVP, organized as 50 small tasks. **T01–T16 are complete: 16/50 completed, 34 remaining. T17 is next.** [HANDOFF.md](HANDOFF.md) records the current check-in and local completion commits. Planning through the user's latest chart correction was committed locally in Cairo as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 4, 2026. **T01–T16 complete: 16/50 complete, 34 remaining. T23 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
 ## 1. The product to deliver
 
-A personal Windows desktop for US stocks, built with TypeScript, Electron, React, and Vite. A trader and Cairo coauthor setup-specific tradebooks in human language. Cairo observes live Bookmap patterns and current Schwab positions/orders, explains entry opportunities, and monitors open trades against their attached management guidelines.
+A personal Windows desktop for US stocks, built with TypeScript, Electron, React, and Vite. During premarket preparation, the trader writes freeform notes and discusses them with Cairo. During trading, Cairo carries that preparation into chat with current Schwab positions/orders/fills, helps review position-specific management, and proposes supported exits. Saving notes does not require a rule interpretation. Bookmap pattern detection/export and automatic entry observation are deferred.
 
-**Entries are observer-only.** Cairo detects and recommends; the trader executes in Schwab, ViteApp, or their existing interface. Cairo picks up that position from the broker.
+**Entries remain external.** The trader executes in Schwab, ViteApp, or their existing interface; Cairo picks up the position from the broker. Entry detection is deferred. Preparation/chat can discuss the trader's scenarios without claiming a live detected signal.
 
 **Exits are observer through assistant.** Cairo recommends or stages exact partial/full closes and supported protective exit-order changes. Every actual submit/cancel/replace requires human approval of that request, followed by current-state validation. Accepting a guideline is not approval of orders. A stop change after an approved partial exit fills needs a new approval.
 
@@ -28,13 +28,12 @@ These are practical defaults selected for this final handoff. Change a default o
 | --- | --- |
 | Engine process | An independent asynchronous TypeScript module inside Electron main. Renderer reload does not restart it. No utility-process framework initially. |
 | OpenCode hosting | Pinned bundled local headless server sidecar, with a Cairo-owned location/config and client adapter. T01 proves the actual Windows/server/plugin combination before depending on it. |
-| Bookmap transport | Observation-only messages on the existing local WebSocket server, normally `ws://127.0.0.1:8765`. No JSONL writer, file tail, or historical replay fallback. |
-| Observation bootstrap | Plugin sends current source status and a bounded episode snapshot on connection, then live updates/status. Cairo treats snapshot episodes as context, not new signals. No inbound trading/config commands are needed from Cairo. |
-| Observation configuration | Add only the local Bookmap observation enable/symbol/detector settings needed for Cairo. Keep these separate from native order-execution eligibility. A missing detector/config remains visible. |
+| Bookmap observation work | Deferred: T17–T20. No plugin source changes, observation client, or pattern selection is needed for the current phase. T16 remains a future contract. |
+| Preparation authoring | Freeform Markdown notes with optional date/symbol context, saved as a small current artifact. Save/reopen works without AI or a reviewed interpretation. AI changes are proposals. |
 | Tradebook authoring | Human-language Markdown edited directly or through chat. Cairo maintains a small reviewed JSON interpretation next to the narrative; users never need to author JSON/YAML/rules. |
 | Artifact activation | Explicit review/accept and per-position attachment. Editing files/chat drafts proposes a change; it does not hot-swap a live attachment. |
-| Initial example | Gap Give and Go / bid-reappear narrative from the user's Backtest folder, with honest unsupported clauses and no inserted management defaults. ORB is only a separate example/fixture. |
-| UI scope | One focus chart/selected setup and one chat. A positions list monitors all selected-account holdings and their attachments independently of chart focus. No multi-chart/watchlist scanner. |
+| Initial examples | Synthetic preparation and two management styles; no required Bookmap pattern. Personal pattern-specific import (T24) is deferred. |
+| UI scope | Preparation notes and one chat alongside one focus chart and positions. Position-specific reviewed guidance remains independent of the current notes/chart focus. No multi-chart/watchlist scanner. |
 | Initial order scope | Whole-share equity partial/full closes and tested regular-session DAY market/limit/stop protective shapes. Unsupported fractional, derivative, order-type, session, or topology changes remain manual and visible. |
 | Broker updates | Modest configurable REST polling/coalesced refresh, plus refresh after a known action. No new Schwab streaming/quote connection is required. |
 | Local API | One small loopback HTTP API plus an in-memory event stream for UI/plugin. Preload supplies lifecycle/config access; do not duplicate domain mutations over IPC and HTTP. |
@@ -48,14 +47,14 @@ If the promised OpenCode V2 Windows artifact/plugin API cannot be obtained, T01 
 flowchart LR
   MR[Massive REST] -->|one-minute snapshots| E[Cairo engine in Electron main]
   MW[Existing Massive WebSocket] --> BM[Bookmap plugin]
-  BM -->|observation export: tasks T17-T19| E
+  BM -.->|future observation export: deferred T17-T19| E
   UI[React desktop] <-->|snapshot / events / tickets| E
   UI <-->|chat / permissions| OC[Bundled OpenCode V2]
   OC <-->|model calls| AI[OpenAI]
   OC <-->|Cairo plugin tools / fresh context| E
   TOKEN[Bookmap credential file] -->|read-only| E
   E <-->|reads / approved exits| S[Schwab]
-  FILES[Current narrative / interpretation / plan / config] <-->|small snapshots| E
+  FILES[Preparation / narrative / interpretation / plan / config] <-->|small snapshots| E
   E --> REC[Minimal recovery checkpoint]
 ```
 
@@ -74,7 +73,7 @@ docs/chatgpt/             This checklist, task notes, compatibility and user gui
 
 The final task layout may differ, but the engine imports no DOM/chart/React globals. Do not import entire ViteApp runtime modules or their Firebase/strategy behavior. Vendor-copy only the relevant pure functions with source/license attribution. ViteApp and Backtest are read-only reference repositories.
 
-Only T17–T19 require additive source changes in the sibling `bookmap-plugin` repository. Read its own instructions first and preserve unrelated edits. Other tasks belong in Cairo. Do not move the Java detector into Cairo, relay full depth/trades/quotes, alter existing native trading behavior, or turn the observation channel into an order channel.
+All current-phase changes belong in Cairo. T17–T19 are deferred sibling `bookmap-plugin` tasks; do not implement them until the user resumes observation work after choosing the required patterns. The existing read-only token handoff continues without plugin changes. ViteApp and Backtest remain read-only references.
 
 ### Local reuse map
 
@@ -101,7 +100,7 @@ The [permission documentation](https://opencode.ai/v2/docs/permissions) distingu
 ## 4. Working protocol for the coding agent
 
 1. Read this document, the latest human messages, and applicable AGENTS.md. Inspect status in every repository you will touch. Preserve unrelated changes; do not reset or stage them.
-2. Start with the first unchecked task whose dependencies are done. Work in order by default. If an external blocker occurs, record it under that task and continue only with independent tasks. Never check off a mock implementation as a real integration.
+2. Follow the revised order: T23, T29–T32 (first runnable chart/notes copilot), T21–T22, T26–T28, T33–T46, then T17–T20, T24–T25 (Bookmap feature phase), then T47–T50. Preserve task IDs and separate commits. Start with the first unfinished task in this order whose revised dependencies are done. Extend T21/T28/T31/T35 with Bookmap support when the bridge is added. If an external blocker occurs, record it and continue only with independent tasks. Never check off a mock implementation as a real integration.
 3. Implement just the task's deliverable. Use synthetic/fake feeds, credentials, broker responses, and model responses for automated checks. No paid inference or real order is needed to complete tests. Live order testing requires a separate explicit user instruction.
 4. Run the stated verification and relevant type/build checks. For visual-only changes, inspect the UI; do not add tests that merely mirror markup. Add meaningful state-transition tests where listed.
 5. Replace that task's `[ ]` with `[x]` only when deliverable and verification pass. Immediately below the task, record actual commands/results and any supported limitations. If blocked, leave it unchecked and record what is missing.
@@ -119,7 +118,8 @@ At session end report completed IDs, local hashes/repositories, checks, and the 
 ### Sources and policy
 
 - REST chart bars, derived ranges/VWAP, and close prices are tagged with fetch/latest-bar time and treated as snapshot context. A snapshot load/refresh cannot create a fresh signal or prove a live exit condition.
-- Bookmap observations carry source-instance identity, sequence, symbol/alias mapping, real-dollar price units, episode/revision, event/receive time, detector/config revision, live/replay/unknown mode, and readiness/heartbeat/reset. Preserve nanoseconds as strings. Never guess price scaling or live mode.
+- Current-phase observations are broker facts and scoped trader confirmations. Unavailable live-market conditions remain unknown/advisory. Bookmap-specific contracts below apply only when the deferred bridge is resumed; they are not prerequisites for preparation/chat or explicit supported exit requests.
+- Future Bookmap observations carry source-instance identity, sequence, symbol/alias mapping, real-dollar price units, episode/revision, event/receive time, detector/config revision, live/replay/unknown mode, and readiness/heartbeat/reset. Preserve nanoseconds as strings. Never guess price scaling or live mode.
 - The existing installed Bookmap API must supply trustworthy mode/readiness evidence. If mode cannot be proven, show observer-only source status and block source-dependent assistant proposals; supported explicit trader-requested exits remain possible using current broker facts.
 - Pattern prices are event evidence, not continuous bid/ask/trade prices. A guideline requiring unavailable fresh data remains advisory/needs confirmation. Chart staleness alone does not block Bookmap-only monitoring or manual exit tickets.
 - The original management narrative is preserved. Internal rules trace to clauses and declare condition/source/timing, bound values, action/quantity basis, once/recurrence/dependencies, and coverage. No invented target, breakeven, R multiple, tier, or wall threshold is installed as trader policy.
@@ -137,7 +137,7 @@ At session end report completed IDs, local hashes/repositories, checks, and the 
 
 ### Files and retention
 
-Use Electron's user-data directory for current `config.json`, `tradebooks/<id>.md`, `tradebooks/<id>.rules.json`, `active-plan.json`, and `recovery.json`. Names are implementation defaults. The interpretation stores the narrative revision/hash; a mismatched pair cannot activate. Active attachments retain their reviewed snapshot even if the current source file changes. Use small serialized temp-file replacement for authored/recovery snapshots, not an append-only framework.
+Use Electron's user-data directory for current `config.json`, `preparation.json` (original Markdown, optional date/symbol context, revision), `tradebooks/<id>.md`, `tradebooks/<id>.rules.json`, `active-plan.json`, and `recovery.json`. Names are implementation defaults. Preparation can be saved without an interpretation and grants no monitoring/action authority. The interpretation stores the narrative revision/hash; a mismatched pair cannot activate. Active attachments retain their reviewed snapshot even if notes or source files change. Use small serialized temp-file replacement for authored/recovery snapshots, not an append-only framework.
 
 API keys are configured locally outside the repository using the runtime's supported provider mechanism or a backend-only environment/local credential source. Prefer OpenCode's own supported key integration. Do not add a cloud account service or credential vault project. The Bookmap credential file remains read-only.
 
@@ -303,6 +303,8 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 ### Bookmap observation bridge — T16–T20
 
+**T17–T20 move to the final feature phase by the October 4 scope revision.** They remain required for the full MVP. T16 stays completed design work. Initial chart/notes/chat and trade-management features do not depend on this bridge; select required observations before implementing it.
+
 - [x] **T16 — Specify the observation envelope from installed APIs**
 
 **Depends:** T03. **Repository:** Cairo; read Bookmap source only.
@@ -347,13 +349,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 ### Tradebooks and useful observer — T21–T28
 
+Start with T23. T24–T25 move to the final Bookmap feature phase and remain required for the full MVP; their boxes stay unchecked until implemented and verified.
+
 - [ ] **T21 — Evaluate small predicates with honest source coverage**
 
-**Depends:** T03, T09, T20. **Repository:** Cairo.
+**Depends:** T03, T09. **Repository:** Cairo.
 
-**Deliver:** Pure scalar/group/registered-Bookmap-event/scoped-human-confirmation evaluation with satisfied/pending/invalid/unknown evidence. Explicitly distinguish historical snapshot context from required fresh inputs; unsupported clauses remain visible. No arbitrary generated code or universal compiler.
+**Deliver:** Pure scalar/group/current-broker-fact/scoped-human-confirmation evaluation with satisfied/pending/invalid/unknown evidence. Distinguish historical chart context from fresh conditions. Bookmap/live-price predicates remain unsupported until the required sources are selected. No arbitrary generated code or universal compiler.
 
-**Verify:** Missing/replay/unready inputs never become true, stale candle refresh cannot fire a live rule, and fresh Bookmap-only rules work with a stale chart. **Commit:** `feat(T21): evaluate supported rules with source coverage`.
+**Verify:** Missing or stale inputs never become true; stale candle refresh cannot fire a live rule; confirmations are scoped to the actual position/condition; broker-fill conditions remain usable with a stale chart. **Commit:** `feat(T21): evaluate supported rules with source coverage`.
 
 - [ ] **T22 — Define the internal guideline interpretation and validator**
 
@@ -363,13 +367,13 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verify:** Two distinct example styles validate differently; ambiguous “some”, undefined “weakness”, invalid quantities, and missing fresh data cannot be silently filled with defaults. **Commit:** `feat(T22): validate clause-linked management interpretations`.
 
-- [ ] **T23 — Edit narrative tradebooks and concrete active plans**
+- [ ] **T23 — Save premarket notes and edit narrative preparation**
 
-**Depends:** T06, T08, T22. **Repository:** Cairo.
+**Depends:** T06, T08. **Repository:** Cairo.
 
-**Deliver:** Human-language editor, setup selection, simple concrete level/date/symbol inputs, and original-clause/interpretation/coverage view. Save accepted current files; unaccepted edits are proposals. No trader-facing rule-language authoring requirement.
+**Deliver:** Freeform preparation editor with explicit Save/reopen, revision protection, and optional date/symbol context. Store original Markdown in a small current `preparation.json` artifact, independently of AI or an interpretation. Preserve narrative tradebooks as separate artifacts; show existing interpretations when available and unresolved coverage otherwise. AI edits remain proposals. No JSON/rule-language input or mandatory setup template. Saving notes does not attach guidance or approve an action.
 
-**Verify:** Inspect save/reopen, unresolved coverage, revision mismatch, and editing a setup while another active attachment remains unchanged. **Commit:** `feat(T23): author narrative tradebooks and active plans`.
+**Verify:** Save/reopen preserves wording; stale concurrent saves are rejected; AI absence does not prevent note editing; preparation changes leave reviewed position attachments intact. Inspect editor and unresolved coverage. **Commit:** `feat(T23): add premarket preparation notes workspace`.
 
 - [ ] **T24 — Import the personal reference and separate ORB example**
 
@@ -401,15 +405,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Deliver:** In-memory rule state and once/dependency handling for attached guidance. Emit recommendations/proposal inputs from current evidence; fill-dependent follow-ups wait for actual fills. Qualitative/unavailable-data clauses remain advisory/confirmation-needed. No direct broker write path.
 
-**Verify:** Different styles, stale chart with live Bookmap evidence, duplicate events, partial/outside fills, and fill-before-follow-up; no automatic writes. **Commit:** `feat(T27): monitor attached management guidelines`.
+**Verify:** Different styles, scoped trader confirmations, unavailable feed conditions, duplicate events, partial/outside fills, and fill-before-follow-up; no automatic writes. **Commit:** `feat(T27): monitor attached management guidelines`.
 
 - [ ] **T28 — Display observer evidence and bounded notifications**
 
-**Depends:** T25, T27. **Repository:** Cairo.
+**Depends:** T27. **Repository:** Cairo.
 
-**Deliver:** Entry evidence, missing conditions, attached management readback, recommendations, bounded session timeline, and deduplicated desktop alerts. Distinguish no pattern from no source. Focus a position without stopping other monitoring.
+**Deliver:** Attached management readback, available/missing evidence, recommendations, bounded session timeline, and deduplicated desktop alerts. Show Bookmap detection as deferred rather than a failing required connection. Focus a position without stopping other monitoring.
 
-**Verify:** Inspect complete/pending/disconnected cases and repeated episodes; relevant observers continue with OpenCode unavailable. **Commit:** `feat(T28): explain observer signals and management alerts`.
+**Verify:** Inspect complete/pending/stale cases and repeated broker events; management monitoring continues with OpenCode unavailable. **Commit:** `feat(T28): explain management evidence and alerts`.
 
 ### One OpenCode copilot — T29–T35
 
@@ -419,21 +423,21 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Deliver:** Use the verified pinned launch/client arrangement with a Cairo-owned registration/location/config. Handle start failure, health, process exit, explicit restart, and shutdown. Do not stop/reconfigure another user's OpenCode process. Keep token/data directory outside repository.
 
-**Verify:** Fake/unavailable/crashed sidecar does not stop engine/account/Bookmap monitoring; owned processes close cleanly; restart uses fresh state. **Commit:** `feat(T29): manage Cairo OpenCode sidecar lifecycle`.
+**Verify:** Fake/unavailable/crashed sidecar does not stop engine/account refresh or preparation editing; owned processes close cleanly; restart uses fresh state. **Commit:** `feat(T29): manage Cairo OpenCode sidecar lifecycle`.
 
 - [ ] **T30 — Register the Cairo domain plugin and read/proposal tools**
 
-**Depends:** T29, T05, T22. **Repository:** Cairo.
+**Depends:** T29, T05, T23. **Repository:** Cairo.
 
-**Deliver:** Thin plugin tools for bounded context/artifact/position reads, guideline proposals, and exit proposal staging adapters. Until tickets exist, staging reports unavailable rather than pretending success. Expose only needed domain capabilities; no shell/filesystem coding tools or broker credentials in the trading session.
+**Deliver:** Thin plugin tools for bounded preparation/artifact/position reads and revision-bound note proposals. Guideline activation reports unavailable until T22/T26; exit staging reports unavailable until tickets exist. Expose only needed domain capabilities; no shell/filesystem coding tools or broker credentials in the trading session. Extend these tools when the corresponding later capabilities are implemented.
 
 **Verify:** Fake tool inputs are validated; bounded outputs label source times/coverage; entry/open/increase intent is rejected. **Commit:** `feat(T30): register Cairo copilot domain tools`.
 
 - [ ] **T31 — Inject fresh context before model steps**
 
-**Depends:** T30, T20, T26. **Repository:** Cairo.
+**Depends:** T30, T14, T23. **Repository:** Cairo.
 
-**Deliver:** Verified OpenCode context hook/adapter that supplies current account/attachments, source status, bounded evidence, and timestamped chart context on initial requests and continuations. Filter unrelated sessions/locations. Set cancellation/stale-result and context-size limits.
+**Deliver:** Verified OpenCode context hook/adapter supplying current saved preparation with revision/date/symbol context, account facts, available position attachments, source status, and timestamped chart context on requests and continuations. Empty attachments are valid before T26. Label Bookmap observation as deferred and unavailable conditions explicitly. Filter unrelated sessions/locations. Set cancellation/stale-result and context-size limits.
 
 **Verify:** A tool continuation after an outside fill sees the new broker facts; stale chat summaries/chart bars do not become current authority. **Commit:** `feat(T31): refresh bounded trading context for copilot runs`.
 
@@ -465,9 +469,9 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Depends:** T27, T31, T32. **Repository:** Cairo.
 
-**Deliver:** Coalesced session input for newly eligible episodes, meaningful position changes, and management recommendations using the verified API. Bound frequency, deduplicate repeated evidence, and avoid per-tick/heartbeat inference. Machine-originated inputs grant no action permission.
+**Deliver:** Coalesced session input for meaningful position/order/fill changes and management recommendations using the verified API. Carry saved preparation and each position's own guidance into the assessment. Bound frequency and deduplicate repeated evidence. Bookmap episode wake-ups are deferred. Machine-originated inputs grant no action permission.
 
-**Verify:** Duplicate episode updates produce one bounded wake-up; cancellation/AI failure preserves deterministic monitoring and pending human review. **Commit:** `feat(T35): coalesce meaningful copilot event updates`.
+**Verify:** Duplicate broker facts produce one bounded wake-up; cancellation/AI failure preserves deterministic monitoring and pending human review. **Commit:** `feat(T35): coalesce meaningful copilot event updates`.
 
 ### Approved assistant exits — T36–T46
 
@@ -563,9 +567,9 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 - [ ] **T47 — Run the complete fake trading workflow**
 
-**Depends:** T28, T34, T35, T43, T45, T46. **Repository:** Cairo.
+**Depends:** T20, T25, T28, T34, T35, T43, T45, T46. **Repository:** Cairo.
 
-**Deliver:** A repeatable synthetic acceptance scenario: stale REST chart, eligible Bookmap episode, observer entry recommendation, externally filled broker position, reviewed setup-specific guidance, exit proposal, approval, partial fill, new approved protection change, and restart/unknown-outcome recovery. Include a second different management style.
+**Deliver:** A repeatable synthetic acceptance scenario beginning with premarket notes and AI discussion of timestamped one-minute chart context, then eligible Bookmap episode (implemented in the final feature phase), observer entry recommendation, externally filled broker position, reviewed setup-specific guidance, exit proposal, approval, partial fill, new approved protection change, and restart/unknown-outcome recovery. Include a second different management style.
 
 **Verify:** No entry/automatic writes; exact approved exits only; no duplicate episode/ticket/submission; no stale-chart triggers; fills and protection remain consistent; AI/renderer outages preserve monitoring. Fix failures in focused commits. **Commit:** `test(T47): verify complete observer and exit-assistant workflow`.
 
@@ -595,10 +599,12 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 ## 7. Completion and continuation
 
+The first runnable app milestone is T23 and T29–T32 with completed T10: notes plus streaming AI chat grounded in one-minute chart snapshots. Missing broker configuration or the postponed Bookmap feed must not prevent this workflow. This milestone does not claim live price monitoring or approved execution. Later management and Bookmap phases finish before the full acceptance/package tasks.
+
 The MVP is complete when all 50 required tasks pass, the packaged Windows app implements observer entries and approved assistant exits, the selected OpenCode runtime works, and the Bookmap observation dependency is implemented/compatible. Source-mode limitations and unsupported guidelines must be visible; a fake-only demonstration is not a live integration claim. Actual real-account/read-only connectivity may be verified by the user; no real order or paid inference is an automated release requirement.
 
 Do not mark tasks complete because time/context is running out. Leave precise next steps and local commits. Additional automated management, assisted entries, live candles/raw-data relay, live ORB, journal/backtesting, CLI/macOS, cloud deployment, security/scalability infrastructure, and multi-agent role frameworks are outside this handoff.
 
 ## 8. Prompt to give the implementation agent
 
-> Resume Cairo using `C:/Users/lingr/trading/cairo/docs/chatgpt/CODING-PLAN.md` as the authoritative MVP coding checklist. Read applicable AGENTS.md, HANDOFF.md, and latest human instructions first. T01–T16 are complete. Start at the first unchecked task with satisfied dependencies, implement that task, run its verification, record results and check it off, and make its separate local task-ID commit before proceeding. Record real blockers and do independent work without silently changing scope. T17–T19 need separate scoped commits in bookmap-plugin plus Cairo progress commits; ViteApp and Backtest stay read-only. The product has observer entries, exact-human-approved assistant exits, per-setup human-language management, OpenCode V2 plus a Cairo plugin, and a stale-tolerant Massive REST one-minute chart with no Cairo Massive WebSocket. Keep live state in memory and only essential authored/recovery files. Do not implement assisted entries, automated management, raw-data sharing/live candles, SQLite, journal/research, or a custom LLM runner. Use fake provider/broker/model data for checks; send no real orders or paid inference merely to test. Never push to any remote. Report completed IDs/local commits, validation, blockers, and the next task when stopping.
+> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16 are complete. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; no plugin changes now. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.

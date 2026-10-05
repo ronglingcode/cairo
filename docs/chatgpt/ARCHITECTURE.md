@@ -1,5 +1,11 @@
 # Cairo simplified MVP architecture
 
+**Current build order:** preparation notes and chart-aware chat → reviewed trade
+management → Bookmap observation features → full acceptance/package. The first
+app works with one-minute chart snapshots; broker/Bookmap connection is not a
+gate for discussing notes and chart context. Bookmap-specific design below
+remains the final feature phase. See [scope revision](PREPARATION-MANAGEMENT-PHASE.md).
+
 Updated October 4, 2026. Start coding with [CODING-PLAN.md](CODING-PLAN.md), which selects explicit implementation defaults and supplies the ordered task checklist. This document explains the architecture; [MVP-SPEC.md](MVP-SPEC.md) covers behavior and [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves user decisions. Earlier SQLite/history/replay requirements are superseded.
 
 ## Confirmed foundation and handoff defaults

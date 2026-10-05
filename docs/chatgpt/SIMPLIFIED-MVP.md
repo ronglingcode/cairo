@@ -1,5 +1,12 @@
 # Cairo: simplified live-trading MVP
 
+**October 4 scope revision:** The first app delivers freeform premarket notes
+and AI chat grounded in timestamped one-minute chart snapshots. Trade management
+follows. Bookmap observation work remains in the full MVP and moves to the final
+feature phase. The earlier Bookmap-first sequence below is superseded by
+[PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md) and the revised
+CODING-PLAN.md task dependencies. No plugin work is required for the initial app.
+
 October 4, 2026. This replaces the earlier database/history-heavy MVP. The user requested no SQLite, prioritized live trading, and selected **Embedded OpenCode V2 with a Cairo plugin**. Planning only.
 
 For coding, [CODING-PLAN.md](CODING-PLAN.md) is the final handoff: 50 small tasks with checks and separate local commits. It selects explicit defaults for the discussion-stage details below and supersedes this document's coarse proposed work sequence.
@@ -8,7 +15,10 @@ For coding, [CODING-PLAN.md](CODING-PLAN.md) is the final handoff: 50 small task
 
 ## The first useful product
 
-A Windows desktop that displays chart data, Bookmap evidence, current positions/working orders, and the conditions of a selected tradebook/active plan. It detects live setups, explains missing evidence, and helps manage a position entered through Cairo, ViteApp, or Schwab.
+A Windows desktop where the trader writes preparation notes, discusses the
+one-minute chart snapshot with AI, and later reviews management of positions
+entered externally. Broker facts enrich management when connected. Bookmap
+evidence and live setup detection arrive in the final feature phase.
 
 Traders describe management in their own words, with different styles for different setups. Cairo clarifies material gaps, shows a clause-linked interpretation for review, and attaches the accepted policy to each trade. It enforces supported rules in the selected mode; presets and tier structures are optional examples, not required styles. See [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md).
 

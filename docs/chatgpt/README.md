@@ -1,8 +1,8 @@
 # Cairo planning package
 
-Updated October 4, 2026. **T01–T16 are implemented and checked off (16/50).** T17 starts the Bookmap observation producer work. [HANDOFF.md](HANDOFF.md) records local completion commits and resume instructions; task verification and limitations are in [CODING-PLAN.md](CODING-PLAN.md). Live integration and the complete packaged MVP remain later work.
+Updated October 4, 2026. **T01–T16 are implemented and checked off (16/50).** Next is T23, then T29–T32 for a runnable notes/chat app with one-minute chart knowledge. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
 
-The target is a personal Windows US-stocks desktop for **live signal detection and open-trade management**. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, existing Bookmap observations, and collaboratively authored tradebooks.
+The target is a personal Windows US-stocks desktop for **premarket preparation and AI-assisted trade management**, with Bookmap signal detection added in the final feature phase. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, and collaboratively authored notes/guidance.
 
 **The user selected Embedded OpenCode V2 with a Cairo plugin. Cairo does not need its own SQLite database for this MVP.** Live state stays in memory. Recover market/account facts from feeds and broker on startup. Save only editable tradebooks/config/active plan and a small broker-action/active-position recovery checkpoint.
 

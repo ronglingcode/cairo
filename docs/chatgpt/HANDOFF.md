@@ -6,8 +6,9 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 
 - T01 and T02 blockers are resolved. The pinned OpenCode Windows integration probe and Electron development-window smoke passed.
 - T03–T16 are implemented and checked off. T16 defines and parses the normalized Bookmap observation contract; the producer stream is not implemented until T17–T19.
-- **Next: T17 — Broadcast pattern observations without executing trades** in `bookmap-plugin`, after reading that repository's instructions. Commit the plugin change and Cairo progress separately.
-- No commits were pushed. T01–T15 are recorded below; T16's commit subject is `docs(T16): define verified Bookmap observation contract`.
+- **Next: T23 — Save premarket notes and edit narrative preparation.** Then T29–T32 deliver the first runnable app with notes/chat and existing one-minute chart snapshots. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
+- Bookmap T17–T20 and pattern-specific T24–T25 move to the final feature phase after the other features; they remain required for the full MVP. No plugin changes now.
+- No commits were pushed. T01–T16 completion commits are recorded below.
 
 | Completed task | Local completion commit |
 | --- | --- |
@@ -26,6 +27,7 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 | T13 | `9a12487` |
 | T14 | `10fa827` |
 | T15 | `9654181` |
+| T16 | `6f6fad0` |
 
 The [OpenCode probe instructions](opencode-v2-probe/README.md) include optional user verification with `npm run probe:manual`: enter `once`, then `reject`, and expect `ALL CHECKS PASSED`. Tool permission metadata alone did not pause the fake executor; the mock backend explicitly waits for the matching permission reply. Preserve that requirement when implementing production engine-ticket approval in T38–T46. Owned application-side lifecycle and distributed packaging remain T29/T48.
 
@@ -33,7 +35,7 @@ The [OpenCode probe instructions](opencode-v2-probe/README.md) include optional 
 
 Give the following prompt to the coding agent:
 
-> Resume Cairo in `C:/Users/lingr/trading/cairo` using `docs/chatgpt/CODING-PLAN.md` as the authoritative coding checklist. Read applicable AGENTS.md, this handoff's current check-in, and latest human instructions first. T01–T15 are complete. Work is paused before T16 pending the user's Bookmap-phase review; proceed only when the user resumes that phase, and follow the task limit they authorize. Then start at the first unchecked task whose dependencies are satisfied. Implement that task, run its verification, record actual results, check it off, and make its separate local task-ID commit before continuing. Record genuine blockers; do not reopen routine implementation defaults or silently expand scope. T17-T19 require scoped local code commits in bookmap-plugin and separate Cairo progress commits recording their hashes. ViteApp and Backtest are read-only references.
+> Resume Cairo in `C:/Users/lingr/trading/cairo` using CODING-PLAN.md and PREPARATION-MANAGEMENT-PHASE.md. Read applicable AGENTS.md and latest human instructions. T01–T16 are complete. Next is T23. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. The first runnable app supports freeform premarket notes, AI chat, and timestamped one-minute chart knowledge. Bookmap remains required for the full MVP but moves to the final feature phase; no plugin changes now. Preserve current token ownership. Verify and commit each task separately. ViteApp and Backtest stay read-only.
 >
 > The confirmed MVP has observer entries, exact-human-approved assistant exits, human-language per-setup management, Embedded OpenCode V2 plus a Cairo plugin, read-only Bookmap-maintained Schwab tokens with direct backend requests, and a stale-tolerant Massive REST one-minute chart. Cairo opens no Massive WebSocket. Keep live state in memory and only essential authored/recovery files. Do not implement assisted entries, automated management, raw-data sharing/live candles, SQLite, journal/research, or a custom model runner.
 >

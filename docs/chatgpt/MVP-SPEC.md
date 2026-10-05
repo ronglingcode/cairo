@@ -1,5 +1,11 @@
 # Cairo simplified MVP behavior and contracts
 
+**Current first milestone:** save/reopen original premarket notes and discuss
+them with AI using timestamped one-minute chart knowledge. Notes can be saved
+without a machine-readable policy; reviewed guidance is attached separately.
+Bookmap detection journeys below remain in the full MVP and move to the final
+feature phase. See [scope revision](PREPARATION-MANAGEMENT-PHASE.md).
+
 Updated October 4, 2026. Planning notation only. Read [CODING-PLAN.md](CODING-PLAN.md) for the final coding checklist/defaults, [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries, and [PLAN-DECISIONS.md](PLAN-DECISIONS.md) for user-confirmed choices. The checklist turns remaining compatibility questions into early verification tasks.
 
 ## 1. Required live journeys
