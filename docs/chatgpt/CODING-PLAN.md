@@ -219,13 +219,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added validated configuration storage below Electron's per-user app-data path for selected account, loopback Bookmap endpoint, token-file path, chart symbol/date, polling interval, and fake/OpenAI model selection. Defaults remain fake mode and missing account configuration produces a setup prompt. Massive/OpenAI keys are read only from backend process environment getters and are absent from public configuration/snapshots; no secret file was read or copied. Temp-path tests include spaces, defaults, validation, and public-view redaction. `npm run test` passed (15 checks); typecheck and build passed. No network/provider/broker access was made.
 
-- [ ] **T08 — Save current narratives, interpretations, and plans**
+- [x] **T08 — Save current narratives, interpretations, and plans**
 
 **Depends:** T03, T07. **Repository:** Cairo.
 
 **Deliver:** Small file loader/writer for Markdown tradebooks, clause-linked JSON interpretations, and active plan. Store revision/narrative hash, validate a pair before activation, serialize replacements, and keep unaccepted drafts in memory. No version-history repository.
 
 **Verify:** Missing/corrupt/mismatched files cannot activate; saving and reopening a current artifact works; an existing active snapshot is not silently overwritten. **Commit:** `feat(T08): persist current authored trading artifacts`.
+
+**Verified (2026-10-04):** Added a serialized current-artifact store under app data. Tradebook drafts remain in memory until explicit activation; activation checks safe IDs, clause links, narrative hashes, and compare-and-swap revision before replacing Markdown/interpretation files. Active position attachment plans are similarly revision-checked; no history or database is created. Tests cover save/reopen, mismatched clauses, concurrent stale replacement, and plan replacement. `npm run test` passed (18 checks) and `npm run typecheck` passed. File-pair writes use temporary files and reject incomplete/corrupt pairs on load.
 
 ### Broker visibility and snapshot chart — T09–T15
 
