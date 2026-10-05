@@ -199,13 +199,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added a loopback-only, ephemeral-port HTTP API with read-only `/health`, `/snapshot`, and `/events` (SSE) endpoints. Snapshot updates increment an in-memory sequence and enter a 128-event ring; clients resume after an instance/sequence cursor, and a changed runtime, invalid cursor, or buffer gap emits `resync` so clients fetch a current snapshot. The server shuts down streams/listeners with the engine and exposes its URL only through the isolated preload. `npm run test` passed (11 checks, including an update in the snapshot/subscription gap delivered exactly once, post-subscription delivery, reconnect/runtime reset, and buffer-gap recovery); `npm run typecheck` and `npm run build` passed. No durable event log, provider, or broker requests were added. Nonfatal Vite/Electron Rollup-option warnings remain as noted under T02.
 
-- [ ] **T06 — Add the desktop workspace and source-status view**
+- [x] **T06 — Add the desktop workspace and source-status view**
 
 **Depends:** T05. **Repository:** Cairo.
 
 **Deliver:** React layout with one chart area, selected setup/plan, positions, copilot, and ticket area. Connect snapshot/events and render independent chart/Bookmap/broker/AI statuses, including unknown/disconnected states. Keep layout usable with fake data.
 
 **Verify:** Inspect the window and simulate reconnect; source status is explicit and renderer subscriptions dispose on unmount. **Commit:** `feat(T06): add trading workspace and source status`.
+
+**Verified (2026-10-04):** Added the single-view trading workspace with chart context, tradebook selection, positions, tickets, copilot area, and independent Bookmap/broker/chart/AI status cards. The renderer loads snapshots, applies ordered SSE events, refetches on gaps/runtime changes, retries disconnected requests, and disposes its stream/timers/fetches on unmount. `npm run test` passed (13 checks, including reconnect, duplicate/gap handling, resync, and cleanup); `npm run typecheck` and `npm run build` passed. Browser preview navigation timed out and Electron's binary download remains pending (T02), so visual window inspection is not verified. No live sources or order controls are connected.
 
 - [ ] **T07 — Load local configuration and backend key sources**
 
