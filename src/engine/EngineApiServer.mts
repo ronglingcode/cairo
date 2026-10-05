@@ -11,6 +11,7 @@ import type { PolicyReview } from "./PolicyReview.mts"
 import type { CopilotWaker } from "../copilot/CopilotWaker.mts"
 import type { ExitTickets } from "./ExitTickets.mts"
 import type { ExitIntent } from "./ExitEligibility.mts"
+import type { ExitWriter } from "./ExitWriter.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -39,6 +40,8 @@ export class EngineApiServer {
   setCopilotWaker(waker: CopilotWaker): void { this.waker = waker }
   private tickets: ExitTickets | undefined
   setExitTickets(tickets: ExitTickets): void { this.tickets = tickets }
+  private writer: ExitWriter | undefined
+  setExitWriter(writer: ExitWriter): void { this.writer = writer }
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -139,10 +142,14 @@ export class EngineApiServer {
     const url = new URL(request.url ?? "/", base)
     if (["/tickets/stage", "/tickets/dismiss", "/tickets/approve"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
-      void this.readCommand(request).then(value => {
+      void this.readCommand(request).then(async value => {
         if (!this.tickets) throw new Error("Exit staging unavailable")
         if (url.pathname === "/tickets/stage") this.json(response, 200, { ticket: this.tickets.stage(value as unknown as ExitIntent, "trader") })
-        else if (url.pathname === "/tickets/approve") this.json(response, 200, { ticket: this.tickets.approve(String(value.id), String(value.expectedHash)), submitted: false })
+        else if (url.pathname === "/tickets/approve") {
+          const ticket = this.tickets.approve(String(value.id), String(value.expectedHash))
+          const attempt = this.writer ? await this.writer.submit(ticket.id, String(value.expectedHash)) : null
+          this.json(response, 200, { ticket, attempt, submitted: attempt !== null })
+        }
         else { this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
       }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Ticket request failed" })); return
     }

@@ -1,4 +1,6 @@
 import { ExitTickets } from "../src/engine/ExitTickets.mts"
+import { RecoveryStore } from "../src/engine/RecoveryStore.mts"
+import { ExitWriter } from "../src/engine/ExitWriter.mts"
 import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
@@ -25,7 +27,7 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture(); tickets.cycle(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const monitor = new ManagementMonitor(engine, guidance)
 const tickets = new ExitTickets(engine)
@@ -39,10 +41,12 @@ let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined
 let waker: CopilotWaker | undefined
+let writer: ExitWriter | undefined
 let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
     await chat?.stop()
+    await writer?.stop()
     await sidecar?.stop()
     await fakeModel?.stop()
     await brokerCoordinator?.stop()
@@ -94,6 +98,12 @@ app.whenReady().then(async () => {
   const accountReader = new SchwabAccountReader(http, tokenProvider)
   const orderReader = new SchwabOrderReader(http, tokenProvider)
   brokerCoordinator = new BrokerRefreshCoordinator(engine, accountReader, orderReader, { intervalMs: configStore.values.brokerPollIntervalMs })
+  const recovery = new RecoveryStore(app.getPath("userData"))
+  try { await recovery.load() } catch { engine.updateSnapshot({ recoveryError: "Recovery file needs manual resolution before broker writes" }) }
+  if (recovery.available) {
+    writer = new ExitWriter({ engine, tickets, recovery, monitor, http, tokens: tokenProvider, refresh: async () => { await brokerCoordinator!.refresh() } })
+    apiServer.setExitWriter(writer)
+  }
   apiServer.setBrokerRefresher(async () => {
     const result = await brokerCoordinator!.refresh()
     return { status: result.status, error: result.error }

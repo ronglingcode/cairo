@@ -218,6 +218,9 @@ export interface CopilotChat {
 }
 
 export interface CairoSnapshot {
+  brokerAttempts: import("../engine/RecoveryStore.mts").BrokerAttempt[]
+  recoveryError: string | null
+  executionReady: boolean
   runtimeInstanceId: string
   sequence: number
   brokerFactsRevision: number
@@ -253,6 +256,7 @@ export interface Clock {
 }
 
 export interface HttpResponse {
+  headers?: Record<string, string>
   status: number
   body: unknown
 }

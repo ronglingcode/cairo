@@ -54,3 +54,6 @@ Exact one-time approval binds all ticket details and current facts through an en
 
 ## T40
 Serialized atomic bounded recovery saves exact attempted requests, account/symbol/time, broker IDs and essential attached/rule state. Corrupt/incomplete files block writes; unresolved attempts are never pruned. Reopening, duplicate checkpoint, failed-write and bounded-pruning fixtures pass. Writer wiring follows T41.
+
+## T41
+Direct Schwab close writer requires exact consumed engine approval, fresh read-only authorization/account mapping, refreshed facts, serialized account/symbol queue, and successful checkpoint before POST. Pending quantities remain reserved. Accepted/working/partial/filled/rejected/unknown are distinct; timeout-after-send never retries. Three synthetic writer fixtures and typecheck pass; no real HTTP broker writes were made.

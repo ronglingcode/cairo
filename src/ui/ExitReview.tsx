@@ -14,7 +14,9 @@ export function ExitReview({ snapshot }: { snapshot: CairoSnapshot }) {
     } catch (error) { setError(error instanceof Error ? error.message : "Exit review unavailable") } finally { setBusy(false) }
   }
   return <section className="tickets-card"><div className="card-heading"><div><span className="eyebrow">EXIT REVIEW</span><h2>Exact exit drafts</h2></div></div>
-    <p>Stage an explicit exit or protection change for review. Review one exact request and approve it once. Broker submission is not yet connected.</p>
+    <p>Stage an explicit exit or protection change for review. {snapshot.executionReady ? "Approving a close sends this exact request after current broker checks." : "Broker submission is unavailable; approval cannot submit."}</p>
+    {snapshot.recoveryError && <p role="alert" className="chart-error">{snapshot.recoveryError}</p>}
+    {snapshot.brokerAttempts.map(attempt => <p key={attempt.id}>{attempt.ticket.symbol} · {attempt.state} · {attempt.filledQuantity}/{attempt.ticket.quantity} shares filled · {attempt.detail}</p>)}
     <div className="chart-controls"><select aria-label="Exit position" value={positionId} onChange={event => setPositionId(event.target.value)}><option value="">Select holding</option>{snapshot.positions.map(item => <option key={item.positionId} value={item.positionId}>{item.symbol} · {item.side} · {item.quantity} shares</option>)}</select>
       <select aria-label="Exit action" value={action} onChange={event => setAction(event.target.value as ExitAction)}><option value="close">Close shares</option><option value="cancel-protection">Cancel protection</option><option value="replace-protection">Replace protection</option></select>
       <input aria-label="Exit shares" type="number" min={1} step={1} placeholder="Shares" value={quantity} onChange={event => setQuantity(event.target.value)} />
