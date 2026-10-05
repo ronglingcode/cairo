@@ -1,6 +1,6 @@
 # Cairo planning package
 
-Updated October 4, 2026. **T01–T16, T23, and T29 are complete (18/50).** Next is T29–T32 for a runnable notes/chat app with one-minute chart knowledge, then T21. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
+Updated October 4, 2026. **T01–T16, T21, T23, and T29–T32 are complete (22/50).** The runnable notes/chart/chat milestone is complete. Next is T22 for clause-linked interpretation validation. Bookmap work moves to the final feature phase and remains required for the full MVP. Read [the scope revision](PREPARATION-MANAGEMENT-PHASE.md). [HANDOFF.md](HANDOFF.md) records local commits; task checks are in [CODING-PLAN.md](CODING-PLAN.md).
 
 The target is a personal Windows US-stocks desktop for **premarket preparation and AI-assisted trade management**, with Bookmap signal detection added in the final feature phase. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, and collaboratively authored notes/guidance.
 
@@ -29,7 +29,7 @@ The MVP execution boundary is confirmed: **observer for entries, and up to assis
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) | Proposed implementation checkpoints; unresolved choices must be resolved before their work |
 | [HANDOFF.md](HANDOFF.md) | Short prompt to start/resume the task checklist |
 
-T01 verifies the pinned OpenCode 2.0.22 Windows server with a bundled plugin and explicit mock permission gate. Application-side lifecycle and complete Windows packaging remain T29/T48. OpenCode may retain its own runtime/session storage internally; **no Cairo-owned SQLite** does not promise an entirely database-free third-party runtime.
+T01 verifies the pinned OpenCode 2.0.22 Windows server with a bundled plugin and explicit mock permission gate. Application-side lifecycle is complete in T29; complete Windows packaging remains T48. OpenCode may retain its own runtime/session storage internally; **no Cairo-owned SQLite** does not promise an entirely database-free third-party runtime.
 
 ## Background research and explanations
 

@@ -1,6 +1,6 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. **T01–T16, T23, T29 complete: 18/50 complete, 32 remaining. T30 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 4, 2026. **T01–T16, T21, T23, T29–T32 complete: 22/50 complete, 28 remaining. T22 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
@@ -351,7 +351,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 Start with T23. T24–T25 move to the final Bookmap feature phase and remain required for the full MVP; their boxes stay unchecked until implemented and verified.
 
-- [ ] **T21 — Evaluate small predicates with honest source coverage**
+- [x] **T21 — Evaluate small predicates with honest source coverage**
 
 **Depends:** T03, T09. **Repository:** Cairo.
 
@@ -611,4 +611,4 @@ Do not mark tasks complete because time/context is running out. Leave precise ne
 
 ## 8. Prompt to give the implementation agent
 
-> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16 are complete. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; no plugin changes now. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
+> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16, T21, T23, and T29–T32 are complete. Resume at T22. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; no plugin changes now. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
