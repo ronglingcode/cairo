@@ -21,6 +21,16 @@ function fixture() {
   return { engine, input, tickets: new ExitTickets(engine) }
 }
 const source = { messageID: "msg_fixture", id: "call_fixture", agent: "build" }
+test("cancel during permission creation prevents late binding or approval", async () => {
+  const f = fixture(); let complete
+  const client = { permission: { create: () => new Promise(resolve => { complete = resolve }), reply: async () => {} } }
+  const permissions = new TicketPermissions(f.tickets, () => client)
+  const waiting = permissions.stage(f.input, "owned", source); const failure = assert.rejects(waiting, /canceled/)
+  const ticket = f.engine.getSnapshot().tickets[0]; assert.equal(permissions.has(ticket.id), true)
+  await assert.rejects(permissions.approve(ticket.id, ticket.reviewHash, async () => assert.fail("Must not submit")))
+  await permissions.cancelSession("owned"); complete({ id: "per_late", effect: "ask" }); await failure
+  assert.equal(f.engine.getSnapshot().tickets[0].state, "invalidated"); assert.equal(permissions.has(ticket.id), false)
+})
 test("generic permission allowances/replies never authorize; exact card controls continuation", async () => {
   const f = fixture(); let effect = "allow"; let replies = 0; let sends = 0
   const client = { permission: { create: async () => ({ id: "per_fixture", effect }), reply: async () => { replies++ } } }
