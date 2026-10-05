@@ -84,3 +84,6 @@ Sibling 2e1ca50 publishes bounded 30-second bootstrap episodes, heartbeat, depth
 
 ## T20
 Additive loopback receiver validates the two-pattern allowlist, aliases, dollar units and revisions. Bounded projection suppresses bootstrap alerts, resets/reconnects and expires heartbeat. Context/readback and predicate support preserve live-mode/readiness gates. Eight WebSocket/projection/predicate checks and typecheck pass. Installed producer mode remains unknown and ineligible for live proposals.
+
+## T24
+Exact personal Backtest references are bundled with attribution and seeded once as an unattached current artifact. Key-level/either-side-of-VWAP/patient low-of-day stop/management language survives unchanged. Placeholder tiers and discretionary targets remain unsupported/advisory, with no installed management. ORB is a separate synthetic narrative only. Import/preservation/no-overwrite fixture and typecheck pass.

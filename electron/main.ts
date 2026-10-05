@@ -1,5 +1,6 @@
 import { TicketPermissions } from "../src/copilot/TicketPermissions.mts"
 import { BookmapReceiver } from "../src/engine/BookmapReceiver.mts"
+import { seedPersonalReferences } from "../src/engine/PersonalReferences.mts"
 import { RecoveryBootstrap } from "../src/engine/RecoveryBootstrap.mts"
 import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
 import { ProtectionCoordinator } from "../src/engine/ProtectionCoordinator.mts"
@@ -103,6 +104,7 @@ app.whenReady().then(async () => {
   apiServer.setPreparationStore(new PreparationStore(app.getPath("userData")))
   await apiServer.loadPreparation()
   const tradebookStore = new TradebookStore(app.getPath("userData"))
+  await seedPersonalReferences(tradebookStore, path.join(app.getAppPath(), "resources/references")).catch(() => { /* Missing/corrupt references remain unavailable. */ })
   try { engine.updateSnapshot({ tradebooks: await tradebookStore.list() }) } catch { /* Invalid artifacts remain inactive. */ }
   apiServer.setPolicyReview(new PolicyReview(engine, tradebookStore, guidance, monitor))
   const http = new FetchHttpPort()

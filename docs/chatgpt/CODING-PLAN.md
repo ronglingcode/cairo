@@ -377,7 +377,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verified (2026-10-04):** Added a freeform notes editor with optional date/symbol context, explicit save/reload, original narrative/coverage readback, and a revision-checked small preparation file. The loopback write requires the preload capability; notes are separate from attachments and approvals. Synthetic tests cover exact wording (including CRLF/Unicode), reopen, concurrent saves, malformed/corrupt files, and attachment/ticket isolation. All 40 tests, typecheck, and build passed (existing nonfatal Vite/Electron option warnings remain). Browser inspection with a temporary synthetic backend verified edit/save/page reload and unchanged notes; no provider/broker or real credential access occurred.
 
-- [ ] **T24 — Import the personal reference and separate ORB example**
+- [x] **T24 — Import the personal reference and separate ORB example**
 
 **Depends:** T22, T23. **Repository:** Cairo.
 
