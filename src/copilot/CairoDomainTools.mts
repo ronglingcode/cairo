@@ -104,7 +104,8 @@ export class CairoDomainTools {
         markdown: attachment.markdown?.slice(0, 4000), interpretation: attachment.interpretation,
       })),
       recommendations: snapshot.recommendations.slice(-20),
-      capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: Boolean(this.tickets), brokerWrites: false, bookmap: "planned-final-phase" },
+      bookmap: { status: snapshot.bookmap, ...snapshot.bookmapProjection, episodes: snapshot.bookmapProjection.episodes.slice(-20) },
+      capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: Boolean(this.tickets), brokerWrites: false, bookmap: "observations-only; proven live mode required" },
     }
   }
 }

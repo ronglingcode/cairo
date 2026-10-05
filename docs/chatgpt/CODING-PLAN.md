@@ -339,7 +339,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verify:** Reconnect supplies current context; resets/new source instances are distinguishable; unknown/replay is never labeled live; existing clients tolerate additive message types. **Commit:** `feat(T19): publish Bookmap source status and snapshots`; record sibling hash.
 
-- [ ] **T20 — Consume and normalize the live observation stream in Cairo**
+- [x] **T20 — Consume and normalize the live observation stream in Cairo**
 
 **Depends:** T05, T16, T19. **Repository:** Cairo.
 

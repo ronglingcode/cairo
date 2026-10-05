@@ -34,7 +34,7 @@ export interface EvaluationContext {
   confirmations?: HumanConfirmation[]
 }
 export interface PredicateEvidence {
-  source: "literal" | "broker" | "chart" | "human" | "unavailable" | "validation"
+  source: "literal" | "broker" | "chart" | "human" | "bookmap" | "unavailable" | "validation"
   state: EvaluationState
   reason: string
   sourceAt: string | null
@@ -125,7 +125,14 @@ export function evaluatePredicate(input: unknown, context: EvaluationContext): P
         node.kind === "all" ? children.every(child => child.state === "satisfied") ? "satisfied" : "pending" : "pending"
       return { state, actionEligible: state === "satisfied" && (node.kind === "all" ? children.every(child => child.actionEligible) : children.some(child => child.actionEligible)), evidence: children.flatMap(child => child.evidence) }
     }
-    if (node.kind === "live-price" || node.kind === "bookmap") return result("unknown", { source: "unavailable", reason: `${node.kind} conditions have no supported current source in this phase`, sourceAt: null })
+    if (node.kind === "bookmap") {
+      if (!["BID_STEP_UP", "BID_REAPPEAR"].includes(node.conditionId)) return result("unknown", { source: "unavailable", reason: "Only the two exported bid pattern conditions are supported", sourceAt: null })
+      const status = snapshot.bookmapProjection?.symbols[scope.symbol]
+      if (snapshot.bookmap.state !== "connected" || !status || status.mode !== "live" || status.readiness !== "ready" || !fresh(status.heartbeatAt, now, 6000)) return result("unknown", { source: "bookmap", reason: "Fresh heartbeat, proven live mode and ready depth required", sourceAt: status?.heartbeatAt ?? null })
+      const episode = snapshot.bookmapProjection.episodes.slice().reverse().find(item => item.observation.symbol.canonical === scope.symbol && item.observation.pattern === node.conditionId && item.freshEvent && item.observation.mode === "live" && item.observation.readiness === "ready" && item.observation.eventTime && now - Number(BigInt(item.observation.eventTime) / 1_000_000n) >= 0 && now - Number(BigInt(item.observation.eventTime) / 1_000_000n) <= 10_000)
+      return result(episode ? "satisfied" : "pending", { source: "bookmap", reason: episode ? `Episode ${episode.observation.episodeId} revision ${episode.observation.revision}; pattern evidence only` : "No fresh eligible episode", sourceAt: episode?.receivedAt ?? status.heartbeatAt }, context.purpose !== "historical-context")
+    }
+    if (node.kind === "live-price") return result("unknown", { source: "unavailable", reason: "Pattern event prices are not a continuous price feed", sourceAt: null })
     if (node.kind === "scalar") return result(compare(node.left, node.operator, node.right) ? "satisfied" : "pending", { source: "literal", reason: "Explicit finite scalar comparison", sourceAt: null, observed: node.left }, context.purpose !== "historical-context")
     if (node.kind === "compare" && node.field === "chart.lastClose") {
       const chart = snapshot.chart

@@ -1,4 +1,5 @@
 import { ExitReview } from "./ExitReview"
+import { BookmapPanel } from "./BookmapPanel"
 import { ProposalReview } from "./ProposalReview"
 import { ManagementPanel } from "./ManagementPanel"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -209,6 +210,7 @@ export function App() {
 
           {snapshot && <ProposalReview snapshot={snapshot} />}
           {snapshot && <ManagementPanel snapshot={snapshot} />}
+          <BookmapPanel snapshot={snapshot} />
           {snapshot && <ExitReview snapshot={snapshot} />}
         </section>
 

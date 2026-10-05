@@ -51,6 +51,7 @@ export class CairoEngine {
       preparation: null,
       preparationError: null,
       bookmap: this.waiting("bookmap", "Observation integration scheduled for the final feature phase"),
+      bookmapProjection: { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] },
       broker: this.waiting("broker", "Broker source has not started"),
       brokerFacts: null,
       copilot: this.waiting("copilot", "Copilot has not started"),

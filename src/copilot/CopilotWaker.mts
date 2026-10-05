@@ -23,7 +23,7 @@ export class CopilotWaker {
   private current() {
     const snapshot = this.engine.getSnapshot(); const facts = snapshot.brokerFacts
     const data = { accountId: facts?.accountId, positions: facts?.positions.map(({ positionId, symbol, side, quantity, averagePrice }) => ({ positionId, symbol, side, quantity, averagePrice })), orders: facts?.workingOrders, fills: facts?.recentFills.map(fill => fill.fillId), recommendations: snapshot.recommendations.filter(item => item.state === "current").map(item => ({ id: item.id, symbol: item.symbol, quantity: item.quantity })) }
-    const serialized = JSON.stringify(data)
+    const serialized = JSON.stringify({ ...data, observations: snapshot.bookmapProjection.episodes.filter(item => item.freshEvent && item.observation.mode === "live" && item.observation.readiness === "ready").map(item => ({ source: item.observation.sourceInstanceId, episode: item.observation.episodeId, revision: item.observation.revision, symbol: item.observation.symbol.canonical, pattern: item.observation.pattern })) })
     return { fingerprint: createHash("sha256").update(serialized).digest("hex"), text: `Machine observation only; no trading approval. Assess meaningful account/recommendation changes using freshly injected preparation and each position's frozen guidance. Do not infer a live trigger from snapshot candles. Latest summary (possibly truncated): ${serialized.slice(0, 7000)}` }
   }
   private publish(): void { if (JSON.stringify(this.engine.getSnapshot().copilotWake) !== JSON.stringify(this.state)) this.engine.updateSnapshot({ copilotWake: structuredClone(this.state) }) }

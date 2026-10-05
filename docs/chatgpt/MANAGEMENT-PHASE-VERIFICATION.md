@@ -81,3 +81,6 @@ Sibling e5c25cb adds separate local enable/symbol/detector settings and observer
 
 ## T19
 Sibling 2e1ca50 publishes bounded 30-second bootstrap episodes, heartbeat, depth readiness and symbol reset on a bounded background sender. Source instances differ after restart. Thirteen targeted Java checks pass. Installed callback evidence proves readiness only; mode stays unknown and source-dependent proposals remain blocked. No live integration claim. Queue overflow clears episode context and sends resets.
+
+## T20
+Additive loopback receiver validates the two-pattern allowlist, aliases, dollar units and revisions. Bounded projection suppresses bootstrap alerts, resets/reconnects and expires heartbeat. Context/readback and predicate support preserve live-mode/readiness gates. Eight WebSocket/projection/predicate checks and typecheck pass. Installed producer mode remains unknown and ineligible for live proposals.
