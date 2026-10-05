@@ -23,6 +23,8 @@ export class ManagementMonitor {
   private readonly now: () => number
   private states = new Map<string, RuleState>()
   private confirmations: HumanConfirmation[] = []
+  checkpointState(): import("./RecoveryStore.mts").SavedRule[] { return [...this.states.entries()].map(([key, state]) => ({ attachmentId: key.split(":")[0]!, semanticKey: key.split(":")[1]!, status: state.status, ...(state.brokerOrderId ? { brokerOrderId: state.brokerOrderId } : {}) })) }
+  restoreState(rules: import("./RecoveryStore.mts").SavedRule[]): void { this.confirmations = []; this.states.clear(); for (const rule of rules) this.states.set(`${rule.attachmentId}:${rule.semanticKey}`, { status: rule.status === "recommended" ? "waiting" : rule.status, ...(rule.brokerOrderId ? { brokerOrderId: rule.brokerOrderId } : {}) }) }
   prepareReplacement(attachment: PositionAttachment, interpretation: PositionAttachment["interpretation"]): () => void {
     const prior = attachment.interpretation.management!.rules.map(rule => ({ rule, state: this.states.get(`${attachment.id}:${ruleSemanticKey(rule, attachment.interpretation)}`) }))
     if (prior.some(item => item.state?.brokerOrderId)) throw new Error("Resolve broker-pending actions before changing guidance")

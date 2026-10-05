@@ -51,3 +51,6 @@ Exact in-memory tickets contain engine-built payload/affected protection, source
 
 ## T39
 Exact one-time approval binds all ticket details and current facts through an engine digest. Renderer capability is required; generic allowances cannot approve. Four approval/staging checks and typecheck pass. Submission remains disconnected.
+
+## T40
+Serialized atomic bounded recovery saves exact attempted requests, account/symbol/time, broker IDs and essential attached/rule state. Corrupt/incomplete files block writes; unresolved attempts are never pruned. Reopening, duplicate checkpoint, failed-write and bounded-pruning fixtures pass. Writer wiring follows T41.
