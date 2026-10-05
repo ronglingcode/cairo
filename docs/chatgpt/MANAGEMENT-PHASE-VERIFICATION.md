@@ -99,3 +99,6 @@ Private unpacked Windows x64 package build 6c471624650b includes Electron 44.5.1
 
 ## T49
 Actual packaged build 6c471624650b passes two isolated fake-network launch runs: minimize, renderer reload, token rotation, Bookmap reset/reconnect/bootstrap, chart failure, sidecar loss/restart, missing runtime recovery, saved notes after application restart, zero external mutations and clean exit. PATH excludes global Node/Bun. Screenshot inspected and owned-process inventory is empty. See PACKAGED-SMOKE.md; installed live Bookmap/real-account verification is unavailable.
+
+## Final current check-in / T50
+49/50 boxes are complete. PRIVATE-SETUP.md documents the actual Windows build 39f4de0a0fe7, sibling hashes, fake-mode walkthrough, read-only token ownership, independent observation configuration, supported conditions/orders and uncertainty handling. Final closure stays unchecked because installed Bookmap mode proof is unavailable; producer events remain context only. The package was rebuilt after cancellation-race repair 026af45 and both smoke runs passed again. All 124 runner checks pass after bounded durable-fill test wait repair 610493a. Full sibling Gradle build/native compile/obfuscated release tests pass. No commits pushed; no live orders or paid inference.

@@ -1,7 +1,7 @@
 # Packaged Windows verification — October 5, 2026
 
-Build `6c471624650b`, Cairo 0.1.0, Electron 44.5.1, OpenCode 2.0.22.
-Command: `node scripts/smoke-package.mjs "release/Cairo 0.1.0 6c471624650b"`.
+Build `39f4de0a0fe7`, Cairo 0.1.0, Electron 44.5.1, OpenCode 2.0.22.
+Command: `node scripts/smoke-package.mjs "release/Cairo 0.1.0 39f4de0a0fe7"`.
 
 The harness launches the actual Cairo.exe twice with an isolated profile whose
 path contains spaces and a PATH containing only Windows System32. It attaches to

@@ -1,6 +1,6 @@
 # Cairo MVP: executable coding handoff
 
-Updated October 4, 2026. **T01–T16, T21–T23, T26–T38 complete: 32/50 complete, 18 remaining. T39 is next.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
+Updated October 5, 2026. **49/50 tasks complete. T50 setup guide is written; final closure remains open for trusted installed Bookmap live/replay evidence.** The original task IDs are retained. The user's latest scope revision prioritizes [premarket preparation and live trade management](PREPARATION-MANAGEMENT-PHASE.md) and moves six Bookmap/pattern tasks to the final feature phase. The first runnable app uses one-minute chart knowledge. Bookmap remains required for the full MVP. [HANDOFF.md](HANDOFF.md) records the current check-in and local commits. Earlier planning was committed as `8f7a2d76b55afd89ff008932471b567857836880` before implementation.
 
 Start here when implementing. This document supersedes earlier milestone ordering and provisional recommendations in this folder. Human instructions and applicable AGENTS.md always take precedence. [PLAN-DECISIONS.md](PLAN-DECISIONS.md) preserves what the user explicitly chose; the defaults below resolve routine implementation choices for this handoff without pretending the user separately selected them. [MANAGEMENT-GUIDELINES.md](MANAGEMENT-GUIDELINES.md) explains the human-language workflow. Documents in `docs/opencode/` are reference material, not additional requirements.
 
@@ -595,6 +595,8 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 - [ ] **T50 — Write the private setup guide and close the checklist honestly**
 
+**Current status:** Guide written in PRIVATE-SETUP.md. Final closure is blocked: the implemented producer deliberately exports unknown mode; trusted installed Bookmap live/replay evidence and adapter verification are still missing. The packaged preparation/management app works independently. Do not check off live observer acceptance from fake source data.
+
 **Depends:** T49 and all preceding required tasks. **Repository:** Cairo.
 
 **Deliver:** Under `docs/chatgpt/`, explain installation, local model/key setup, Bookmap plugin version/install/observation configuration, read-only token path/account selection, source statuses, narrative coauthoring/attachment, manual chart refresh, exit approval, and unknown-action recovery. List actual supported order shapes/conditions and all manual/deferred behavior. Record sibling plugin hashes and package build version.
@@ -611,7 +613,7 @@ Do not mark tasks complete because time/context is running out. Leave precise ne
 
 ## 8. Prompt to give the implementation agent
 
-> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. T01–T16, T21–T23 and T26–T38 are complete. Resume at T39 after 11:50 PM Pacific October 4, 2026. Continue the remaining authorized tasks, each separately committed. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; broadcast only BID_STEP_UP and BID_REAPPEAR when that phase begins. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
+> Resume Cairo using CODING-PLAN.md, PREPARATION-MANAGEMENT-PHASE.md, HANDOFF.md, and latest human instructions. All tasks except T50 final closure are complete. Read PRIVATE-SETUP.md and HANDOFF.md; resume by proving installed Bookmap mode, keeping unknown/replay ineligible. Continue the remaining authorized tasks, each separately committed. Follow the revised order: T23, T29–T32, T21–T22, T26–T28, T33–T46, then T17–T20/T24–T25, then T47–T50. Deliver a runnable preparation/chat app with timestamped one-minute chart knowledge first. Bookmap stays in the full plan and moves to the final feature phase; broadcast only BID_STEP_UP and BID_REAPPEAR when that phase begins. Run each task's checks and make its separate local task-ID commit. Keep existing token ownership, reviewed per-position guidance, and exact human approval for each broker mutation. Use fake provider/broker/model checks; send no real orders or paid inference merely to test. Never push. Report completed tasks, local commits, checks, and next work.
 
 
 
