@@ -165,6 +165,12 @@ export interface CairoSnapshot {
   tickets: ExitTicket[]
 }
 
+export interface EngineEvent {
+  runtimeInstanceId: string
+  sequence: number
+  changes: Partial<Omit<CairoSnapshot, "runtimeInstanceId" | "sequence">>
+}
+
 export interface Clock {
   now(): number
 }

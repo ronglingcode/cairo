@@ -1,13 +1,20 @@
 import { app, BrowserWindow } from "electron"
 import path from "node:path"
 import { CairoEngine } from "../src/engine/CairoEngine.mts"
+import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
 import { installShutdownHook } from "../src/engine/installShutdownHook.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
-installShutdownHook(app, engine)
+const apiServer = new EngineApiServer(engine)
+installShutdownHook(app, {
+  stop: async () => {
+    await apiServer.stop()
+    await engine.stop()
+  },
+})
 
-function createWindow(): void {
+function createWindow(apiBaseUrl: string): void {
   const window = new BrowserWindow({
     width: 1440,
     height: 940,
@@ -20,6 +27,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      additionalArguments: [`--cairo-api-url=${apiBaseUrl}`],
     },
   })
 
@@ -30,11 +38,12 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const apiBaseUrl = await apiServer.start()
   engine.start()
-  createWindow()
+  createWindow(apiBaseUrl)
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl)
   })
 })
 

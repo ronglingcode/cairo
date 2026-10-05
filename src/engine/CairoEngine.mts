@@ -1,9 +1,16 @@
-import type { CairoSnapshot, Clock, SourceStatus } from "../shared/contracts.mts"
+import type { CairoSnapshot, Clock, EngineEvent, SourceStatus } from "../shared/contracts.mts"
 
 const MAX_POSITIONS = 500
 const MAX_TRADEBOOKS = 100
 const MAX_ATTACHMENTS = 500
 const MAX_TICKETS = 200
+const MAX_EVENTS = 128
+
+export type EngineEventListener = (event: EngineEvent) => void
+
+export type EngineSubscription =
+  | { resyncRequired: false; unsubscribe: () => void }
+  | { resyncRequired: true; reason: "runtime-changed" | "event-gap" | "cursor-ahead" }
 
 export interface EngineOptions {
   clock?: Clock
@@ -22,6 +29,8 @@ export class CairoEngine {
   private started = false
   private timer: ReturnType<typeof setTimeout> | undefined
   private pendingCycle: Promise<void> | undefined
+  private events: EngineEvent[] = []
+  private listeners = new Set<EngineEventListener>()
 
   constructor(options: EngineOptions = {}) {
     this.runtimeInstanceId = globalThis.crypto.randomUUID()
@@ -66,18 +75,64 @@ export class CairoEngine {
 
   updateSnapshot(update: Partial<Omit<CairoSnapshot, "runtimeInstanceId" | "sequence">>): CairoSnapshot {
     const cloned = structuredClone(update)
+    const changes = {
+      ...cloned,
+      ...(cloned.positions === undefined ? {} : { positions: cloned.positions.slice(-MAX_POSITIONS) }),
+      ...(cloned.tradebooks === undefined ? {} : { tradebooks: cloned.tradebooks.slice(-MAX_TRADEBOOKS) }),
+      ...(cloned.attachments === undefined ? {} : { attachments: cloned.attachments.slice(-MAX_ATTACHMENTS) }),
+      ...(cloned.tickets === undefined ? {} : { tickets: cloned.tickets.slice(-MAX_TICKETS) }),
+    }
     this.snapshot = {
       ...this.snapshot,
-      ...cloned,
+      ...changes,
       runtimeInstanceId: this.runtimeInstanceId,
       sequence: this.snapshot.sequence + 1,
-      positions: cloned.positions === undefined ? this.snapshot.positions : cloned.positions.slice(-MAX_POSITIONS),
-      tradebooks: cloned.tradebooks === undefined ? this.snapshot.tradebooks : cloned.tradebooks.slice(-MAX_TRADEBOOKS),
-      attachments: cloned.attachments === undefined ? this.snapshot.attachments : cloned.attachments.slice(-MAX_ATTACHMENTS),
-      tickets: cloned.tickets === undefined ? this.snapshot.tickets : cloned.tickets.slice(-MAX_TICKETS),
+      positions: changes.positions === undefined ? this.snapshot.positions : changes.positions,
+      tradebooks: changes.tradebooks === undefined ? this.snapshot.tradebooks : changes.tradebooks,
+      attachments: changes.attachments === undefined ? this.snapshot.attachments : changes.attachments,
+      tickets: changes.tickets === undefined ? this.snapshot.tickets : changes.tickets,
+    }
+    const event: EngineEvent = {
+      runtimeInstanceId: this.runtimeInstanceId,
+      sequence: this.snapshot.sequence,
+      changes,
+    }
+    this.events.push(event)
+    if (this.events.length > MAX_EVENTS) this.events.splice(0, this.events.length - MAX_EVENTS)
+    for (const listener of [...this.listeners]) {
+      try {
+        listener(structuredClone(event))
+      } catch {
+        this.listeners.delete(listener)
+      }
     }
     return this.getSnapshot()
   }
+
+  subscribeFrom(runtimeInstanceId: string, sequence: number, listener: EngineEventListener): EngineSubscription {
+    if (runtimeInstanceId !== this.runtimeInstanceId) return { resyncRequired: true, reason: "runtime-changed" }
+    if (!Number.isSafeInteger(sequence) || sequence < 0 || sequence > this.snapshot.sequence) {
+      return { resyncRequired: true, reason: "cursor-ahead" }
+    }
+    const firstAvailable = this.events[0]?.sequence ?? this.snapshot.sequence + 1
+    if (sequence < firstAvailable - 1) return { resyncRequired: true, reason: "event-gap" }
+
+    for (const event of this.events) {
+      if (event.sequence > sequence) listener(structuredClone(event))
+    }
+    this.listeners.add(listener)
+    let active = true
+    return {
+      resyncRequired: false,
+      unsubscribe: () => {
+        if (!active) return
+        active = false
+        this.listeners.delete(listener)
+      },
+    }
+  }
+
+  get listenerCount(): number { return this.listeners.size }
 
   private waiting(source: SourceStatus["source"], detail: string): SourceStatus {
     return { source, state: "waiting", updatedAt: new Date(this.clock.now()).toISOString(), detail }
