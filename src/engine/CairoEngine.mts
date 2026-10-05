@@ -61,6 +61,7 @@ export class CairoEngine {
       tickets: [],
       management: [],
       recommendations: [],
+      managementTimeline: [],
     }
   }
 
@@ -169,3 +170,4 @@ export class CairoEngine {
     }, delay)
   }
 }
+

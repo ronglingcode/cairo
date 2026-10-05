@@ -1,4 +1,5 @@
-import { app, BrowserWindow, shell } from "electron"
+import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
+import { app, BrowserWindow, shell, Notification } from "electron"
 import path from "node:path"
 import { CairoEngine } from "../src/engine/CairoEngine.mts"
 import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
@@ -20,9 +21,10 @@ import { PositionGuidance } from "../src/engine/PositionGuidance.mts"
 import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { guidance.reconcile(); monitor.cycle(); timeline.capture() } })
 const guidance = new PositionGuidance(engine)
 const monitor = new ManagementMonitor(engine, guidance)
+const timeline = new ManagementTimeline(engine, text => { if (Notification.isSupported()) new Notification({ title: "Cairo management recommendation", body: text }).show() })
 const apiServer = new EngineApiServer(engine)
 apiServer.setPositionGuidance(guidance)
 apiServer.setManagementMonitor(monitor)
@@ -122,3 +124,4 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+

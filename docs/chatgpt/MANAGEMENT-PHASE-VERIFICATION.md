@@ -27,3 +27,6 @@ T28/T34; persistence/restart reactivation follows in the recovery tasks.
 
 ## T27
 Deterministic per-position monitoring, bounded confirmations, once-only recommendations, and dependencies gated by actual matching fills. Targeted monitor fixtures and typecheck pass. Broker writes remain absent.
+
+## T28
+Attached prose, per-rule evidence/quantity/status, scoped observation confirmation, pause/rearm/resume, bounded session timeline, and deduplicated desktop recommendation alerts. Typecheck and three synthetic monitor/timeline checks pass. No approval or broker write is exposed.

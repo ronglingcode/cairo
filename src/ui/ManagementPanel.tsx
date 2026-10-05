@@ -1,0 +1,36 @@
+import { useState } from "react"
+import type { CairoSnapshot } from "../shared/contracts.mts"
+import type { Predicate } from "../engine/PredicateEvaluator.mts"
+function humans(predicate: Predicate): string[] { return predicate.kind === "human" ? [predicate.conditionId] : predicate.kind === "all" || predicate.kind === "any" ? predicate.conditions.flatMap(humans) : [] }
+export function ManagementPanel({ snapshot }: { snapshot: CairoSnapshot }) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function command(path: string, value: unknown) {
+    setBusy(true); setError(null)
+    try {
+      const response = await fetch(`${window.cairo?.apiBaseUrl}/management/${path}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify(value) })
+      const result = await response.json(); if (!response.ok) throw new Error(result.error)
+    } catch (error) { setError(error instanceof Error ? error.message : "Management unavailable") }
+    finally { setBusy(false) }
+  }
+  return <section className="setup-card"><div className="card-heading"><div><span className="eyebrow">ATTACHED GUIDANCE</span><h2>Management monitor</h2></div></div>
+    <p>Every attached position is monitored by the engine. Chart focus and AI availability do not stop monitoring.</p>
+    {error && <p role="alert" className="chart-error">{error}</p>}
+    {!snapshot.attachments.length && <div className="empty-inline">Review a guideline interpretation before attaching it to a position.</div>}
+    {snapshot.attachments.map(attachment => <article className="position-item" key={attachment.id}><strong>{attachment.symbol} · {attachment.state}</strong><p>{attachment.pauseReason}</p>
+      <details><summary>Frozen original guidance</summary><pre className="narrative-text">{attachment.markdown}</pre></details>
+      {snapshot.management.filter(rule => rule.attachmentId === attachment.id).map(rule => {
+        const policyRule = attachment.interpretation.management?.rules.find(item => item.id === rule.ruleId)
+        return <div className="clause-readback" key={rule.ruleId}><blockquote>{rule.sourceText}</blockquote><strong>{rule.status} · condition {rule.result.state}{rule.quantity ? ` · ${rule.quantity} shares` : ""}</strong>
+          {rule.result.evidence.map((evidence, index) => <p key={index}>{evidence.reason}{evidence.sourceAt ? ` · ${new Date(evidence.sourceAt).toLocaleTimeString()}` : ""}</p>)}
+          {policyRule && humans(policyRule.condition).map(conditionId => <button className="quiet-button" key={conditionId} disabled={busy || attachment.state !== "active"} onClick={() => void command("confirm", { id: attachment.id, expectedRevision: attachment.revision, factsRevision: snapshot.brokerFactsRevision, conditionId, value: true })}>Confirm observation: {conditionId}</button>)}
+          <button className="quiet-button" disabled={busy || attachment.state !== "active" || rule.status === "filled" || rule.status === "awaiting-fill"} onClick={() => void command("rearm", { id: attachment.id, expectedRevision: attachment.revision, ruleId: rule.ruleId })}>Review and rearm</button>
+        </div>
+      })}
+      {attachment.state === "active" && <button className="quiet-button" disabled={busy} onClick={() => void command("pause", { id: attachment.id, expectedRevision: attachment.revision })}>Pause guidance</button>}
+      {attachment.state === "paused" && <button className="quiet-button" disabled={busy} onClick={() => void command("reconfirm", { id: attachment.id, expectedRevision: attachment.revision, factsRevision: snapshot.brokerFactsRevision, initialQuantity: attachment.initialQuantity, reviewed: true })}>I reviewed current quantity and allocations · resume</button>}
+    </article>)}
+    <p className="chart-footnote">Observation confirmation supplies evidence. Exit recommendations require a separate exact ticket approval.</p>
+    <details><summary>Session timeline ({snapshot.managementTimeline.length})</summary>{snapshot.managementTimeline.slice(-20).reverse().map(event => <p key={event.id}>{new Date(event.at).toLocaleTimeString()} · {event.symbol} · {event.text}</p>)}</details>
+  </section>
+}

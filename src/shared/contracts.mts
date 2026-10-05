@@ -219,6 +219,7 @@ export interface CairoSnapshot {
   attachments: PositionAttachment[]
   tickets: ExitTicket[]
   management: import("../engine/ManagementMonitor.mts").RuleReadback[]
+  managementTimeline: import("../engine/ManagementTimeline.mts").ManagementEvent[]
   recommendations: import("../engine/ManagementMonitor.mts").ManagementRecommendation[]
 }
 
@@ -527,3 +528,4 @@ export class FakeObservationSource implements ObservationPort {
   }
   get subscriberCount(): number { return this.handlers.size }
 }
+
