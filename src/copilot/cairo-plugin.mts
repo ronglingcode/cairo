@@ -1,13 +1,18 @@
 import { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
+import { injectTradingContext } from "./TradingContext.mts"
 
-type Bridge = (operation: string, input: unknown, context: ToolContext) => Promise<unknown>
+type Bridge = (operation: string, input: unknown, context: Pick<ToolContext, "sessionID" | "signal">) => Promise<unknown>
 const empty = { type: "object", properties: {}, additionalProperties: false } as const
 
 export function createCairoPlugin(bridge: Bridge) {
   return Plugin.define({
     id: "cairo.domain",
     async setup(ctx) {
+      await ctx.session.hook("context", input => injectTradingContext(input, sessionID => bridge("read_context", {}, {
+        sessionID: sessionID as ToolContext["sessionID"], signal: AbortSignal.timeout(5000),
+      })))
+      await ctx.session.hook("title", async input => { input.result = "Cairo trading preparation" })
       await ctx.tool.transform(editor => {
         for (const tool of editor.list()) editor.remove(tool.id)
         editor.namespace({ name: "cairo", description: "Cairo preparation and trading context" })

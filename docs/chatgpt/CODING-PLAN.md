@@ -437,7 +437,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verify:** Fake tool inputs are validated; bounded outputs label source times/coverage; entry/open/increase intent is rejected. **Commit:** `feat(T30): register Cairo copilot domain tools`.
 
-- [ ] **T31 — Inject fresh context before model steps**
+- [x] **T31 — Inject fresh context before model steps**
 
 **Depends:** T30, T14, T23. **Repository:** Cairo.
 

@@ -46,7 +46,7 @@ test("note proposals are revision-bound, expire, and never apply guidance or sub
 test("Cairo plugin replaces coding tools with only six domain tools", async () => {
   const catalog = new Map([["bash", { id: "bash" }], ["read", { id: "read" }]])
   const plugin = createCairoPlugin(async (operation, input) => ({ operation, input }))
-  await plugin.setup({ tool: { transform: async callback => callback({
+  await plugin.setup({ session: { hook: async () => {} }, tool: { transform: async callback => callback({
     list: () => [...catalog.values()], remove: id => catalog.delete(id), namespace: () => {},
     add: tool => catalog.set(`cairo_${tool.name}`, tool),
   }) } })
@@ -74,25 +74,47 @@ test("self-contained Cairo plugin bundle loads in the actual pinned runtime", { 
   const bundle = await build({ entryPoints: ["src/copilot/cairo-plugin.mts"], bundle: true, platform: "node", format: "esm", outfile: pluginPath, metafile: true })
   assert.ok(Object.values(bundle.metafile.outputs).every(output => output.imports.length === 0))
   let exposed = []
+  const engine = new CairoEngine()
+  const api = new EngineApiServer(engine)
+  const base = await api.start()
+  const observed = []
+  let calls = 0
   const provider = createServer(async (request, response) => {
     let body = ""
     for await (const chunk of request) body += chunk
     const input = JSON.parse(body)
     exposed = input.tools?.map(tool => tool.function.name) ?? []
-    response.writeHead(200, { "content-type": "text/event-stream" }).end(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 0, model: "probe", choices: [{ index: 0, delta: { content: "fixture done" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`)
+    observed.push(JSON.stringify(input.messages))
+    calls++
+    if (calls === 1) {
+      const asOf = new Date().toISOString()
+      const position = { positionId: "outside-position", symbol: "SPY", side: "long", quantity: 7, averagePrice: 500, markPrice: 501 }
+      const source = { source: "broker", state: "connected", updatedAt: asOf, detail: "fixture" }
+      engine.updateSnapshot({ positions: [position], broker: source, brokerFactsRevision: 2,
+        brokerFacts: { accountId: "fixture-account", asOf, positions: [position], workingOrders: [], recentFills: [{ fillId: "outside-fill", orderId: null, symbol: "SPY", side: "sell", quantity: 3, price: 501, filledAt: asOf }], ordersComplete: true, source },
+        preparation: { markdown: "Changed after outside fill", revision: "b".repeat(64), date: null, symbol: "SPY", savedAt: asOf },
+      })
+    }
+    const delta = calls === 1 ? { tool_calls: [{ index: 0, id: "fixture-call", type: "function", function: { name: "cairo_read_context", arguments: "{}" } }] } : { content: "fixture done" }
+    response.writeHead(200, { "content-type": "text/event-stream" }).end(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 0, model: "probe", choices: [{ index: 0, delta, finish_reason: calls === 1 ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`)
   })
   await new Promise(resolve => provider.listen(0, "127.0.0.1", resolve))
-  const sidecar = new OpenCodeSidecar({ binary: path.resolve("node_modules/@opencode/cli/bin/opencode.exe"), userDataPath: root, pluginPath, onStatus: () => {}, config: {
+  const sidecar = new OpenCodeSidecar({ binary: path.resolve("node_modules/@opencode/cli/bin/opencode.exe"), userDataPath: root, pluginPath, onStatus: () => {}, environment: { CAIRO_TOOL_ENDPOINT: `${base}/copilot/tools`, CAIRO_TOOL_TOKEN: api.toolToken }, config: {
     snapshots: false, model: "cairo-fake/probe", permissions: [{ action: "*", resource: "*", effect: "deny" }, { action: "provider.use", resource: "cairo-fake", effect: "allow" }, { action: "cairo_read", resource: "*", effect: "allow" }, { action: "cairo_propose", resource: "*", effect: "allow" }],
     providers: { "cairo-fake": { package: "@opencode/ai/providers/openai-compatible", settings: { baseURL: `http://127.0.0.1:${provider.address().port}/v1`, apiKey: "fixture" }, models: { probe: { name: "Fixture", capabilities: { tools: true } } } } },
   } })
-  t.after(async () => { await sidecar.stop(); await new Promise(resolve => provider.close(resolve)); await rm(root, { recursive: true, force: true }) })
+  api.setDomainTools(new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace))
+  t.after(async () => { await sidecar.stop(); await api.stop(); await new Promise(resolve => provider.close(resolve)); await rm(root, { recursive: true, force: true }) })
   assert.equal(await sidecar.start(), true)
   const session = await sidecar.client.session.create({ title: "Cairo plugin check", location: { directory: sidecar.workspace }, model: { providerID: "cairo-fake", id: "probe" } })
   await sidecar.client.session.prompt({ sessionID: session.id, text: "Fixture" })
-  for (let count = 0; !exposed.length && count < 100; count++) await new Promise(resolve => setTimeout(resolve, 100))
+  for (let count = 0; calls < 2 && count < 100; count++) await new Promise(resolve => setTimeout(resolve, 100))
   const plugins = await sidecar.client.plugin.list({ location: { directory: sidecar.workspace } })
   assert.ok(plugins.data.some(plugin => plugin.id === "cairo.domain"), JSON.stringify(plugins.data))
   assert.equal(exposed.length, 6)
   assert.ok(exposed.every(name => name.startsWith("cairo_")), JSON.stringify(exposed))
+  assert.equal(calls, 2)
+  assert.ok(observed[0].includes("CAIRO_CURRENT_CONTEXT"))
+  assert.ok(observed[1].includes("Changed after outside fill"))
+  assert.ok(observed[1].includes("outside-fill"))
 })
