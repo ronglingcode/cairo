@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto"
 import type { ChartSnapshot, EngineEvent } from "../shared/contracts.mts"
 import { CairoEngine } from "./CairoEngine.mts"
 import { PreparationConflictError, PreparationStore, PreparationValidationError } from "./PreparationStore.mts"
+import type { CairoDomainTools } from "../copilot/CairoDomainTools.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -21,14 +22,17 @@ export class EngineApiServer {
   private preparationStore: PreparationStore | undefined
   private preparationOperation: Promise<unknown> = Promise.resolve()
   private copilotRestarter: (() => Promise<boolean>) | undefined
+  private domainTools: CairoDomainTools | undefined
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
+  readonly toolToken = randomBytes(32).toString("hex")
 
   constructor(engine: CairoEngine) { this.engine = engine }
 
   setPreparationStore(store: PreparationStore): void { this.preparationStore = store }
   setCopilotRestarter(restart: () => Promise<boolean>): void { this.copilotRestarter = restart }
+  setDomainTools(tools: CairoDomainTools): void { this.domainTools = tools }
 
   async loadPreparation(): Promise<boolean> {
     if (!this.preparationStore) return false
@@ -114,6 +118,12 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (url.pathname === "/copilot/tools" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.toolToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.domainTools) { this.json(response, 503, { error: "copilot-tools-unavailable" }); return }
+      void this.executeDomainTool(request, response)
+      return
+    }
     if (url.pathname === "/copilot/restart" && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.copilotRestarter) { this.json(response, 503, { error: "copilot-unavailable" }); return }
@@ -214,6 +224,23 @@ export class EngineApiServer {
       if (error instanceof PreparationValidationError) { this.json(response, 400, { error: error.message }); return }
       this.json(response, 503, { error: "Preparation could not be saved. Your edits are still in the editor." })
     }
+  }
+
+  private async executeDomainTool(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const chunks: Buffer[] = []
+      let bytes = 0
+      for await (const chunk of request) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        bytes += buffer.length
+        if (bytes > 512 * 1024) { this.json(response, 413, { error: "request-too-large" }); return }
+        chunks.push(buffer)
+      }
+      const value = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid tool request")
+      const result = await this.domainTools!.execute(value.operation, value.input, value.sessionId)
+      this.json(response, 200, result)
+    } catch { this.json(response, 400, { error: "Cairo tool request was rejected. Read current context before continuing." }) }
   }
 
   private async refreshChart(request: IncomingMessage, response: ServerResponse): Promise<void> {

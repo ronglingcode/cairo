@@ -12,6 +12,7 @@ import { SchwabOrderReader } from "../src/engine/SchwabOrderReader.mts"
 import { BrokerRefreshCoordinator } from "../src/engine/BrokerRefreshCoordinator.mts"
 import { PreparationStore } from "../src/engine/PreparationStore.mts"
 import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
+import { CairoDomainTools } from "../src/copilot/CairoDomainTools.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
@@ -78,9 +79,22 @@ app.whenReady().then(async () => {
   sidecar = new OpenCodeSidecar({
     binary: app.isPackaged ? path.join(process.resourcesPath, "opencode", "opencode.exe") : path.join(app.getAppPath(), "node_modules", "@opencode", "cli", "bin", "opencode.exe"),
     userDataPath: app.getPath("userData"),
+    pluginPath: app.isPackaged ? path.join(process.resourcesPath, "copilot", "cairo-plugin.js") : path.join(app.getAppPath(), "dist-copilot", "cairo-plugin.js"),
+    config: { snapshots: false, permissions: [
+      { action: "*", resource: "*", effect: "deny" },
+      { action: "cairo_read", resource: "*", effect: "allow" },
+      { action: "cairo_propose", resource: "*", effect: "allow" },
+    ] },
+    environment: { CAIRO_TOOL_ENDPOINT: `${apiBaseUrl}/copilot/tools`, CAIRO_TOOL_TOKEN: apiServer.toolToken },
     onStatus: copilot => engine.updateSnapshot({ copilot }),
   })
   apiServer.setCopilotRestarter(() => sidecar!.restart())
+  apiServer.setDomainTools(new CairoDomainTools(engine, async id => {
+    const client = sidecar?.client
+    if (!client || !sidecar) return false
+    const session = await client.session.get({ sessionID: id })
+    return path.resolve(session.location.directory).toLowerCase() === path.resolve(sidecar.workspace).toLowerCase()
+  }))
   void sidecar.start()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)

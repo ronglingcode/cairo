@@ -429,7 +429,7 @@ Start with T23. T24–T25 move to the final Bookmap feature phase and remain req
 
 **Verified (2026-10-04):** Added the pinned root CLI/client dependencies and main-owned runtime lifecycle with isolated Cairo config/data/cache/state/workspace, authenticated loopback client, exact process/version identity checks, bounded startup, periodic health, serialized restart, and shutdown of only its owned child. Restart uses a capability-protected API route. Four focused tests passed, including actual Windows 2.0.22 startup/health/shutdown without model requests, missing binary, wrong runtime identity, and crash isolation. Typecheck/build passed; existing nonfatal build-option warnings remain. Application packaging stays T48.
 
-- [ ] **T30 — Register the Cairo domain plugin and read/proposal tools**
+- [x] **T30 — Register the Cairo domain plugin and read/proposal tools**
 
 **Depends:** T29, T05, T23. **Repository:** Cairo.
 

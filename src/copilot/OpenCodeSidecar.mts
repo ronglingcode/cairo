@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { mkdir, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { OpenCode } from "@opencode/client"
 import type { SourceStatus } from "../shared/contracts.mts"
 
@@ -10,6 +11,7 @@ export type OpenCodeClient = ReturnType<typeof OpenCode.make>
 export interface SidecarOptions {
   binary: string
   userDataPath: string
+  pluginPath?: string
   onStatus(status: SourceStatus): void
   config?: Record<string, unknown>
   environment?: Record<string, string>
@@ -56,7 +58,14 @@ export class OpenCodeSidecar {
     this.publish("waiting", "Starting Cairo's OpenCode runtime")
     try {
       await mkdir(this.workspace, { recursive: true })
-      const config = this.options.config ?? { snapshots: false, permissions: [{ action: "*", resource: "*", effect: "deny" }] }
+      if (this.options.pluginPath) {
+        const pluginDirectory = path.join(this.workspace, ".opencode", "plugins")
+        await mkdir(pluginDirectory, { recursive: true })
+        await copyFile(this.options.pluginPath, path.join(pluginDirectory, "cairo.js"))
+      }
+      const config = { ...(this.options.config ?? { snapshots: false, permissions: [{ action: "*", resource: "*", effect: "deny" }] }),
+        ...(this.options.pluginPath ? { plugins: [pathToFileURL(path.join(this.workspace, ".opencode", "plugins", "cairo.js")).href] } : {}),
+      }
       await writeFile(path.join(this.workspace, "opencode.json"), `${JSON.stringify(config, null, 2)}\n`, "utf8")
       const environment: NodeJS.ProcessEnv = {}
       for (const [key, value] of Object.entries(process.env)) {

@@ -54,7 +54,7 @@ export class PreparationStore {
   }
 }
 
-function validateContent(input: unknown): PreparationContent {
+export function validateContent(input: unknown): PreparationContent {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new PreparationValidationError("Preparation must be an object")
   const value = input as Record<string, unknown>
   if (typeof value.markdown !== "string" || value.markdown.length > 65_536) throw new PreparationValidationError("Notes must be text of at most 65,536 characters")

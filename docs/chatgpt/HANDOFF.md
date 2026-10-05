@@ -7,7 +7,8 @@ Updated October 4, 2026. [CODING-PLAN.md](CODING-PLAN.md) is the authoritative c
 - T01 and T02 blockers are resolved. The pinned OpenCode Windows integration probe and Electron development-window smoke passed.
 - T03–T16 are implemented and checked off. T16 defines and parses the normalized Bookmap observation contract; the producer stream is not implemented until T17–T19.
 - T23's notes workspace and T29's owned runtime lifecycle are complete. T29 commit subject: `feat(T29): manage Cairo OpenCode sidecar lifecycle`.
-- **Remaining authorized tasks: T30, T31, T32, T21**, each in its own commit. T30–T32 finish the first runnable notes/chart copilot. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
+- T30's restricted domain plugin is complete; see [verification](T30-VERIFICATION.md).
+- **Remaining authorized tasks: T31, T32, T21**, each in its own commit. T31–T32 finish the first runnable notes/chart copilot. Read [PREPARATION-MANAGEMENT-PHASE.md](PREPARATION-MANAGEMENT-PHASE.md).
 - Bookmap T17–T20 and pattern-specific T24–T25 move to the final feature phase after the other features; they remain required for the full MVP. No plugin changes now.
 - No commits were pushed. T01–T16 completion commits are recorded below.
 
