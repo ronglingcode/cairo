@@ -7,6 +7,7 @@ import type { CairoDomainTools } from "../copilot/CairoDomainTools.mts"
 import type { CopilotChat } from "../copilot/CopilotChat.mts"
 import type { PositionGuidance, AttachRequest } from "./PositionGuidance.mts"
 import type { ManagementMonitor } from "./ManagementMonitor.mts"
+import type { PolicyReview } from "./PolicyReview.mts"
 
 const MAX_EVENT_CLIENTS = 16
 const HEARTBEAT_MS = 15_000
@@ -29,6 +30,8 @@ export class EngineApiServer {
   private chat: CopilotChat | undefined
   private guidance: PositionGuidance | undefined
   private monitor: ManagementMonitor | undefined
+  private policyReview: PolicyReview | undefined
+  setPolicyReview(review: PolicyReview): void { this.policyReview = review }
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
   private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
@@ -127,6 +130,10 @@ export class EngineApiServer {
     }
     const base = this.baseUrl()
     const url = new URL(request.url ?? "/", base)
+    if (["/proposals/accept", "/proposals/reject"].includes(url.pathname) && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.reviewProposal(url.pathname, request, response); return
+    }
     if (["/management/attach", "/management/pause", "/management/reconfirm", "/management/confirm", "/management/rearm"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       if (!this.guidance) { this.json(response, 503, { error: "Guidance service unavailable" }); return }
@@ -246,6 +253,27 @@ export class EngineApiServer {
       if (route === "/management/rearm") { if (!this.monitor) throw new Error("Monitoring unavailable"); this.monitor.rearm(String(value.id), String(value.expectedRevision), String(value.ruleId)) }
       this.json(response, 200, { ok: true })
     } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Guidance request failed" }) }
+  }
+  private async reviewProposal(route: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const value = await this.readCommand(request); const id = String(value.id)
+      if (value.kind === "notes") {
+        const proposal = this.domainTools?.proposals.find(item => item.id === id)
+        if (!proposal) throw new Error("Note proposal expired or unavailable")
+        if (route === "/proposals/accept") {
+          if (value.reviewed !== true || !this.preparationStore) throw new Error("Explicit note review is required")
+          await this.serialPreparation(async () => {
+            const preparation = await this.preparationStore!.save(proposal.content, proposal.expectedRevision)
+            this.engine.updateSnapshot({ preparation, preparationError: null })
+          })
+        }
+        this.domainTools!.removeProposal(id)
+      } else if (value.kind === "guidance" && this.policyReview) {
+        if (route === "/proposals/reject") this.policyReview.reject(id)
+        else await this.policyReview.accept(id, value.reviewed === true, value.position as (AttachRequest & { attachmentId?: string; expectedAttachmentRevision?: string }) | undefined)
+      } else throw new Error("Proposal review is unavailable")
+      this.json(response, 200, { ok: true })
+    } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Review failed" }) }
   }
 
   private async refreshBroker(response: ServerResponse): Promise<void> {

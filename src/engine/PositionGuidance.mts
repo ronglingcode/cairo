@@ -44,6 +44,15 @@ export class PositionGuidance {
   pause(id: string, expectedRevision: string): void {
     this.change(id, expectedRevision, attachment => ({ ...attachment, state: "paused", pauseReason: "Paused by trader", revision: randomUUID() }))
   }
+  replace(id: string, expectedRevision: string, request: AttachRequest): void {
+    const snapshot = this.engine.getSnapshot()
+    const previous = snapshot.attachments.find(item => item.id === id && item.revision === expectedRevision && item.state !== "closed")
+    if (!previous || previous.accountId !== request.accountId || previous.positionId !== request.positionId) throw new Error("Current matching attachment is required")
+    // Validate with the same attachment rules without exposing an intermediate unattached state.
+    const isolated = { getSnapshot: () => ({ ...snapshot, attachments: snapshot.attachments.filter(item => item.id !== id) }), updateSnapshot: () => {} } as unknown as CairoEngine
+    const replacement = new PositionGuidance(isolated, this.now).attach(request)
+    this.engine.updateSnapshot({ attachments: snapshot.attachments.map(item => item.id === id ? { ...replacement, id } : item) })
+  }
   reconfirm(id: string, expectedRevision: string, factsRevision: number, initialQuantity: number, reviewed: boolean): void {
     if (reviewed !== true) throw new Error("Current position and allocations must be reviewed")
     this.change(id, expectedRevision, attachment => {

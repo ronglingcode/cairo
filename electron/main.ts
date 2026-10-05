@@ -1,3 +1,5 @@
+import { TradebookStore } from "../src/engine/TradebookStore.mts"
+import { PolicyReview } from "../src/engine/PolicyReview.mts"
 import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
 import { app, BrowserWindow, shell, Notification } from "electron"
 import path from "node:path"
@@ -76,6 +78,9 @@ app.whenReady().then(async () => {
   const config = await configStore.load()
   apiServer.setPreparationStore(new PreparationStore(app.getPath("userData")))
   await apiServer.loadPreparation()
+  const tradebookStore = new TradebookStore(app.getPath("userData"))
+  try { engine.updateSnapshot({ tradebooks: await tradebookStore.list() }) } catch { /* Invalid artifacts remain inactive. */ }
+  apiServer.setPolicyReview(new PolicyReview(engine, tradebookStore, guidance, monitor))
   const http = new FetchHttpPort()
   const massive = new MassiveRestReader(http, () => configStore.massiveApiKey)
   apiServer.setChartRefresher((symbol, date) => massive.refresh(symbol, date))
@@ -124,4 +129,5 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit()
 })
+
 

@@ -1,3 +1,4 @@
+import { ProposalReview } from "./ProposalReview"
 import { ManagementPanel } from "./ManagementPanel"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { CairoSnapshot, SourceStatus } from "../shared/contracts.mts"
@@ -205,6 +206,7 @@ export function App() {
             {snapshot?.brokerFacts?.recentFills.length ? <div className="fills-section"><div className="protection-heading">Recent fills <span>last 7 days</span></div>{snapshot.brokerFacts.recentFills.slice(-5).reverse().map((fill) => <div className="fill-row" key={fill.fillId}><strong>{fill.symbol} · {fill.side}</strong><span>{fill.quantity} @ ${fill.price.toFixed(2)}</span><small>{formatTime(fill.filledAt)}</small></div>)}</div> : null}
           </section>
 
+          {snapshot && <ProposalReview snapshot={snapshot} />}
           {snapshot && <ManagementPanel snapshot={snapshot} />}
           <section className="tickets-card">
             <div className="card-heading"><div><span className="eyebrow">EXIT REVIEW</span><h2>Tickets</h2></div><span className="count">{snapshot?.tickets.length ?? 0}</span></div>
@@ -256,4 +258,5 @@ function formatMoney(value: number | null): string {
 function supportedOrderType(value: string): boolean {
   return ["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "STOP-LIMIT"].includes(value.toUpperCase())
 }
+
 

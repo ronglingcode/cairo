@@ -27,6 +27,7 @@ export class CairoDomainTools {
     this.drafts = this.drafts.filter(value => Date.parse(value.expiresAt) > this.now())
     return structuredClone(this.drafts)
   }
+  removeProposal(id: string): void { this.drafts = this.drafts.filter(item => item.id !== id); this.engine.updateSnapshot({ noteProposals: this.proposals }) }
 
   async execute(operation: unknown, input: unknown, sessionId: unknown): Promise<unknown> {
     if (typeof sessionId !== "string" || !sessionId || sessionId.length > 200 || !await this.verifySession(sessionId)) {
@@ -48,6 +49,7 @@ export class CairoDomainTools {
       if (snapshot.preparationError) throw new Error("Saved preparation must be repaired before proposing edits")
       const draft: NoteProposal = { id: randomUUID(), sessionId, expectedRevision: value.expectedRevision as string | null, content, expiresAt: new Date(this.now() + 5 * 60_000).toISOString() }
       this.drafts = [...this.proposals, draft].slice(-20)
+      this.engine.updateSnapshot({ noteProposals: this.proposals })
       return { available: true, proposal: draft, applied: false, review: "Proposal only. Notes have not been saved and no position guidance has changed." }
     }
     if (operation === "propose_guidance") return { available: true, applied: false, proposal: new GuidanceProposals(this.engine, this.now).propose(value, sessionId) }

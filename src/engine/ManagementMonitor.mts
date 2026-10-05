@@ -23,6 +23,18 @@ export class ManagementMonitor {
   private readonly now: () => number
   private states = new Map<string, RuleState>()
   private confirmations: HumanConfirmation[] = []
+  prepareReplacement(attachment: PositionAttachment, interpretation: PositionAttachment["interpretation"]): () => void {
+    const prior = attachment.interpretation.management!.rules.map(rule => ({ rule, state: this.states.get(`${attachment.id}:${ruleSemanticKey(rule, attachment.interpretation)}`) }))
+    if (prior.some(item => item.state?.brokerOrderId)) throw new Error("Resolve broker-pending actions before changing guidance")
+    // Conservatively carry completed close/protection actions across wording, IDs and quantities.
+    // An edited policy cannot reset a completed once-only action.
+    const completed = prior.filter(item => item.state?.status === "filled")
+    return () => {
+      this.confirmations = this.confirmations.filter(item => item.scope.attachmentId !== attachment.id)
+      for (const rule of interpretation.management!.rules) if (completed.some(item => item.rule.action.kind === rule.action.kind && item.rule.action.orderType === rule.action.orderType)) this.states.set(`${attachment.id}:${ruleSemanticKey(rule, interpretation)}`, { status: "filled" })
+      this.engine.updateSnapshot({ recommendations: this.engine.getSnapshot().recommendations.map(item => item.attachmentId === attachment.id && item.state === "current" ? { ...item, state: "invalidated" } : item) })
+    }
+  }
   constructor(engine: CairoEngine, guidance: PositionGuidance, now: () => number = Date.now) { this.engine = engine; this.guidance = guidance; this.now = now }
   confirm(attachmentId: string, expectedRevision: string, factsRevision: number, conditionId: string, value: boolean): void {
     const snapshot = this.engine.getSnapshot()

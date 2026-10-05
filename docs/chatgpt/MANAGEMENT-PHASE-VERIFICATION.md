@@ -33,3 +33,6 @@ Attached prose, per-rule evidence/quantity/status, scoped observation confirmati
 
 ## T33
 The owned-session propose_guidance tool stages complete engine-validated interpretations of the current saved prose. Exact clause text, hash/revision binding, numeric provenance, quantity basis and rounding are required; unresolved portions remain visible. Two authored-style fixtures plus invented/missing/partial/stale output checks and typecheck pass; plugin bundle builds.
+
+## T34
+Capability-protected explicit accept/reject for note and guideline artifacts; saved notes use existing serialized CAS. Guidance acceptance can attach/replace only the reviewed current position, revision and initial shares. Artifacts preserve exact bytes. Completed actions conservatively carry across edits/renames of the same close/protection order type; pending broker actions block replacement. Four artifact/review fixtures and typecheck pass.

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { PositionAttachment, Tradebook, TradebookInterpretation } from "../shared/contracts.mts"
 import { validateManagementPolicy } from "./ManagementPolicy.mts"
@@ -22,6 +22,13 @@ export class TradebookStore {
   private operations = new Map<string, Promise<unknown>>()
 
   constructor(userDataPath: string) { this.root = path.join(userDataPath, "tradebooks") }
+  async list(): Promise<Tradebook[]> {
+    await mkdir(this.root, { recursive: true })
+    const names = (await readdir(this.root)).filter(name => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\.md$/.test(name)).slice(0, 100)
+    const books: Tradebook[] = []
+    for (const name of names) { const book = await this.loadTradebook(name.slice(0, -3)); if (book) books.push(book) }
+    return books
+  }
 
   stageDraft(draft: TradebookDraft): void {
     const checked = validateDraft(draft)
@@ -58,7 +65,7 @@ export class TradebookStore {
       if (!existing && expectedRevision !== null) throw new Error("Expected active revision does not exist")
 
       const checked = validateDraft(draft)
-      const markdown = checked.markdown.trimEnd() + "\n"
+      const markdown = checked.markdown
       const interpretation = validateInterpretation(checked.interpretation, checked.id, hash(markdown), markdown)
       const content = JSON.stringify(interpretation, null, 2) + "\n"
       await mkdir(this.root, { recursive: true })
@@ -122,7 +129,7 @@ function validateDraft(input: TradebookDraft): TradebookDraft {
   if (!input || typeof input !== "object") throw new Error("Tradebook draft must be an object")
   const id = safeIdentifier(input.id)
   if (typeof input.title !== "string" || !input.title.trim() || typeof input.markdown !== "string" || !input.markdown.trim()) throw new Error("Tradebook draft needs a title and narrative")
-  const markdown = input.markdown.trimEnd() + "\n"
+  const markdown = input.markdown
   const interpretation = validateInterpretation(input.interpretation, id, hash(markdown), markdown)
   return { id, title: input.title.trim(), markdown, interpretation }
 }

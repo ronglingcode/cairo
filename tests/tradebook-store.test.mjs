@@ -9,7 +9,7 @@ import { TradebookStore } from "../src/engine/TradebookStore.mts"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 const draft = (markdown = "# Gap Give and Go\n\nWait for a bid to reappear.") => ({
   id: "gap-give-go", title: "Gap Give and Go", markdown,
-  interpretation: { tradebookId: "gap-give-go", narrativeHash: digest(`${markdown.trimEnd()}\n`), clauses: [{ clauseId: "bid-reappears", sourceText: "Wait for a bid to reappear.", coverage: "human", explanation: "Trader confirms the pattern." }] },
+  interpretation: { tradebookId: "gap-give-go", narrativeHash: digest(markdown), clauses: [{ clauseId: "bid-reappears", sourceText: "Wait for a bid to reappear.", coverage: "human", explanation: "Trader confirms the pattern." }] },
 })
 
 test("tradebook pair activates only when the narrative and interpretation match, then reopens", async () => {
@@ -53,3 +53,4 @@ test("active plan replacement uses revision compare-and-swap", async () => {
     assert.notEqual(updated.revision, saved.revision)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
