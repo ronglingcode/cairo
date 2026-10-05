@@ -72,3 +72,6 @@ Startup is observer-first: authored files and essential recovery load, pending c
 
 ## T46
 Copilot staging creates a native OpenCode ask permission bound to the exact ticket digest and holds tool continuation until the capability-protected ticket review. Generic/saved allowance cannot submit; cancellation invalidates authority. Two synthetic permission fixtures, including the pinned runtime with a fake provider, and typecheck pass. No paid inference or real broker mutation.
+
+## T17
+Sibling bookmap-plugin commit 772b754 exports only BID_STEP_UP and BID_REAPPEAR from the existing store update path. Event nanoseconds remain strings; normalized dollar prices and episode revisions survive UUID updates. Targeted Java serialization check passes. Mode remains unknown pending T19. Preexisting duplicate test annotation repaired separately in b71de0a.

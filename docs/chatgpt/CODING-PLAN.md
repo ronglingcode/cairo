@@ -315,7 +315,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Audited the sibling plugin's Bookmap 7.8.0.13 callback declarations, pattern signal serializer/store, price normalizer, WebSocket behavior, and detector eligibility. Added the normalized observation contract and three fixtures for snapshot, live episode revision, and source reset. Added explicit `delivery` parsing so bootstrap context cannot be confused with a live update. Fixtures preserve USD prices and nanosecond strings and leave mode/readiness/detector/config revisions unknown where the current producer cannot prove them. `npm run test` passed (35 checks); `npm run typecheck` passed. No Bookmap or broker runtime was launched and no plugin files were changed.
 
-- [ ] **T17 — Broadcast pattern observations without executing trades**
+- [x] **T17 — Broadcast pattern observations without executing trades**
 
 **Depends:** T16. **Repository:** bookmap-plugin, followed by Cairo progress commit.
 
