@@ -75,3 +75,6 @@ Copilot staging creates a native OpenCode ask permission bound to the exact tick
 
 ## T17
 Sibling bookmap-plugin commit 772b754 exports only BID_STEP_UP and BID_REAPPEAR from the existing store update path. Event nanoseconds remain strings; normalized dollar prices and episode revisions survive UUID updates. Targeted Java serialization check passes. Mode remains unknown pending T19. Preexisting duplicate test annotation repaired separately in b71de0a.
+
+## T18
+Sibling e5c25cb adds separate local enable/symbol/detector settings and observerOnly attachment without native runtime startup or secret reads. Missing/invalid settings disable export. Native eligibility remains independent. Twelve Java config/export/detector checks pass; preexisting unreachable replay fixture corrected separately in 5aa7cd0. Reattach applies configuration changes.

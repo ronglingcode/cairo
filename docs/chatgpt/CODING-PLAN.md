@@ -323,7 +323,7 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verify:** Relevant Java tests show exported create/update observations and no routing into native execution. **Commit:** `feat(T17): export Bookmap pattern observations`; Cairo note records the sibling hash.
 
-- [ ] **T18 — Enable observation detection independently of native execution**
+- [x] **T18 — Enable observation detection independently of native execution**
 
 **Depends:** T17. **Repository:** bookmap-plugin, followed by Cairo progress commit.
 
