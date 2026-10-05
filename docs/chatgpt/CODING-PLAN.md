@@ -271,13 +271,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added direct backend reads for Schwab account-number mappings and the explicitly configured account's positions. The reader requires exactly one account match, fetches by its broker hash, normalizes long/short/fractional equity quantities and optional marks, skips non-equity holdings, and preserves a stable broker position identity. Unknown/missing account, malformed data, and auth rejection remain stale; 401/403 invalidates the token and does not retry. Order coverage is explicitly incomplete pending T13. Synthetic multi-account and holdings tests passed; no broker network request or real token was used. `npm run test` passed (27 checks) and typecheck passed. Reference patterns were checked against Cairo's read-only ViteApp adapter; live account-number availability still requires the user's account/API permissions.
 
-- [ ] **T13 — Project complete working orders and relevant recent fills**
+- [x] **T13 — Project complete working orders and relevant recent fills**
 
 **Depends:** T12. **Repository:** Cairo.
 
 **Deliver:** Standalone and recursive stop/target/OCO order relationships, working/partial/filled/canceled/replaced/rejected/unknown statuses, and deduplicated recent fills. Query enough broker state to include prior-day working protection; report incomplete coverage honestly. No full past-fill/tax-lot ledger.
 
 **Verify:** Fixtures for standalone stops, OCO siblings, prior-day working orders, partial/canceled-after-fill orders, and repeated fill observations. **Commit:** `feat(T13): normalize protection orders and recent fills`.
+
+**Verified (2026-10-04):** Added a read-only Schwab order reader covering the selected account's prior 60 days, recursively subdividing result windows at the broker cap and marking minimum-window truncation incomplete. It preserves standalone and nested OCO/parent IDs, order type, raw status, fill quantity, normalized working/partial/filled/canceled/replaced/rejected/expired/unknown states, and seven days of deduplicated recent executions. Orders are fetched by GET only; no legacy full fill ledger is created. Synthetic tests cover OCO siblings, prior-day protection, statuses, duplicate fills, capped paging, and auth rejection. `npm run test` passed (30 checks) and typecheck passed. No live Schwab requests were made.
 
 - [ ] **T14 — Refresh broker facts with coalesced REST polling**
 

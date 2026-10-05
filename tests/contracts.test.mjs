@@ -49,6 +49,11 @@ test("broker facts and exit tickets reject absent or malformed boundaries", () =
     workingOrders: [], recentFills: [],
   })
   assert.equal(facts.positions[0].symbol, "AAPL")
+  const orderStatuses = ["working", "partially-filled", "cancel-pending", "filled", "canceled", "replaced", "rejected", "expired", "unknown"]
+  for (const status of orderStatuses) {
+    const normalized = parseBrokerFacts({ ...facts, workingOrders: [{ orderId: `o-${status}`, symbol: "AAPL", side: "sell", quantity: 4, filledQuantity: 1, status, orderType: "STOP", parentOrderId: "parent-1", ocoGroupId: "oco-1", brokerStatus: status.toUpperCase() }] })
+    assert.equal(normalized.workingOrders[0].status, status)
+  }
   assert.throws(() => parseBrokerFacts({ accountId: "account-1" }), /arrays are required/)
   assert.throws(() => parseBrokerFacts({ ...facts, positions: [{ ...facts.positions[0], quantity: 0 }] }), /finite number in range/)
 

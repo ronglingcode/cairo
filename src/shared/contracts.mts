@@ -65,10 +65,12 @@ export interface BrokerWorkingOrder {
   symbol: string
   side: "buy" | "sell"
   quantity: number
-  status: "working" | "partially-filled" | "cancel-pending" | "unknown"
+  status: "working" | "partially-filled" | "cancel-pending" | "filled" | "canceled" | "replaced" | "rejected" | "expired" | "unknown"
   orderType: string
   parentOrderId: string | null
   ocoGroupId: string | null
+  filledQuantity?: number
+  brokerStatus?: string
 }
 
 export interface BrokerFill {
@@ -343,10 +345,12 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
       symbol: text(o.symbol, `brokerFacts.workingOrders[${index}].symbol`).toUpperCase(),
       side: enumValue(o.side, ["buy", "sell"] as const, `brokerFacts.workingOrders[${index}].side`),
       quantity: finite(o.quantity, `brokerFacts.workingOrders[${index}].quantity`, Number.MIN_VALUE),
-      status: enumValue(o.status, ["working", "partially-filled", "cancel-pending", "unknown"] as const, `brokerFacts.workingOrders[${index}].status`),
+      status: enumValue(o.status, ["working", "partially-filled", "cancel-pending", "filled", "canceled", "replaced", "rejected", "expired", "unknown"] as const, `brokerFacts.workingOrders[${index}].status`),
       orderType: text(o.orderType, `brokerFacts.workingOrders[${index}].orderType`),
       parentOrderId: nullableText(o.parentOrderId, `brokerFacts.workingOrders[${index}].parentOrderId`),
       ocoGroupId: nullableText(o.ocoGroupId, `brokerFacts.workingOrders[${index}].ocoGroupId`),
+      ...(o.filledQuantity === undefined ? {} : { filledQuantity: finite(o.filledQuantity, `brokerFacts.workingOrders[${index}].filledQuantity`, 0) }),
+      ...(o.brokerStatus === undefined ? {} : { brokerStatus: text(o.brokerStatus, `brokerFacts.workingOrders[${index}].brokerStatus`) }),
     }
   })
   const recentFills = item.recentFills.map((raw, index): BrokerFill => {
