@@ -7,11 +7,27 @@ import type { CairoSnapshot, SourceStatus } from "../shared/contracts.mts"
 import { EngineConnection, type RendererConnectionState } from "../renderer/EngineConnection.mts"
 import { ChartView } from "./ChartView"
 import { PreparationEditor } from "./PreparationEditor"
+import { LiveContext } from "./LiveContext"
 import { CopilotPanel } from "./CopilotPanel"
 
 const EMPTY_STATUS: SourceStatus = { source: "chart", state: "unknown", updatedAt: null, detail: "Engine snapshot unavailable" }
 
 export function App() {
+  const detachedView = window.cairo?.view === "chat"
+  const [liveMode, setLiveMode] = useState(detachedView)
+  const [chatDetached, setChatDetached] = useState(false)
+  const [windowError, setWindowError] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    const unsubscribe = window.cairo?.onChatDetached?.(value => { if (active) setChatDetached(value) })
+    void window.cairo?.chatWindow?.("state").then(value => { if (active) setChatDetached(value) }).catch(() => {})
+    return () => { active = false; unsubscribe?.() }
+  }, [])
+  async function changeChatWindow(action: "detach" | "dock") {
+    setWindowError(null)
+    try { await window.cairo?.chatWindow?.(action) }
+    catch { setWindowError("Chat window could not open. Try again.") }
+  }
   const apiBaseUrl = window.cairo?.apiBaseUrl ?? null
   const [snapshot, setSnapshot] = useState<CairoSnapshot | null>(null)
   const [connectionState, setConnectionState] = useState<RendererConnectionState>(apiBaseUrl ? "connecting" : "disconnected")
@@ -108,22 +124,16 @@ export function App() {
   }).format(new Date()).toUpperCase()
 
   return (
-    <main className="shell">
+    <main className={`shell ${liveMode ? "live-mode" : ""} ${detachedView ? "detached-view" : ""} ${chatDetached && !detachedView ? "chat-detached" : ""}`}>
       <header className="topbar">
         <div className="brand"><span className="brand-mark">C</span><span>Cairo</span></div>
         <div className="environment"><span className={`status-dot ${connectionTone(connectionState)}`} />LOCAL · {apiBaseUrl ? (window.cairo?.config?.provider ?? "fake").toUpperCase() : "PREVIEW"}</div>
-        <button className="profile" aria-label="Local profile">LR</button>
+        {!detachedView && <div className="view-switch" aria-label="Workspace view"><button aria-pressed={!liveMode} onClick={() => setLiveMode(false)}>Planning</button><button aria-pressed={liveMode} onClick={() => setLiveMode(true)}>Live chat</button></div>}
+        {detachedView && <button className="quiet-button dock-button" onClick={() => void changeChatWindow("dock")}>Dock chat</button>}
       </header>
 
       <section className="workspace">
-        <aside className="rail" aria-label="Workspace navigation">
-          <button className="rail-button selected" aria-label="Trading workspace">◫</button>
-          <button className="rail-button" aria-label="Tradebooks">▤</button>
-          <button className="rail-button" aria-label="Settings">⚙</button>
-          <div className="rail-bottom">?</div>
-        </aside>
-
-        <section className="main-column">
+        <section className="main-column" hidden={liveMode}>
           <div className="page-heading">
             <div><p className="eyebrow">{sessionDate}</p><h1>Preparation &amp; trading</h1></div>
             <span className="market-pill"><span className={`status-dot ${connectionTone(connectionState)}`} />Engine {connectionLabel(connectionState)}</span>
@@ -214,8 +224,11 @@ export function App() {
           {snapshot && <ExitReview snapshot={snapshot} />}
         </section>
 
-        <aside className="copilot-column">
-          <div className="copilot-heading"><div><span className="eyebrow">CAIRO COPILOT</span><h2>Trade assistant</h2></div><span className={`online-tag ${connectionTone(copilotStatus.state)}`}>{sourceLabel(copilotStatus.state).toUpperCase()}</span></div>
+        {chatDetached && !detachedView && <aside className="detached-placeholder"><h2>Chat is in its own window</h2><p>Keep planning here, or focus chat for live trading.</p><button className="quiet-button" onClick={() => void changeChatWindow("detach")}>Show chat window</button><button className="quiet-button" onClick={() => void changeChatWindow("dock")}>Dock chat</button>{windowError && <p role="alert">{windowError}</p>}</aside>}
+        <aside className="copilot-column" hidden={chatDetached && !detachedView}>
+          <div className="copilot-heading"><div><span className="eyebrow">CAIRO COPILOT</span><h2>Trade assistant</h2></div><div className="chat-heading-actions"><span className={`online-tag ${connectionTone(copilotStatus.state)}`}>{sourceLabel(copilotStatus.state).toUpperCase()}</span>{!detachedView && window.cairo?.chatWindow && <button className="quiet-button" onClick={() => void changeChatWindow("detach")}>Pop out chat ↗</button>}</div></div>
+          {windowError && <p className="chart-error" role="alert">{windowError}</p>}
+          <LiveContext snapshot={snapshot} connectionState={connectionState} />
           <div className="chat-runtime">
             <label><input type="checkbox" checked={snapshot?.copilotWake.enabled ?? false} disabled={!snapshot || !apiBaseUrl} onChange={event => { void fetch(`${apiBaseUrl}/copilot/events`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify({ enabled: event.target.checked }) }).then(response => { if (!response.ok) setCopilotRestartError("Event updates could not be changed") }).catch(() => setCopilotRestartError("Event updates unavailable")) }} /> AI updates for account changes</label>
             {snapshot?.copilotWake.error && <p role="status">{snapshot.copilotWake.error}</p>}

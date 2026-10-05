@@ -1,4 +1,10 @@
-import { contextBridge } from "electron"
+import { contextBridge, ipcRenderer } from "electron"
+
+function subscribe<T>(channel: string, callback: (value: T) => void) {
+  const listener = (_event: Electron.IpcRendererEvent, value: T) => callback(value)
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.removeListener(channel, listener)
+}
 
 const apiBaseUrl = process.argv.find((argument) => argument.startsWith("--cairo-api-url="))?.slice("--cairo-api-url=".length) ?? null
 const configArgument = process.argv.find((argument) => argument.startsWith("--cairo-public-config="))?.slice("--cairo-public-config=".length)
@@ -12,4 +18,9 @@ contextBridge.exposeInMainWorld("cairo", {
   apiBaseUrl,
   config,
   commandToken,
+  view: process.argv.includes("--cairo-view=chat") ? "chat" : "planning",
+  chatWindow: (action: "detach" | "dock" | "state") => ipcRenderer.invoke("cairo:chat-window", action),
+  onChatDetached: (callback: (detached: boolean) => void) => subscribe("cairo:chat-detached", callback),
+  chatDraft: (draft?: string) => ipcRenderer.invoke("cairo:chat-draft", draft),
+  onChatDraft: (callback: (draft: string) => void) => subscribe("cairo:chat-draft", callback),
 })

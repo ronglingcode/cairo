@@ -12,7 +12,7 @@ import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
 import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
-import { app, BrowserWindow, shell, Notification } from "electron"
+import { app, BrowserWindow, shell, Notification, ipcMain } from "electron"
 import path from "node:path"
 import { CairoEngine } from "../src/engine/CairoEngine.mts"
 import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
@@ -76,21 +76,49 @@ installShutdownHook(app, {
   },
 })
 
-function createWindow(apiBaseUrl: string, config: PublicConfiguration): void {
+let planningWindow: BrowserWindow | null = null
+let chatWindow: BrowserWindow | null = null
+let chatDraft = ""
+const managedWindows = new Set<BrowserWindow>()
+const hiddenWindowTest = process.env.CAIRO_WINDOW_TEST_MODE === "hidden"
+
+function focusWindow(window: BrowserWindow): void {
+  if (hiddenWindowTest) return
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+}
+
+function broadcast(channel: string, value: unknown): void {
+  for (const window of managedWindows) if (!window.isDestroyed()) window.webContents.send(channel, value)
+}
+
+function createWindow(apiBaseUrl: string, config: PublicConfiguration, view: "planning" | "chat" = "planning"): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1440,
-    height: 940,
-    minWidth: 960,
-    minHeight: 640,
-    title: "Cairo",
+    show: !hiddenWindowTest,
+    width: view === "chat" ? 720 : 1440,
+    height: view === "chat" ? 860 : 940,
+    minWidth: view === "chat" ? 420 : 960,
+    minHeight: view === "chat" ? 540 : 640,
+    title: view === "chat" ? "Cairo · Live chat" : "Cairo",
     backgroundColor: "#0b0e12",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-    additionalArguments: [`--cairo-api-url=${apiBaseUrl}`, `--cairo-public-config=${encodeURIComponent(JSON.stringify(config))}`, `--cairo-command-token=${apiServer.commandToken}`],
+      backgroundThrottling: !hiddenWindowTest,
+      additionalArguments: [`--cairo-view=${view}`, `--cairo-api-url=${apiBaseUrl}`, `--cairo-public-config=${encodeURIComponent(JSON.stringify(config))}`, `--cairo-command-token=${apiServer.commandToken}`],
     },
+  })
+  managedWindows.add(window)
+  window.setMenuBarVisibility(false)
+  if (view === "chat") chatWindow = window
+  else planningWindow = window
+  window.on("closed", () => {
+    managedWindows.delete(window)
+    if (view === "chat") { chatWindow = null; broadcast("cairo:chat-detached", false) }
+    else planningWindow = null
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url === "https://www.tradingview.com/") void shell.openExternal(url)
@@ -102,6 +130,7 @@ function createWindow(apiBaseUrl: string, config: PublicConfiguration): void {
   } else {
     void window.loadFile(path.join(__dirname, "../dist/index.html"))
   }
+  return window
 }
 
 app.whenReady().then(async () => {
@@ -141,6 +170,29 @@ app.whenReady().then(async () => {
     return { status: result.status, error: result.error }
   })
   const apiBaseUrl = await apiServer.start()
+  ipcMain.handle("cairo:chat-window", (event, action: unknown) => {
+    if (![...managedWindows].some(window => window.webContents === event.sender)) throw new Error("Unknown Cairo window")
+    if (action === "detach") {
+      if (!chatWindow) createWindow(apiBaseUrl, config, "chat")
+      focusWindow(chatWindow!)
+      broadcast("cairo:chat-detached", true)
+    } else if (action === "dock") {
+      if (!planningWindow) createWindow(apiBaseUrl, config)
+      focusWindow(planningWindow!)
+      chatWindow?.close()
+    }
+    return Boolean(chatWindow)
+  })
+  ipcMain.handle("cairo:chat-draft", (event, draft: unknown) => {
+    if (![...managedWindows].some(window => window.webContents === event.sender)) throw new Error("Unknown Cairo window")
+    if (typeof draft === "string" && draft.length <= 8000) {
+      chatDraft = draft
+      for (const window of managedWindows) {
+        if (!window.isDestroyed() && window.webContents !== event.sender) window.webContents.send("cairo:chat-draft", chatDraft)
+      }
+    }
+    return chatDraft
+  })
   engine.start()
   brokerCoordinator.start()
   createWindow(apiBaseUrl, config)

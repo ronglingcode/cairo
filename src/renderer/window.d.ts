@@ -8,6 +8,11 @@ declare global {
       apiBaseUrl: string | null
       commandToken: string | null
       config: PublicConfiguration | null
+      view?: "planning" | "chat"
+      chatWindow?: (action: "detach" | "dock" | "state") => Promise<boolean>
+      onChatDetached?: (callback: (detached: boolean) => void) => () => void
+      chatDraft?: (draft?: string) => Promise<string>
+      onChatDraft?: (callback: (draft: string) => void) => () => void
     }
   }
 }

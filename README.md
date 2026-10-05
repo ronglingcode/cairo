@@ -13,6 +13,18 @@ model by default. Preparation notes, one-minute chart snapshots and streaming ch
 are implemented. See [model/chart setup and verification](docs/chatgpt/T32-VERIFICATION.md).
 For a synthetic browser demo, run `npm run build` then `npm run preview:fake`.
 
+Use **Planning** for notes, charts, and tradebooks alongside a wider chat panel.
+**Live chat** gives the conversation the full workspace. **Pop out chat ↗** opens
+a separate resizable desktop window; **Dock chat** or closing that window restores
+the embedded conversation. Both views share the engine, conversation, and unsent
+message draft. The chat includes source status, position summaries, and an expandable
+**Trading context** drawer with protection, management, and exact exit review controls.
+Enter sends a message; Shift+Enter adds a line break.
+
+After building, run `node_modules/.bin/electron scripts/verify-chat-window.cjs`
+for the native window lifecycle and layout check with a disposable fake profile.
+Verification windows stay hidden and do not take focus.
+
 The strategy selector reads the top-level `.md` files in
 `%USERPROFILE%\code\Backtest\tradebooks`, excluding `index.md` and subfolders.
 Set `CAIRO_TRADEBOOK_PATH` before launching to use another directory. Restart
