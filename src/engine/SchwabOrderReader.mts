@@ -147,7 +147,7 @@ function visitOrder(
         quantity,
         filledQuantity,
         status,
-        brokerStatus,
+        brokerStatus, instruction, session: typeof raw.session === "string" ? raw.session : "UNKNOWN", duration: typeof raw.duration === "string" ? raw.duration : "UNKNOWN", strategy: ownStrategy, legCount: legs.length,
         positionEffect: typeof leg.positionEffect === "string" ? leg.positionEffect : "UNKNOWN",
         orderType: typeof raw.orderType === "string" ? raw.orderType : "UNKNOWN",
         parentOrderId: parentId,
@@ -204,3 +204,4 @@ function isWorking(status: BrokerWorkingOrder["status"]): boolean { return ["wor
 function optionalPositive(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null }
 function optionalNonnegative(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null }
 function safeMessage(error: unknown): string { return (error instanceof Error ? error.message : "Schwab order read failed").replace(/Bearer\s+\S+/gi, "Bearer [redacted]").slice(0, 240) }
+

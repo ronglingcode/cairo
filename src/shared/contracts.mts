@@ -76,6 +76,11 @@ export interface BrokerWorkingOrder {
   filledQuantity?: number
   brokerStatus?: string
   positionEffect?: string
+  instruction?: string
+  session?: string
+  duration?: string
+  strategy?: string
+  legCount?: number
 }
 
 export interface BrokerFill {
@@ -414,6 +419,8 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
       ...(o.filledQuantity === undefined ? {} : { filledQuantity: finite(o.filledQuantity, `brokerFacts.workingOrders[${index}].filledQuantity`, 0) }),
       ...(o.brokerStatus === undefined ? {} : { brokerStatus: text(o.brokerStatus, `brokerFacts.workingOrders[${index}].brokerStatus`) }),
       ...(o.positionEffect === undefined ? {} : { positionEffect: text(o.positionEffect, `brokerFacts.workingOrders[${index}].positionEffect`) }),
+      ...Object.fromEntries(["instruction", "session", "duration", "strategy"].filter(key => o[key] !== undefined).map(key => [key, text(o[key], `brokerFacts.workingOrders[${index}].${key}`)])),
+      ...(o.legCount === undefined ? {} : { legCount: finite(o.legCount, "order.legCount", 1) }),
     }
   })
   const recentFills = item.recentFills.map((raw, index): BrokerFill => {
@@ -531,6 +538,7 @@ export class FakeObservationSource implements ObservationPort {
   }
   get subscriberCount(): number { return this.handlers.size }
 }
+
 
 
 

@@ -42,3 +42,6 @@ Opt-in account/recommendation updates coalesce into one latest bounded summary, 
 
 ## T36
 Pure SINGLE equity market/limit/stop/stop-limit close payloads derive SELL or BUY_TO_COVER from current holdings. Only whole shares, NORMAL session and DAY duration; prices format to cents while sub-cent input requires clarification. No entry factory or network writer. Long/short/price/invalid-shape fixtures and typecheck pass. Live broker submission remains for later approved-writer work.
+
+## T37
+Authoritative exit validation binds account, position, symbol, side, current fact revision, fresh complete reads, available whole shares and exact rule evidence. Explicit trader closes use broker facts without live candles. Working protection blocks additional closes; only exact known standalone closing NORMAL/DAY protection qualifies for cancel/replace staging. Unknown/OCO/entry topology stays manual. Generic permission/approval fields are rejected. Three eligibility fixtures and typecheck pass.
