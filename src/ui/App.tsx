@@ -135,7 +135,7 @@ export function App() {
             <Source status={chartStatus} name="Chart data" />
             <Source status={copilotStatus} name="Cairo AI" />
           </div>
-          {window.cairo?.config?.setupRequired && <div className="setup-notice" role="status">Review local source settings in {window.cairo.config.configPath}. A Schwab account is optional for preparation and chart discussion.</div>}
+          {window.cairo?.config?.setupRequired && <div className="setup-notice" role="status">{window.cairo.config.secretsError && `${window.cairo.config.secretsError} `}Review local source settings in {window.cairo.config.configPath}. A Schwab account is optional for preparation and chart discussion.</div>}
 
           <PreparationEditor apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} preparation={snapshot?.preparation ?? null} loadError={snapshot?.preparationError ?? null} loaded={snapshot !== null} />
 

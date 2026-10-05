@@ -15,8 +15,10 @@ one-minute chart. Ask Cairo about your saved preparation, chart context and
 positions. Chart bars retain fetch/latest-bar timestamps and failure/stale labels.
 No Massive WebSocket, continuous quote feed or live ORB is created.
 
-Configuration is `config.json` in Electron's user-data directory (normally
-`%APPDATA%/cairo`). `CAIRO_USER_DATA` can select a separate private profile. Change
+Configuration is `config.json` under `%USERPROFILE%/cairo` (normally
+`C:/Users/lingr/cairo`), following Bookmap's home-folder convention. On first
+startup, Cairo copies the previous `%APPDATA%/cairo` profile if the new folder
+does not exist, preserving the old files. `CAIRO_USER_DATA` can select a separate private profile. Change
 configuration and restart the app. Example fields:
 
 ```json
@@ -25,6 +27,7 @@ configuration and restart the app. Example fields:
   "model": "",
   "selectedAccountId": "",
   "schwabTokenFile": "C:/Users/YOU/bmtrader/secrets.json",
+  "secretsFile": "C:/Users/YOU/code/secrets/storeSecrets.js",
   "bookmapEndpoint": "ws://127.0.0.1:8765",
   "chartSymbol": "SPY",
   "chartDate": "2026-10-05",
@@ -33,12 +36,46 @@ configuration and restart the app. Example fields:
 ```
 
 For actual OpenAI chat, set provider to `openai`, supply your exact available
-OpenAI model ID in `model`, and provide `CAIRO_OPENAI_API_KEY` in Cairo's launch
-environment. `CAIRO_MASSIVE_API_KEY` supplies REST chart authorization. Keys belong
-in the local environment, not these documents, renderer, model context or source
-control. Missing AI configuration leaves notes/chart/broker monitoring usable.
+OpenAI model ID in `model`, and set `secretsFile` to your existing `storeSecrets.js`
+path. Keep keys in that local file, not these documents, renderer, model context
+or source control. Missing AI configuration leaves notes/chart/broker monitoring usable.
 Restart AI explicitly after a runtime failure. Automatic AI event updates are
 opt-in and pause after cancellation or uncertain delivery.
+
+Set `secretsFile` to the absolute path of your existing
+`storeSecrets.js` provisioning file. Cairo reads `openai.apiKey`, `massive.apiKey`,
+and `schwab.accountId` from its `localStorage.setItem` sections on startup, without
+modifying that file or copying keys into Cairo configuration. The referenced
+OpenAI key takes precedence over the environment. `CAIRO_MASSIVE_API_KEY` can
+override the chart key; an explicit `selectedAccountId` takes precedence over the
+referenced account. Restart Cairo after changing the provisioning file.
+Schwab's current token and expiry still come from `schwabTokenFile`, maintained
+by Bookmap; provisioning access/refresh tokens are not used or refreshed by Cairo.
+
+### OpenAI development launcher
+
+After installing dependencies with Node 24 and `npm ci`, run from the repository:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-openai.ps1
+```
+
+The launcher uses your installed Node (22.18 or newer), falling back to Codex's
+bundled Node runtime when needed. `-NodeDirectory` can select another runtime.
+It uses `openai.apiKey` from the configured `secretsFile` without prompting for
+a key. On a new computer, pass the file path once:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-openai.ps1 -SecretsFile "D:\your-folder\storeSecrets.js"
+```
+
+Only the path is saved; missing files or keys produce a setup message.
+It preserves existing configuration fields, backs up existing `config.json` to
+`config.json.before-openai.bak`, selects `openai` and starts the desktop app.
+Close Cairo before changing its settings. The default model is `gpt-4.1`; use
+`-Model YOUR_MODEL_ID` to select another OpenAI model supporting Chat Completions
+and function calling. Account access and a successful live request still need
+verification with your own key. OpenRouter is not currently supported.
 
 ## Bookmap companion and broker ownership
 

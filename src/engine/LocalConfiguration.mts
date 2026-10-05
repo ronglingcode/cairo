@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { readReferencedSecrets, type ReferencedSecrets } from "./ReferencedSecrets.mts"
 
 export type ProviderSelection = "openai" | "fake"
 
@@ -7,6 +8,7 @@ export interface CairoConfig {
   selectedAccountId: string
   bookmapEndpoint: string
   schwabTokenFile: string
+  secretsFile: string
   chartSymbol: string
   chartDate: string
   brokerPollIntervalMs: number
@@ -19,6 +21,8 @@ export interface PublicConfiguration {
   selectedAccountId: string | null
   bookmapEndpoint: string
   schwabTokenFile: string
+  secretsFile: string
+  secretsError: string | null
   chartSymbol: string
   chartDate: string
   brokerPollIntervalMs: number
@@ -31,6 +35,7 @@ const DEFAULTS: CairoConfig = {
   selectedAccountId: "",
   bookmapEndpoint: "ws://127.0.0.1:8765",
   schwabTokenFile: path.join(process.env.USERPROFILE ?? process.env.HOME ?? ".", "bmtrader", "secrets.json"),
+  secretsFile: "",
   chartSymbol: "SPY",
   chartDate: new Date().toISOString().slice(0, 10),
   brokerPollIntervalMs: 30_000,
@@ -41,6 +46,8 @@ const DEFAULTS: CairoConfig = {
 export class LocalConfiguration {
   readonly configPath: string
   private current: CairoConfig = { ...DEFAULTS }
+  private secrets: ReferencedSecrets = {}
+  private secretsError: string | null = null
 
   constructor(userDataPath: string) {
     this.configPath = path.join(userDataPath, "config.json")
@@ -54,35 +61,47 @@ export class LocalConfiguration {
       if (!isMissingFile(error)) throw error
       await this.save(this.current)
     }
+    await this.loadReferencedSecrets()
     return this.publicView()
   }
 
-  get values(): Readonly<CairoConfig> { return { ...this.current } }
+  get values(): Readonly<CairoConfig> { return { ...this.current, selectedAccountId: this.current.selectedAccountId || this.secrets.schwab?.accountId || "" } }
 
-  get massiveApiKey(): string | null { return process.env.CAIRO_MASSIVE_API_KEY?.trim() || null }
-  get openAiApiKey(): string | null { return process.env.CAIRO_OPENAI_API_KEY?.trim() || null }
+  get massiveApiKey(): string | null { return process.env.CAIRO_MASSIVE_API_KEY?.trim() || this.secrets.massive?.apiKey || null }
+  get openAiApiKey(): string | null { return this.current.secretsFile ? this.secrets.openai?.apiKey || null : process.env.CAIRO_OPENAI_API_KEY?.trim() || null }
 
   async save(next: CairoConfig): Promise<PublicConfiguration> {
     const valid = validateConfig(next)
     await mkdir(path.dirname(this.configPath), { recursive: true })
     await writeFile(this.configPath, `${JSON.stringify(valid, null, 2)}\n`, { encoding: "utf8", mode: 0o600 })
     this.current = valid
+    await this.loadReferencedSecrets()
     return this.publicView()
   }
 
   private publicView(): PublicConfiguration {
     return {
       configPath: this.configPath,
-      selectedAccountId: this.current.selectedAccountId || null,
+      selectedAccountId: this.values.selectedAccountId || null,
       bookmapEndpoint: this.current.bookmapEndpoint,
       schwabTokenFile: this.current.schwabTokenFile,
+      secretsFile: this.current.secretsFile,
+      secretsError: this.secretsError,
       chartSymbol: this.current.chartSymbol,
       chartDate: this.current.chartDate,
       brokerPollIntervalMs: this.current.brokerPollIntervalMs,
       provider: this.current.provider,
       model: this.current.model,
-      setupRequired: !this.current.selectedAccountId || (this.current.provider === "openai" && !this.current.model),
+      setupRequired: !this.values.selectedAccountId || (this.current.provider === "openai" && !this.current.model) || Boolean(this.secretsError),
     }
+  }
+
+  private async loadReferencedSecrets(): Promise<void> {
+    this.secrets = {}
+    this.secretsError = null
+    if (!this.current.secretsFile) return
+    try { this.secrets = await readReferencedSecrets(this.current.secretsFile) }
+    catch { this.secretsError = "Cannot read secretsFile; check its path and provisioning format, then restart Cairo." }
   }
 }
 
@@ -93,6 +112,7 @@ function validateConfig(input: unknown): CairoConfig {
     selectedAccountId: optionalString(value.selectedAccountId, DEFAULTS.selectedAccountId),
     bookmapEndpoint: optionalString(value.bookmapEndpoint, DEFAULTS.bookmapEndpoint),
     schwabTokenFile: optionalString(value.schwabTokenFile, DEFAULTS.schwabTokenFile),
+    secretsFile: optionalString(value.secretsFile, DEFAULTS.secretsFile),
     chartSymbol: optionalString(value.chartSymbol, DEFAULTS.chartSymbol).toUpperCase(),
     chartDate: optionalString(value.chartDate, DEFAULTS.chartDate),
     brokerPollIntervalMs: value.brokerPollIntervalMs === undefined ? DEFAULTS.brokerPollIntervalMs : Number(value.brokerPollIntervalMs),
@@ -104,6 +124,7 @@ function validateConfig(input: unknown): CairoConfig {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.chartDate) || !Number.isFinite(Date.parse(`${result.chartDate}T00:00:00Z`))) throw new Error("chartDate must use YYYY-MM-DD")
   if (!Number.isFinite(result.brokerPollIntervalMs) || result.brokerPollIntervalMs < 5_000 || result.brokerPollIntervalMs > 300_000) throw new Error("brokerPollIntervalMs must be between 5000 and 300000")
   if (result.provider !== "openai" && result.provider !== "fake") throw new Error("provider must be openai or fake")
+  if (result.secretsFile && !path.isAbsolute(result.secretsFile)) throw new Error("secretsFile must be an absolute path")
   return result
 }
 

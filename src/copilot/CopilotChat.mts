@@ -56,7 +56,7 @@ export class CopilotChat {
   }
   private async connectOwned(): Promise<void> {
     await this.stop()
-    if (!this.options.configured()) { this.fail("Choose a model and set CAIRO_OPENAI_API_KEY, then restart Cairo."); return }
+    if (!this.options.configured()) { this.fail("Choose a model and configure secretsFile pointing to storeSecrets.js with openai.apiKey, then restart Cairo."); return }
     const client = this.options.client()
     if (!client) { this.fail("AI runtime is unavailable. Restart AI, then reconnect chat."); return }
     this.client = client
