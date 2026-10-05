@@ -1,6 +1,6 @@
 # Cairo planning package
 
-Updated October 4, 2026 after the request to simplify the MVP and prioritize live trading. Planning only; no application or live integration has been implemented.
+Updated October 4, 2026. **T01–T15 are implemented and checked off (15/50).** Work is paused before T16 for the user's Bookmap-phase review. [HANDOFF.md](HANDOFF.md) records local completion commits and resume instructions; task verification and limitations are in [CODING-PLAN.md](CODING-PLAN.md). Live integration and the complete packaged MVP remain later work.
 
 The target is a personal Windows US-stocks desktop for **live signal detection and open-trade management**. Use TypeScript, Electron, React/Vite, Lightweight Charts, Massive, Schwab, existing Bookmap observations, and collaboratively authored tradebooks.
 
@@ -29,7 +29,7 @@ The MVP execution boundary is confirmed: **observer for entries, and up to assis
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) | Proposed implementation checkpoints; unresolved choices must be resolved before their work |
 | [HANDOFF.md](HANDOFF.md) | Short prompt to start/resume the task checklist |
 
-The selected OpenCode plan proposes a bundled local server sidecar, with exact Windows packaging to prove. OpenCode may retain its own runtime/session storage internally; **no Cairo-owned SQLite** does not promise an entirely database-free third-party runtime.
+T01 verifies the pinned OpenCode 2.0.22 Windows server with a bundled plugin and explicit mock permission gate. Application-side lifecycle and complete Windows packaging remain T29/T48. OpenCode may retain its own runtime/session storage internally; **no Cairo-owned SQLite** does not promise an entirely database-free third-party runtime.
 
 ## Background research and explanations
 
@@ -45,4 +45,4 @@ These preserve earlier research. Their SQLite, full-history, replay, journal/res
 
 Important findings remain: the Bookmap detector currently keeps serializable signals in memory and still needs an observation export/stream; Cairo leaves its heatmap external. ViteApp supplies reusable Massive/Schwab examples. Personal management semantics and the separate 1-minute ORB reference must survive simplification. The engine never waits for model inference.
 
-No secrets were inspected or paid inference/broker calls made. Planning through the scope decisions was committed locally as `8f7a2d7` at the user's request. The coding handoff is committed separately. No application implementation or remote push is part of this work.
+Planning through the scope decisions was committed locally as `8f7a2d7`. Implementation through T15 and the T01/T02 retries has separate local commits, recorded in HANDOFF.md. The latest OpenCode probe uses synthetic local model responses and no credentials or broker calls. Nothing was pushed remotely.
