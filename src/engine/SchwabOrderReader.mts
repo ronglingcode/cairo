@@ -148,6 +148,7 @@ function visitOrder(
         filledQuantity,
         status,
         brokerStatus, instruction, session: typeof raw.session === "string" ? raw.session : "UNKNOWN", duration: typeof raw.duration === "string" ? raw.duration : "UNKNOWN", strategy: ownStrategy, legCount: legs.length,
+        limitPrice: optionalPositive(raw.price), stopPrice: optionalPositive(raw.stopPrice),
         positionEffect: typeof leg.positionEffect === "string" ? leg.positionEffect : "UNKNOWN",
         orderType: typeof raw.orderType === "string" ? raw.orderType : "UNKNOWN",
         parentOrderId: parentId,

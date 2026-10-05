@@ -59,7 +59,7 @@ export class PositionGuidance {
       const position = this.currentPosition(attachment.accountId, attachment.positionId, factsRevision)
       if (!Number.isSafeInteger(initialQuantity) || initialQuantity < position.quantity) throw new Error("Initial quantity is invalid")
       const checked = validateManagementPolicy(attachment.interpretation.management, attachment.interpretation, attachment.markdown!)
-      this.checkAllocations(checked.policy.allocations, position.quantity)
+      this.checkAllocations(attachment.remainingAllocations ? Object.values(attachment.remainingAllocations).map(shares => ({ shares, remainder: false })) : checked.policy.allocations, position.quantity)
       return { ...attachment, state: "active", baseline: this.baseline(position), initialQuantity, revision: randomUUID(), pauseReason: null, reviewedAt: new Date(this.now()).toISOString() }
     })
   }

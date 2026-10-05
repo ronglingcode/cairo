@@ -34,6 +34,7 @@ export function ManagementPanel({ snapshot }: { snapshot: CairoSnapshot }) {
     {!snapshot.attachments.length && <div className="empty-inline">Review a guideline interpretation before attaching it to a position.</div>}
     {snapshot.attachments.map(attachment => <article className="position-item" key={attachment.id}><strong>{attachment.symbol} · {attachment.state}</strong><p>{attachment.pauseReason}</p>
       <details><summary>Frozen original guidance</summary><pre className="narrative-text">{attachment.markdown}</pre></details>
+      {attachment.remainingAllocations && <p>Remaining allocations: {Object.entries(attachment.remainingAllocations).map(([name, quantity]) => `${name}: ${quantity} shares`).join(" · ")}</p>}
       {snapshot.management.filter(rule => rule.attachmentId === attachment.id).map(rule => {
         const policyRule = attachment.interpretation.management?.rules.find(item => item.id === rule.ruleId)
         return <div className="clause-readback" key={rule.ruleId}><blockquote>{rule.sourceText}</blockquote><strong>{rule.status} · condition {rule.result.state}{rule.quantity ? ` · ${rule.quantity} shares` : ""}</strong>

@@ -60,3 +60,6 @@ Direct Schwab close writer requires exact consumed engine approval, fresh read-o
 
 ## T42
 Exact standalone closing protection DELETE/PUT use the same current approval/checkpoint/queue path. Cancellation acknowledgement is not final cancellation. Replacement records the returned broker identity; uncertain outcomes retain blocking state without resend. OCO/entry/unknown relationships stay manual. Five synthetic writer/protection checks pass; no live mutations.
+
+## T43
+Only actual matching approved fills reconcile remaining shares/identified allocations. Unknown outside changes retain manual review. Initial-share fractions keep their initial basis while allocation availability caps them. Excess standalone protection offers a separately staged replacement; OCO stays manual. A previously reviewed canceled stop can supply a separately approved follow-up price. Pending/unknown transitions block subsequent proposals. Seven synthetic allocation/protection/policy checks and typecheck pass.

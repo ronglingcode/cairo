@@ -63,6 +63,7 @@ export class CairoEngine {
       management: [],
       recommendations: [],
       brokerAttempts: [], recoveryError: null, executionReady: false,
+      protectionReadback: [],
       managementTimeline: [],
       guidanceProposals: [],
       noteProposals: [],

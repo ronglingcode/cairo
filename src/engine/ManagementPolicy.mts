@@ -115,7 +115,7 @@ export function ruleSemanticKey(rule: ManagementRule, interpretation: TradebookI
   return createHash("sha256").update(JSON.stringify({ source: source.trim().toLowerCase().replace(/\s+/g, " "), action: rule.action })).digest("hex")
 }
 export function resolveRuleQuantity(quantity: QuantityPolicy, initial: number, remaining: number, allocation?: number): number {
-  const base = quantity.allocationId ? allocation : quantity.basis === "initial" ? initial : remaining
+  const base = quantity.basis === "initial" ? initial : quantity.allocationId ? allocation : remaining
   if (base === undefined || !Number.isSafeInteger(base) || base <= 0 || !Number.isSafeInteger(remaining) || remaining <= 0) fail("Whole-share quantity basis is unavailable")
   const result = quantity.basis === "all" ? base : quantity.basis === "shares" ? quantity.value! : Math.floor(base * quantity.value!)
   if (!Number.isSafeInteger(result) || result <= 0 || result > remaining || (allocation !== undefined && result > allocation)) fail("Rule quantity is zero, excessive, or invalid")

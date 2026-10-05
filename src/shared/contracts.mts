@@ -81,6 +81,8 @@ export interface BrokerWorkingOrder {
   duration?: string
   strategy?: string
   legCount?: number
+  limitPrice?: number | null
+  stopPrice?: number | null
 }
 
 export interface BrokerFill {
@@ -152,6 +154,7 @@ export interface PositionAttachment {
   baseline?: { quantity: number; averagePrice: number; side: "long" | "short"; fillIds: string[] }
   pauseReason?: string | null
   reviewedAt?: string
+  remainingAllocations?: Record<string, number>
 }
 
 export type ExitAction = "close" | "cancel-protection" | "replace-protection"
@@ -218,6 +221,7 @@ export interface CopilotChat {
 }
 
 export interface CairoSnapshot {
+  protectionReadback: import("../engine/ProtectionCoordinator.mts").ProtectionReadback[]
   brokerAttempts: import("../engine/RecoveryStore.mts").BrokerAttempt[]
   recoveryError: string | null
   executionReady: boolean
@@ -436,6 +440,7 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
       ...(o.positionEffect === undefined ? {} : { positionEffect: text(o.positionEffect, `brokerFacts.workingOrders[${index}].positionEffect`) }),
       ...Object.fromEntries(["instruction", "session", "duration", "strategy"].filter(key => o[key] !== undefined).map(key => [key, text(o[key], `brokerFacts.workingOrders[${index}].${key}`)])),
       ...(o.legCount === undefined ? {} : { legCount: finite(o.legCount, "order.legCount", 1) }),
+      ...Object.fromEntries(["limitPrice", "stopPrice"].filter(key => o[key] !== undefined).map(key => [key, o[key] === null ? null : finite(o[key], `order.${key}`, Number.MIN_VALUE)])),
     }
   })
   const recentFills = item.recentFills.map((raw, index): BrokerFill => {

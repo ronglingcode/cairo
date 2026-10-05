@@ -103,7 +103,7 @@ export class ManagementMonitor {
         if (result.actionEligible && attachment.state === "active") {
           try {
             const position = this.guidance.currentPosition(attachment.accountId, attachment.positionId, snapshot.brokerFactsRevision)
-            const allocation = rule.action.quantity.allocationId ? policy.allocations.find(value => value.id === rule.action.quantity.allocationId)?.shares : undefined
+            const allocation = rule.action.quantity.allocationId ? attachment.remainingAllocations?.[rule.action.quantity.allocationId] ?? policy.allocations.find(value => value.id === rule.action.quantity.allocationId)?.shares : undefined
             quantity = resolveRuleQuantity(rule.action.quantity, attachment.initialQuantity!, position.quantity, allocation)
           } catch (error) { result = { state: "invalid", actionEligible: false, evidence: [{ state: "invalid", source: "broker", reason: error instanceof Error ? error.message : "Quantity unavailable", sourceAt: snapshot.brokerFacts?.asOf ?? null }] } }
         }
