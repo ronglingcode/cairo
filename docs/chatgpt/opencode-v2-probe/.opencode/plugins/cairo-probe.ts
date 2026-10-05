@@ -13,7 +13,7 @@ export default Plugin.define({
           properties: {},
           additionalProperties: false,
         },
-        options: { namespace: "cairo" },
+        options: { namespace: "cairo", codemode: false, permission: "cairo_read" },
         execute: async () => ({ content: "cairo-fake-read-ok" }),
       })
 
@@ -25,8 +25,25 @@ export default Plugin.define({
           properties: {},
           additionalProperties: false,
         },
-        options: { namespace: "cairo", permission: "cairo_trade" },
-        execute: async () => ({ content: "permission-granted-once" }),
+        options: { namespace: "cairo", codemode: false, permission: "cairo_trade" },
+        execute: async (_input, context) => {
+          // Mock Cairo backend: explicitly ask through the real OpenCode client.
+          // Tool registration metadata alone is not order approval.
+          const approvalURL = process.env.CAIRO_PROBE_APPROVAL_URL
+          if (!approvalURL || !approvalURL.startsWith("http://127.0.0.1:")) {
+            throw new Error("The isolated probe approval bridge is unavailable")
+          }
+          const response = await fetch(approvalURL, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sessionID: context.sessionID, messageID: context.messageID, id: context.id }),
+            signal: context.signal,
+          })
+          if (!response.ok || (await response.json()).approved !== true) {
+            throw new Error("Probe permission rejected; fake action did not execute")
+          }
+          return { content: "permission-granted-once" }
+        },
       })
     })
 

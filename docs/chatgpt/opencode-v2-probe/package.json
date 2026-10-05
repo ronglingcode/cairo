@@ -2,12 +2,18 @@
   "name": "cairo-opencode-v2-probe",
   "private": true,
   "type": "module",
+  "scripts": {
+    "probe": "node server-probe.mjs",
+    "probe:manual": "node server-probe.mjs --manual"
+  },
   "devDependencies": {
     "@opencode/client": "2.0.22",
-    "@opencode/plugin": "2.0.22"
+    "@opencode/plugin": "2.0.22",
+    "esbuild": "0.28.2"
   },
   "allowScripts": {
-    "@opencode/cli": true
+    "@opencode/cli": true,
+    "esbuild@0.28.2": true
   },
   "dependencies": {
     "@opencode/cli": "2.0.22"

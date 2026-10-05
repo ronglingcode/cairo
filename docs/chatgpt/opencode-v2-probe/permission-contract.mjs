@@ -12,10 +12,10 @@ const permission = {
 const request = {
   sessionID: "fake-session",
   requestID: "fake-request",
-  reply: "once",
+  decision: "once",
 }
 await permission.reply(request)
 assert.deepEqual(replies, [request])
-assert.equal(replies[0].reply, "once")
-assert.notEqual(replies[0].reply, "always")
+assert.equal(replies[0].decision, "once")
+assert.notEqual(replies[0].decision, "always")
 console.log("permission-contract-ok: exact fake request accepted once; no broker path exists")

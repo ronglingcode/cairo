@@ -31,5 +31,5 @@ assert.deepEqual(await read.execute({}, {}), { content: "cairo-fake-read-ok" })
 
 const action = registered.find((item) => item.id === "cairo_request_exit")
 assert.ok(action, "V2 plugin registers the inert permission probe action")
-assert.deepEqual(await action.execute({}, {}), { content: "permission-granted-once" })
-console.log("plugin-contract-ok: OpenCode 2.0.22 Plugin API setup registered and ran two fake tools")
+assert.equal(action.options.codemode, false)
+console.log("plugin-contract-ok: fixture registered two direct tools and ran the fake read; use npm run probe for real server/permission verification")
