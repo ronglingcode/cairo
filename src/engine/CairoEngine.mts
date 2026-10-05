@@ -4,6 +4,8 @@ const MAX_POSITIONS = 500
 const MAX_TRADEBOOKS = 100
 const MAX_ATTACHMENTS = 500
 const MAX_TICKETS = 200
+const MAX_BROKER_ORDERS = 1_000
+const MAX_BROKER_FILLS = 1_000
 const MAX_EVENTS = 128
 
 export type EngineEventListener = (event: EngineEvent) => void
@@ -43,9 +45,12 @@ export class CairoEngine {
     this.snapshot = {
       runtimeInstanceId: this.runtimeInstanceId,
       sequence: 0,
+      brokerFactsRevision: 0,
+      brokerRefreshSequence: 0,
       chart: null,
       bookmap: this.waiting("bookmap", "Observation source has not started"),
       broker: this.waiting("broker", "Broker source has not started"),
+      brokerFacts: null,
       copilot: this.waiting("copilot", "Copilot has not started"),
       positions: [],
       tradebooks: [],
@@ -77,6 +82,14 @@ export class CairoEngine {
     const cloned = structuredClone(update)
     const changes = {
       ...cloned,
+      ...(cloned.brokerFacts === undefined || cloned.brokerFacts === null ? {} : {
+        brokerFacts: {
+          ...cloned.brokerFacts,
+          positions: cloned.brokerFacts.positions.slice(-MAX_POSITIONS),
+          workingOrders: cloned.brokerFacts.workingOrders.slice(-MAX_BROKER_ORDERS),
+          recentFills: cloned.brokerFacts.recentFills.slice(-MAX_BROKER_FILLS),
+        },
+      }),
       ...(cloned.positions === undefined ? {} : { positions: cloned.positions.slice(-MAX_POSITIONS) }),
       ...(cloned.tradebooks === undefined ? {} : { tradebooks: cloned.tradebooks.slice(-MAX_TRADEBOOKS) }),
       ...(cloned.attachments === undefined ? {} : { attachments: cloned.attachments.slice(-MAX_ATTACHMENTS) }),

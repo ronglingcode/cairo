@@ -61,6 +61,24 @@ test("chart refresh requires the preload capability and publishes timestamped sn
   assert.equal(engine.getSnapshot().sequence, 1)
 })
 
+test("manual broker refresh requires the preload capability", async (t) => {
+  const engine = new CairoEngine()
+  const { api, baseUrl } = await startApi(engine)
+  t.after(() => api.stop())
+  let reads = 0
+  const status = { source: "broker", state: "connected", updatedAt: "2026-10-04T16:00:00Z", detail: "synthetic" }
+  api.setBrokerRefresher(async () => {
+    reads++
+    engine.updateSnapshot({ broker: status, brokerRefreshSequence: 1 })
+    return { status, error: null }
+  })
+  assert.equal((await fetch(`${baseUrl}/broker/refresh`, { method: "POST" })).status, 403)
+  assert.equal(reads, 0)
+  const response = await fetch(`${baseUrl}/broker/refresh`, { method: "POST", headers: { Authorization: `Bearer ${api.commandToken}` } })
+  assert.equal(response.status, 200)
+  assert.equal(engine.getSnapshot().brokerRefreshSequence, 1)
+})
+
 test("snapshot cursor catches an update in the snapshot-subscription gap exactly once", async (t) => {
   const engine = new CairoEngine()
   const { api, baseUrl } = await startApi(engine)

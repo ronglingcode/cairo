@@ -30,9 +30,12 @@ function validSnapshot(value: unknown): value is CairoSnapshot {
   const item = value as Record<string, unknown>
   return typeof item.runtimeInstanceId === "string" && item.runtimeInstanceId.length > 0 &&
     typeof item.sequence === "number" && Number.isSafeInteger(item.sequence) && item.sequence >= 0 &&
+    typeof item.brokerFactsRevision === "number" && Number.isSafeInteger(item.brokerFactsRevision) && item.brokerFactsRevision >= 0 &&
+    typeof item.brokerRefreshSequence === "number" && Number.isSafeInteger(item.brokerRefreshSequence) && item.brokerRefreshSequence >= 0 &&
     Array.isArray(item.positions) && Array.isArray(item.tradebooks) && Array.isArray(item.attachments) && Array.isArray(item.tickets) &&
     item.bookmap !== null && typeof item.bookmap === "object" &&
     item.broker !== null && typeof item.broker === "object" &&
+    (item.brokerFacts === null || (item.brokerFacts !== null && typeof item.brokerFacts === "object")) &&
     item.copilot !== null && typeof item.copilot === "object"
 }
 

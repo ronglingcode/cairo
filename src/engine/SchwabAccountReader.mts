@@ -35,8 +35,8 @@ export class SchwabAccountReader {
         ? ((accountResponse as Record<string, unknown>).securitiesAccount ?? accountResponse) as Record<string, unknown>
         : null
       if (!account || typeof account !== "object") throw new Error("Schwab account response has no securitiesAccount")
-      const positions = normalizePositions(account.positions, hashValue)
       const updatedAt = new Date(this.now()).toISOString()
+      const positions = normalizePositions(account.positions, hashValue, updatedAt)
       const source: SourceStatus = { source: "broker", state: "connected", updatedAt, detail: "Selected Schwab account read; order coverage pending" }
       const facts = parseBrokerFacts({
           accountId: authorization.accountId,
@@ -77,7 +77,7 @@ export class SchwabAccountReader {
 
 class SchwabUnauthorizedError extends Error { constructor() { super("Schwab rejected the Bookmap token") } }
 
-function normalizePositions(input: unknown, accountHash: string): BrokerPosition[] {
+function normalizePositions(input: unknown, accountHash: string, markUpdatedAt: string): BrokerPosition[] {
   if (input === undefined || input === null) return []
   if (!Array.isArray(input)) throw new Error("Schwab account positions are invalid")
   const result: BrokerPosition[] = []
@@ -106,6 +106,8 @@ function normalizePositions(input: unknown, accountHash: string): BrokerPosition
       quantity,
       averagePrice,
       markPrice,
+      markUpdatedAt: markPrice === null ? null : markUpdatedAt,
+      markSource: markPrice === null ? null : "Schwab account market value",
     })
   }
   return result

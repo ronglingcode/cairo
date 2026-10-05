@@ -6,12 +6,18 @@ import { installShutdownHook } from "../src/engine/installShutdownHook.mts"
 import { LocalConfiguration, type PublicConfiguration } from "../src/engine/LocalConfiguration.mts"
 import { MassiveRestReader } from "../src/engine/MassiveRestReader.mts"
 import { FetchHttpPort } from "../src/engine/FetchHttpPort.mts"
+import { BookmapTokenProvider } from "../src/engine/BookmapTokenProvider.mts"
+import { SchwabAccountReader } from "../src/engine/SchwabAccountReader.mts"
+import { SchwabOrderReader } from "../src/engine/SchwabOrderReader.mts"
+import { BrokerRefreshCoordinator } from "../src/engine/BrokerRefreshCoordinator.mts"
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
 const engine = new CairoEngine()
 const apiServer = new EngineApiServer(engine)
+let brokerCoordinator: BrokerRefreshCoordinator | undefined
 installShutdownHook(app, {
   stop: async () => {
+    await brokerCoordinator?.stop()
     await apiServer.stop()
     await engine.stop()
   },
@@ -48,10 +54,20 @@ function createWindow(apiBaseUrl: string, config: PublicConfiguration): void {
 app.whenReady().then(async () => {
   const configStore = new LocalConfiguration(app.getPath("userData"))
   const config = await configStore.load()
-  const massive = new MassiveRestReader(new FetchHttpPort(), () => configStore.massiveApiKey)
+  const http = new FetchHttpPort()
+  const massive = new MassiveRestReader(http, () => configStore.massiveApiKey)
   apiServer.setChartRefresher((symbol, date) => massive.refresh(symbol, date))
+  const tokenProvider = new BookmapTokenProvider(() => ({ selectedAccountId: configStore.values.selectedAccountId, schwabTokenFile: configStore.values.schwabTokenFile }))
+  const accountReader = new SchwabAccountReader(http, tokenProvider)
+  const orderReader = new SchwabOrderReader(http, tokenProvider)
+  brokerCoordinator = new BrokerRefreshCoordinator(engine, accountReader, orderReader, { intervalMs: configStore.values.brokerPollIntervalMs })
+  apiServer.setBrokerRefresher(async () => {
+    const result = await brokerCoordinator!.refresh()
+    return { status: result.status, error: result.error }
+  })
   const apiBaseUrl = await apiServer.start()
   engine.start()
+  brokerCoordinator.start()
   createWindow(apiBaseUrl, config)
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)

@@ -14,7 +14,10 @@ export function App() {
   const [chartDate, setChartDate] = useState(window.cairo?.config?.chartDate ?? new Date().toISOString().slice(0, 10))
   const [refreshing, setRefreshing] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+  const [brokerRefreshing, setBrokerRefreshing] = useState(false)
+  const [brokerRefreshError, setBrokerRefreshError] = useState<string | null>(null)
   const refreshAbort = useRef<AbortController | null>(null)
+  const brokerRefreshAbort = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!apiBaseUrl) return
@@ -31,6 +34,8 @@ export function App() {
     setRefreshing(false)
     return () => refreshAbort.current?.abort()
   }, [chartSymbol, chartDate])
+
+  useEffect(() => () => brokerRefreshAbort.current?.abort(), [])
 
   async function refreshChart() {
     if (!apiBaseUrl || !window.cairo?.commandToken || refreshing) return
@@ -51,6 +56,23 @@ export function App() {
       if (!controller.signal.aborted) setChartError(error instanceof Error ? error.message : "Refresh failed")
     } finally {
       if (!controller.signal.aborted) setRefreshing(false)
+    }
+  }
+
+  async function refreshBroker() {
+    if (!apiBaseUrl || !window.cairo?.commandToken || brokerRefreshing) return
+    const controller = new AbortController()
+    brokerRefreshAbort.current = controller
+    setBrokerRefreshing(true)
+    setBrokerRefreshError(null)
+    try {
+      const response = await fetch(`${apiBaseUrl}/broker/refresh`, { method: "POST", signal: controller.signal, headers: { Authorization: `Bearer ${window.cairo.commandToken}` } })
+      const result = await response.json() as { error?: string }
+      if (!response.ok) setBrokerRefreshError(result.error ?? `Refresh failed (${response.status})`)
+    } catch (error) {
+      if (!controller.signal.aborted) setBrokerRefreshError(error instanceof Error ? error.message : "Refresh failed")
+    } finally {
+      if (!controller.signal.aborted) setBrokerRefreshing(false)
     }
   }
 
@@ -138,7 +160,8 @@ export function App() {
           </section>
 
           <section className="positions-card">
-            <div className="card-heading"><div><span className="eyebrow">ACCOUNT MONITOR</span><h2>Positions</h2></div><span className="count">{snapshot?.positions.length ?? 0}</span></div>
+            <div className="card-heading"><div><span className="eyebrow">ACCOUNT MONITOR</span><h2>Positions</h2></div><div className="chart-controls"><button className="quiet-button" disabled={!apiBaseUrl || brokerRefreshing} onClick={() => void refreshBroker()}>{brokerRefreshing ? "Refreshing…" : "Refresh account"}</button><span className="count">{snapshot?.positions.length ?? 0}</span></div></div>
+            {brokerRefreshError && <p className="chart-error" role="status">{brokerRefreshError}</p>}
             {snapshot?.positions.length ? (
               <div className="position-list">{snapshot.positions.map((position) => <div className="position-row" key={position.positionId}><strong>{position.symbol}</strong><span className={position.side}>{position.side}</span><span>{position.quantity} shares</span><span>{position.markPrice === null ? "Mark unavailable" : `$${position.markPrice.toFixed(2)}`}</span></div>)}</div>
             ) : <div className="empty-positions">{brokerStatus.state === "connected" ? "No open positions in the selected account." : "Connect a broker account to monitor open positions."}</div>}

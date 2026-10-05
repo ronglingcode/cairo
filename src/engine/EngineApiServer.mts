@@ -18,12 +18,17 @@ export class EngineApiServer {
   private starting: Promise<string> | undefined
   private readonly engine: CairoEngine
   private chartRefresher: ((symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>) | undefined
+  private brokerRefresher: (() => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>) | undefined
   readonly commandToken = randomBytes(32).toString("hex")
 
   constructor(engine: CairoEngine) { this.engine = engine }
 
   setChartRefresher(refresher: (symbol: string, date: string) => Promise<{ ok: boolean; snapshot: ChartSnapshot | null; error?: string }>): void {
     this.chartRefresher = refresher
+  }
+
+  setBrokerRefresher(refresher: () => Promise<{ status: import("../shared/contracts.mts").SourceStatus; error: string | null }>): void {
+    this.brokerRefresher = refresher
   }
 
   get isListening(): boolean { return this.server?.listening === true }
@@ -94,6 +99,12 @@ export class EngineApiServer {
       void this.refreshChart(request, response)
       return
     }
+    if (request.method === "POST" && url.pathname === "/broker/refresh") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      if (!this.brokerRefresher) { this.json(response, 503, { error: "broker-source-unavailable" }); return }
+      void this.refreshBroker(response)
+      return
+    }
     if (request.method !== "GET") {
       this.json(response, 405, { error: "method-not-allowed" })
       return
@@ -118,6 +129,16 @@ export class EngineApiServer {
       return
     }
     this.json(response, 404, { error: "not-found" })
+  }
+
+  private async refreshBroker(response: ServerResponse): Promise<void> {
+    try {
+      const result = await this.brokerRefresher!()
+      if (response.destroyed) return
+      this.json(response, result.error ? 503 : 200, { ok: !result.error, status: result.status })
+    } catch {
+      this.json(response, 502, { error: "broker-refresh-failed" })
+    }
   }
 
   private async refreshChart(request: IncomingMessage, response: ServerResponse): Promise<void> {

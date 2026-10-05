@@ -5,7 +5,7 @@ import { EngineConnection } from "../src/renderer/EngineConnection.mts"
 function snapshot(runtimeInstanceId, sequence) {
   const status = (source) => ({ source, state: "waiting", updatedAt: null, detail: null })
   return {
-    runtimeInstanceId, sequence, chart: null, bookmap: status("bookmap"), broker: status("broker"),
+    runtimeInstanceId, sequence, brokerFactsRevision: 0, brokerRefreshSequence: 0, chart: null, bookmap: status("bookmap"), broker: status("broker"), brokerFacts: null,
     copilot: status("copilot"), positions: [], tradebooks: [], attachments: [], tickets: [],
   }
 }

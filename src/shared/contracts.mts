@@ -58,6 +58,8 @@ export interface BrokerPosition {
   quantity: number
   averagePrice: number
   markPrice: number | null
+  markUpdatedAt?: IsoTimestamp | null
+  markSource?: string | null
 }
 
 export interface BrokerWorkingOrder {
@@ -157,9 +159,12 @@ export interface ExitTicket {
 export interface CairoSnapshot {
   runtimeInstanceId: string
   sequence: number
+  brokerFactsRevision: number
+  brokerRefreshSequence: number
   chart: ChartSnapshot | null
   bookmap: SourceStatus
   broker: SourceStatus
+  brokerFacts: BrokerFacts | null
   copilot: SourceStatus
   positions: BrokerPosition[]
   tradebooks: Tradebook[]
@@ -336,6 +341,8 @@ export function parseBrokerFacts(value: unknown): BrokerFacts {
       quantity: finite(p.quantity, `brokerFacts.positions[${index}].quantity`, Number.MIN_VALUE),
       averagePrice: finite(p.averagePrice, `brokerFacts.positions[${index}].averagePrice`, Number.MIN_VALUE),
       markPrice: p.markPrice === null ? null : finite(p.markPrice, `brokerFacts.positions[${index}].markPrice`, Number.MIN_VALUE),
+      ...(p.markUpdatedAt === undefined ? {} : { markUpdatedAt: p.markUpdatedAt === null ? null : isoTimestamp(p.markUpdatedAt, `brokerFacts.positions[${index}].markUpdatedAt`) }),
+      ...(p.markSource === undefined ? {} : { markSource: nullableText(p.markSource, `brokerFacts.positions[${index}].markSource`) }),
     }
   })
   const workingOrders = item.workingOrders.map((raw, index): BrokerWorkingOrder => {

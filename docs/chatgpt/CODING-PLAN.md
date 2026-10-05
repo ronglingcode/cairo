@@ -281,13 +281,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added a read-only Schwab order reader covering the selected account's prior 60 days, recursively subdividing result windows at the broker cap and marking minimum-window truncation incomplete. It preserves standalone and nested OCO/parent IDs, order type, raw status, fill quantity, normalized working/partial/filled/canceled/replaced/rejected/expired/unknown states, and seven days of deduplicated recent executions. Orders are fetched by GET only; no legacy full fill ledger is created. Synthetic tests cover OCO siblings, prior-day protection, statuses, duplicate fills, capped paging, and auth rejection. `npm run test` passed (30 checks) and typecheck passed. No live Schwab requests were made.
 
-- [ ] **T14 — Refresh broker facts with coalesced REST polling**
+- [x] **T14 — Refresh broker facts with coalesced REST polling**
 
 **Depends:** T12, T13. **Repository:** Cairo.
 
 **Deliver:** Modest configurable account/order polling, manual refresh, and coalescing overlapping refresh requests. Publish actual fact revisions separately from refresh sequence. Broker-returned marks retain known source/time; unknown freshness is not treated as live data. No new quote/stream integration.
 
 **Verify:** One request runs at a time, unchanged facts keep ticket-relevant revisions stable, disconnected/auth-failed data is visibly stale, and shutdown stops polling. **Commit:** `feat(T14): refresh broker facts without duplicate reads`.
+
+**Verified (2026-10-04):** Added interval polling, protected manual refresh, overlapping-request coalescing, in-flight shutdown cleanup, stale status on failed reads, and retention of last-known positions/orders. Snapshot exposes separate refresh sequence and fact revision; unchanged positions/orders/fills keep the revision stable while mark freshness metadata can advance. Schwab marks carry their source and fetch timestamp and are never labeled live. The engine bounds retained broker positions/orders/fills. Synthetic tests cover coalescing, stable/changed revisions, stale retention, manual API capability, and stopped timers. `npm run test` passed (34 checks); typecheck and production build passed. No Schwab reads were made.
 
 - [ ] **T15 — Display positions, protection, and account availability**
 
