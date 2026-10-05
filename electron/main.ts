@@ -1,5 +1,11 @@
 import { app, BrowserWindow } from "electron"
 import path from "node:path"
+import { CairoEngine } from "../src/engine/CairoEngine.mts"
+import { installShutdownHook } from "../src/engine/installShutdownHook.mts"
+
+// Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
+const engine = new CairoEngine()
+installShutdownHook(app, engine)
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -25,6 +31,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  engine.start()
   createWindow()
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

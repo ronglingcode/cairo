@@ -179,13 +179,15 @@ Each checkbox is the completion flag. Each task needs its own local commit and a
 
 **Verified (2026-10-04):** Added shared contracts and boundary parsers in `src/shared/contracts.mts` for chart snapshots, Bookmap observations, broker facts, tradebooks/interpretations, attachments, source status, and exit tickets. Added deterministic fake clock, HTTP, broker-read, and observation ports. `npm run test` passed (5 checks, including unknown mode, nanosecond string preservation, nonfinite prices, absent fields, and fake-only I/O); `npm run typecheck` passed; `npm run build` passed. Build has nonfatal Vite/Electron Rollup-option warnings recorded under T02. T02's Electron window smoke remains pending its binary download; the shell and lockfile required by this task are present. No network or broker calls were made.
 
-- [ ] **T04 — Own the engine lifecycle in Electron main**
+- [x] **T04 — Own the engine lifecycle in Electron main**
 
 **Depends:** T03. **Repository:** Cairo.
 
 **Deliver:** Independent engine module with start/stop, bounded memory state, async scheduling, and observer-first initialization. Electron main owns it; renderer remount/reload does not recreate it. Ensure owned timers/listeners stop cleanly.
 
 **Verify:** Renderer reload preserves engine instance/state; app exit clears resources; startup has no action authority. **Commit:** `feat(T04): host asynchronous engine in Electron main`.
+
+**Verified (2026-10-04):** Added a single main-process `CairoEngine` instance with observer-only startup, a bounded in-memory snapshot, and non-overlapping async cycle scheduling. Renderer reads receive clones; the main process stops the engine before quitting. `npm run test` passed (8 checks, including same-instance renderer reads, bounded tickets, no authority, and shutdown cleanup); `npm run typecheck` and `npm run build` passed. The actual desktop window smoke remains pending the Electron binary download noted under T02; engine lifecycle was verified with synthetic process/renderer ports. No provider or broker was contacted.
 
 - [ ] **T05 — Implement engine snapshot and event endpoints**
 
