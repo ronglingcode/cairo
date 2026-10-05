@@ -23,7 +23,7 @@ async function libraryFixture(t, cleanup = true) {
 
 test("catalog composes skills once, applies file edits and rejects broken dependencies", async t => {
   const { library } = await libraryFixture(t)
-  assert.deepEqual((await library.list()).map(skill => skill.name), ["manage-trade", "set-stop-loss", "set-targets"])
+  assert.deepEqual((await library.list()).map(skill => skill.name), ["bookmap-pattern", "manage-trade", "set-stop-loss", "set-targets"])
   const selected = await library.forMessage("/manage-trade /set-stop-loss PCVX")
   assert.deepEqual(selected.map(skill => skill.name), ["set-stop-loss", "set-targets", "manage-trade"])
   const file = selected[0].path
@@ -52,7 +52,7 @@ test("skill files validate YAML, names, missing dependencies and instruction bou
   await assert.rejects(library.load(), /under 32 KB/)
   await writeFile(file, original)
   await mkdir(path.join(library.directory, "empty-folder"))
-  assert.equal((await library.list()).length, 3)
+  assert.equal((await library.list()).length, 4)
 })
 
 test("slash completion filters prefixes and preserves surrounding text and caret", async () => {
@@ -84,7 +84,7 @@ test("authenticated skill catalog refreshes independently of the AI connection",
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("cache-control"), "no-store")
   const body = await response.json()
-  assert.equal(body.skills.length, 3)
+  assert.equal(body.skills.length, 4)
   assert.deepEqual(Object.keys(body.skills[0]).sort(), ["description", "name"])
 })
 

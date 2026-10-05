@@ -7,6 +7,7 @@ Type `/` in either Cairo chat window to list skills. `/s` filters to `set-stop-l
 Examples:
 
 ```text
+/bookmap-pattern
 /set-stop-loss
 /set-targets PCVX
 /manage-trade What should I watch next?
@@ -16,6 +17,18 @@ Examples:
 The native OpenCode prompt hook attaches the selected skill instructions to the request. `manage-trade` also attaches `set-stop-loss` and `set-targets`; repeated dependencies are included once. Skill revisions are recorded in message metadata. Native skill attachments preserve the loaded instructions for conversation replay.
 
 The catalog refreshes when the composer gains focus. Files are reread for each explicit skill invocation, so an edit applies to the next invocation without restarting Cairo. A reply already underway keeps its existing instructions. Regular messages and automatic account-change notifications keep their existing behavior; this initial library is selected with slash commands.
+
+## Bookmap pattern tagging and stop routing
+
+`/bookmap-pattern` opens a quick picker to tag or change a current trade’s pattern. `/bookmap-pattern SYMBOL` focuses a held symbol. With several holdings and no unique symbol, select the trade first. Cairo reads the side from fresh broker facts and offers only that side’s active patterns.
+
+`/set-stop-loss` and `/manage-trade` open the same picker if the trade has no confirmed active tag. Clicking a pattern saves it, binds the original request to the selected symbol, side and position ID, and continues the request. Manual `/bookmap-pattern` selection saves the tag without sending an AI request. Cancel leaves the message draft available. The picker is shared by docked and detached chat windows.
+
+The canonical catalog is `Backtest/tradebooks/bookmap_patterns/activePatterns.md`, under the configured `CAIRO_TRADEBOOK_PATH`. Edit its Long/Short tables to maintain stable pattern IDs, labels and local tradebook links. Cairo rereads the catalog and linked Markdown each invocation. Unmapped patterns return no source; a source without a stop rule remains undefined. Currently bid vwap shape recovery and bid breakdown need mappings, and bid reappear needs a stop rule.
+
+Tags persist in `bookmap-pattern-tags.json` inside Cairo’s user-data directory. They are scoped to account, position, side and an observed trade instance. Quantity changes preserve a tag; an observed flat holding or side change retires it. A broker position ID reused after going flat gets a new trade instance. On restart the previous tag remains visible but requires one-click reconfirmation, since a trade may have closed and reopened while Cairo was offline. Account changes cannot reuse another account’s tag.
+
+The AI’s `cairo.read_bookmap_pattern` tool returns the confirmed tag, active candidates and selected source narrative. The AI cannot save a tag; the trader chooses it in the picker. Tagging does not attach executable guidance or submit broker orders. Test the picker with synthetic holdings using `npm run build` followed by `npm run preview:fake -- --patterns`.
 
 ## Add or edit a skill
 

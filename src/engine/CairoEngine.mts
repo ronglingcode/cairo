@@ -43,6 +43,7 @@ export class CairoEngine {
     }
     this.runCycle = options.runCycle ?? (async () => undefined)
     this.snapshot = {
+      bookmapPatternTags: [], bookmapPatternPicker: null, bookmapPatternError: null,
       runtimeInstanceId: this.runtimeInstanceId,
       sequence: 0,
       brokerFactsRevision: 0,

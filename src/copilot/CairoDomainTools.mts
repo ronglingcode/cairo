@@ -15,6 +15,8 @@ export interface NoteProposal {
 }
 
 export class CairoDomainTools {
+  private bookmapPatterns?: import("../engine/BookmapPatterns.mts").BookmapPatterns
+  setBookmapPatterns(patterns: import("../engine/BookmapPatterns.mts").BookmapPatterns): void { this.bookmapPatterns = patterns }
   private drafts: NoteProposal[] = []
   private readonly engine: CairoEngine
   private readonly verifySession: (id: string) => Promise<boolean>
@@ -44,6 +46,11 @@ export class CairoDomainTools {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Tool input must be an object")
     const value = input as Record<string, unknown>
     const snapshot = this.engine.getSnapshot()
+    if (operation === "read_bookmap_pattern") {
+      if (!this.bookmapPatterns) throw new Error("Bookmap pattern library unavailable")
+      if (Object.keys(value).some(key => key !== "positionId")) throw new Error("Unexpected pattern field")
+      return this.bookmapPatterns.read(value.positionId)
+    }
     if (["read_context", "read_preparation", "read_positions"].includes(String(operation))) {
       if (Object.keys(value).length) throw new Error("This read tool takes no parameters")
       if (operation === "read_context") return this.context()
@@ -104,6 +111,11 @@ export class CairoDomainTools {
         markdown: attachment.markdown?.slice(0, 4000), interpretation: attachment.interpretation,
       })),
       recommendations: snapshot.recommendations.slice(-20),
+      bookmapPatterns: {
+        tags: snapshot.bookmapPatternTags.filter(tag => tag.accountId === facts?.accountId).slice(-20).map(tag => ({ ...tag, confirmed: tag.active && tag.runtimeInstanceId === snapshot.runtimeInstanceId })),
+        error: snapshot.bookmapPatternError,
+        pickerOpen: Boolean(snapshot.bookmapPatternPicker),
+      },
       bookmap: { status: snapshot.bookmap, ...snapshot.bookmapProjection, episodes: snapshot.bookmapProjection.episodes.slice(-20) },
       observationAttempts: snapshot.observationAttempts.slice(-5),
       capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: Boolean(this.tickets), brokerWrites: false, bookmap: "observations-only; proven live mode required" },

@@ -25,6 +25,8 @@ interface EventClient {
 }
 
 export class EngineApiServer {
+  private bookmapPatterns?: import("./BookmapPatterns.mts").BookmapPatterns
+  setBookmapPatterns(patterns: import("./BookmapPatterns.mts").BookmapPatterns): void { this.bookmapPatterns = patterns }
   private entryObserver?: import("./EntryObserver.mts").EntryObserver
   setEntryObserver(observer: import("./EntryObserver.mts").EntryObserver): void { this.entryObserver = observer }
   private server: Server | undefined
@@ -169,6 +171,27 @@ export class EngineApiServer {
         else { if (this.permissions?.has(String(value.id))) await this.permissions.reject(String(value.id)); else this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
       }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Ticket request failed" })); return
     }
+    if (["/bookmap-pattern/select", "/bookmap-pattern/cancel"].includes(url.pathname) && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.readCommand(request).then(async value => {
+        if (!this.bookmapPatterns) throw new Error("Bookmap pattern selection unavailable")
+        if (url.pathname === "/bookmap-pattern/cancel") this.bookmapPatterns.cancel(value.pickerId)
+        else {
+          if (this.chat?.snapshot.busy) throw new Error("Wait for the current reply before tagging")
+          const selected = await this.bookmapPatterns.select(value)
+          if (!selected.manual) {
+            if (!this.chat) throw new Error("Pattern saved. Reconnect chat and invoke /set-stop-loss again.")
+            await this.chat.send(selected.text, selected.commandId)
+          }
+        }
+        this.json(response, 200, { ok: true })
+      }).catch(error => {
+        const detail = error instanceof Error ? error.message : "Pattern selection failed"
+        if (!this.engine.getSnapshot().bookmapPatternPicker) this.engine.updateSnapshot({ bookmapPatternError: detail })
+        this.json(response, 400, { error: detail })
+      })
+      return
+    }
     if (url.pathname === "/copilot/events" && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(value => { if (!this.waker || typeof value.enabled !== "boolean") throw new Error("Event settings unavailable"); this.waker.setEnabled(value.enabled); this.json(response, 200, { ok: true }) }).catch(() => this.json(response, 400, { error: "Invalid event setting" })); return
@@ -285,7 +308,11 @@ export class EngineApiServer {
         }
         const value = JSON.parse(Buffer.concat(chunks).toString("utf8"))
         if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid message")
-        await this.chat!.send(value.text, value.commandId)
+        if (typeof value.text !== "string" || !value.text.trim() || value.text.length > 8000 || typeof value.commandId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(value.commandId)) throw new Error("Invalid message or command ID")
+        if (this.chat!.snapshot.busy) throw new Error("Wait for the current reply before choosing a pattern")
+        const prepared = await this.bookmapPatterns?.preflight(value.text, value.commandId)
+        if (prepared?.picker) { this.json(response, 200, { patternSelectionRequired: true }); return }
+        await this.chat!.send(prepared?.text ?? value.text, value.commandId)
       }
       this.json(response, 200, { chat: this.chat!.snapshot })
     } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Chat request failed" }) }

@@ -17,6 +17,7 @@ import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
 import { ExitTickets } from "../src/engine/ExitTickets.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
 import { GuidanceProposals } from "../src/engine/GuidanceProposals.mts"
+import { BookmapPatterns } from "../src/engine/BookmapPatterns.mts"
 import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 
 // Source preview with synthetic market facts and disposable storage; no real provider/broker.
@@ -25,6 +26,14 @@ const engine = new CairoEngine()
 const api = new EngineApiServer(engine)
 api.setPreparationStore(new PreparationStore(root))
 await api.loadPreparation()
+const patterns = new BookmapPatterns(engine, root, path.resolve("../Backtest/tradebooks"))
+await patterns.load(); api.setBookmapPatterns(patterns)
+if (process.argv.includes("--patterns")) {
+  const { positionEngine } = await import("../tests/fixtures/positions.mjs")
+  const snapshot = positionEngine().getSnapshot()
+  snapshot.brokerFacts.positions[1].side = "short"
+  engine.updateSnapshot({ positions: snapshot.brokerFacts.positions, brokerFacts: snapshot.brokerFacts, broker: snapshot.broker, brokerFactsRevision: 1 })
+}
 const guidance = new PositionGuidance(engine); const monitor = new ManagementMonitor(engine, guidance)
 const timeline = new ManagementTimeline(engine); const tickets = new ExitTickets(engine)
 tickets.setPreflight(() => { guidance.reconcile(); monitor.cycle() })
@@ -41,7 +50,7 @@ if (process.argv.includes("--management")) {
   new GuidanceProposals(engine).propose({ tradebookId: "reviewed-whole", expectedPreparationRevision: preparation.revision, expectedTradebookRevision: null, clauses: book.interpretation.clauses, management: book.interpretation.management }, "synthetic-preview")
 }
 const managementTimer = setInterval(() => {
-  if (process.argv.includes("--management")) { const facts = engine.getSnapshot().brokerFacts; facts.asOf = new Date().toISOString(); facts.source.updatedAt = facts.asOf; engine.updateSnapshot({ brokerFacts: facts, broker: facts.source }) }
+  if (process.argv.includes("--management") || process.argv.includes("--patterns")) { const facts = engine.getSnapshot().brokerFacts; facts.asOf = new Date().toISOString(); facts.source.updatedAt = facts.asOf; engine.updateSnapshot({ brokerFacts: facts, broker: facts.source }) }
   guidance.reconcile(); monitor.cycle(); timeline.capture(); tickets.cycle()
 }, 1000)
 const base = await api.start()
@@ -56,6 +65,7 @@ const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: 
 api.setCopilotChat(chat)
 const tools = new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace)
 tools.setExitTickets(tickets); api.setDomainTools(tools)
+tools.setBookmapPatterns(patterns)
 const waker = new CopilotWaker(engine, chat); api.setCopilotWaker(waker)
 const wakeTimer = setInterval(() => waker.cycle(), 1000)
 api.setCopilotRestarter(async () => { await chat.stop(); const ok = await sidecar.restart(); if (ok) await chat.connect(); return ok })
@@ -85,6 +95,7 @@ async function stop() {
   if (stopping) return
   stopping = true
   clearInterval(managementTimer); clearInterval(wakeTimer)
+  patterns.stop()
   server.closeAllConnections()
   await new Promise(resolve => server.close(resolve))
   await chat.stop(); await sidecar.stop(); await provider.stop(); await api.stop(); await engine.stop()

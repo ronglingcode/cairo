@@ -11,7 +11,10 @@ export function LiveContext({ snapshot, connectionState }: { snapshot: CairoSnap
   const recommendations = snapshot?.recommendations.filter(item => item.state === "current").length ?? 0
   return <div className="live-context">
     <div className="live-sources"><span className={`status-dot ${connectionState === "connected" ? "online" : "warning"}`} />Engine {connectionState} · Schwab {snapshot?.broker.state ?? "unknown"} · Bookmap {snapshot?.bookmap.state ?? "unknown"}</div>
-    {!!snapshot?.positions.length && <div className="live-holdings" aria-label="Open positions">{snapshot.positions.map(position => <span key={position.positionId}>{position.symbol} · {position.side} {position.quantity} · {position.markPrice === null ? "mark unknown" : `$${position.markPrice.toFixed(2)}`}</span>)}</div>}
+    {!!snapshot?.positions.length && <div className="live-holdings" aria-label="Open positions">{snapshot.positions.map(position => {
+      const tag = snapshot.bookmapPatternTags?.find(tag => tag.accountId === snapshot.brokerFacts?.accountId && tag.positionId === position.positionId && tag.side === position.side && tag.active)
+      return <span key={position.positionId}>{position.symbol} · {position.side} {position.quantity} · {position.markPrice === null ? "mark unknown" : `$${position.markPrice.toFixed(2)}`}{tag ? ` · ${tag.patternId.replaceAll("-", " ")}${tag.runtimeInstanceId !== snapshot.runtimeInstanceId ? " (reconfirm)" : ""}` : ""}</span>
+    })}</div>}
     {(staged > 0 || recommendations > 0) && <p className="live-review-notice" role="status">{staged} staged tickets · {recommendations} current recommendations · open Trading context to review</p>}
     {snapshot?.recoveryError && <p role="alert" className="chart-error">{snapshot.recoveryError}</p>}
     <details className="live-context-details"><summary>Trading context · {snapshot?.positions.length ?? 0} positions · {snapshot?.tickets.length ?? 0} tickets</summary><div className="live-context-body">
@@ -25,6 +28,7 @@ export function LiveContext({ snapshot, connectionState }: { snapshot: CairoSnap
           <strong>{position.symbol} · {position.side} · {position.quantity} shares</strong>
           <span>Mark {position.markPrice === null ? "unknown" : `$${position.markPrice.toFixed(2)}`} · {time(position.markUpdatedAt)}</span>
           <span>Guidance: {snapshot.attachments.find(item => item.positionId === position.positionId && item.accountId === snapshot.brokerFacts?.accountId)?.state ?? "unattached"}</span>
+          <span>Bookmap pattern: {(() => { const tag = snapshot.bookmapPatternTags?.find(tag => tag.accountId === snapshot.brokerFacts?.accountId && tag.positionId === position.positionId && tag.side === position.side && tag.active); return tag ? `${tag.patternId.replaceAll("-", " ")}${tag.runtimeInstanceId === snapshot.runtimeInstanceId ? "" : " · reconfirm with /bookmap-pattern"}` : "untagged · /bookmap-pattern" })()}</span>
           {snapshot.brokerFacts?.workingOrders.filter(order => order.symbol === position.symbol).map(order => <span key={order.orderId}>{order.orderType} · {order.side} · {order.quantity} shares · {order.status}{order.stopPrice != null ? ` · stop $${order.stopPrice.toFixed(2)}` : ""}{order.limitPrice != null ? ` · limit $${order.limitPrice.toFixed(2)}` : ""} · order {order.orderId}</span>)}
           <small>{snapshot.brokerFacts?.ordersComplete ? "Order coverage current" : "Order coverage incomplete"}</small>
         </div>)}

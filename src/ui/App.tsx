@@ -236,7 +236,7 @@ export function App() {
             <button className="quiet-button" disabled={!apiBaseUrl || restartingCopilot} onClick={() => void restartCopilot()}>{restartingCopilot ? "Restarting…" : "Restart AI"}</button>
             {copilotRestartError && <p className="chart-error" role="status">{copilotRestartError}</p>}
           </div>
-          <CopilotPanel apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} chat={snapshot?.copilotChat ?? null} />
+          <CopilotPanel apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} chat={snapshot?.copilotChat ?? null} patternPicker={snapshot?.bookmapPatternPicker} patternError={snapshot?.bookmapPatternError} />
         </aside>
       </section>
       <footer className="statusbar"><span><span className="status-dot muted" />Observer-only entries</span><span>{snapshot ? `Runtime ${snapshot.runtimeInstanceId.slice(0, 8)} · sequence ${snapshot.sequence}` : connectionLabel(connectionState)}</span></footer>

@@ -10,6 +10,7 @@ import { RecoveryStore } from "../src/engine/RecoveryStore.mts"
 import { ExitWriter } from "../src/engine/ExitWriter.mts"
 import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 import { TradebookStore } from "../src/engine/TradebookStore.mts"
+import { BookmapPatterns } from "../src/engine/BookmapPatterns.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
 import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
 import { app, BrowserWindow, shell, Notification, ipcMain } from "electron"
@@ -142,6 +143,10 @@ app.whenReady().then(async () => {
   await apiServer.loadPreparation()
   const tradebookPath = path.resolve(process.env.CAIRO_TRADEBOOK_PATH || path.join(homedir(), "code", "Backtest", "tradebooks"))
   const tradebookStore = new TradebookStore(app.getPath("userData"), tradebookPath)
+  const bookmapPatterns = new BookmapPatterns(engine, app.getPath("userData"), tradebookPath)
+  apiServer.setBookmapPatterns(bookmapPatterns)
+  try { await bookmapPatterns.load() } catch (error) { engine.updateSnapshot({ bookmapPatternError: error instanceof Error ? error.message : "Bookmap pattern storage unavailable" }) }
+  app.once("before-quit", () => bookmapPatterns.stop())
   try { engine.updateSnapshot({ tradebooks: await tradebookStore.list() }) } catch (error) { console.error(`Cannot load tradebooks from ${tradebookPath}`, error) }
   apiServer.setPolicyReview(new PolicyReview(engine, guidance, monitor))
   const http = new FetchHttpPort()
@@ -226,6 +231,7 @@ app.whenReady().then(async () => {
     return path.resolve(session.location.directory).toLowerCase() === path.resolve(sidecar.workspace).toLowerCase()
   })
   domainTools.setExitTickets(tickets)
+  domainTools.setBookmapPatterns(bookmapPatterns)
   ticketPermissions = new TicketPermissions(tickets, () => sidecar?.client)
   domainTools.setTicketPermissions(ticketPermissions)
   apiServer.setTicketPermissions(ticketPermissions)

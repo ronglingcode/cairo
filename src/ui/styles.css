@@ -173,3 +173,12 @@ button:focus-visible, summary:focus-visible, textarea:focus-visible { outline: 2
 .detached-view .brand { width: auto; }
 .detached-view .environment { display: none; }
 @media (max-width: 600px) { .chat-heading-actions { flex-wrap: wrap; justify-content: flex-end; }.live-sources { font-size: 10px; }.copilot-heading .eyebrow { display: none; }.chat-runtime label { font-size: 10px; }.statusbar { font-size: 8px; }.brand { width: auto; } }
+
+.bookmap-pattern-picker { margin: 6px 12px; padding: 12px; border: 1px solid #a9c7ef; border-radius: 8px; background: #eef5ff; flex-shrink: 0; max-height: 40vh; overflow-y: auto; font-size: 12px; }
+.pattern-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bookmap-pattern-picker p { margin: 8px 0; }
+.bookmap-pattern-picker select { margin-left: 8px; max-width: 100%; }
+.pattern-options { display: grid; gap: 6px; margin: 8px 0; }
+.pattern-options button { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; border: 1px solid #b6cfee; border-radius: 6px; background: white; text-align: left; }
+.pattern-options button:hover, .pattern-options button:focus-visible { border-color: #2374f5; background: #e2edff; }
+.pattern-options span, .pattern-previous { font-size: 11px; color: #526b8b; }

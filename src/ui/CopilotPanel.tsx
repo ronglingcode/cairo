@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 import type { CopilotChat } from "../shared/contracts.mts"
 import { completeSkill, skillQuery, type SkillSummary } from "../shared/SkillCommands.mts"
+import type { BookmapPatternPicker as Picker } from "../shared/BookmapPatterns.mts"
+import { BookmapPatternPicker } from "./BookmapPatternPicker"
 
-export function CopilotPanel({ apiBaseUrl, commandToken, chat }: { apiBaseUrl: string | null; commandToken?: string | null; chat: CopilotChat | null }) {
+export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, patternError }: { apiBaseUrl: string | null; commandToken?: string | null; chat: CopilotChat | null; patternPicker?: Picker | null; patternError?: string | null }) {
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -23,6 +25,7 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat }: { apiBaseUrl: s
   const matches = query ? skills.filter(skill => skill.name.startsWith(query.query)) : []
   const menuOpen = focused && !dismissed && query !== null
   const selectedIndex = Math.min(activeSkill, Math.max(0, matches.length - 1))
+  const canSend = Boolean(apiBaseUrl && !chat?.busy && !pending && !patternPicker && draft.trim() && (chat?.connected || /^\/bookmap-pattern(?:\s|$)/.test(draft.trim())))
   async function loadSkills() {
     if (!apiBaseUrl || !commandToken) return
     skillController.current?.abort()
@@ -72,9 +75,9 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat }: { apiBaseUrl: s
         headers: { Authorization: `Bearer ${commandToken}`, "Content-Type": "application/json" },
         body: action === "send" ? JSON.stringify({ text: draft, commandId: crypto.randomUUID() }) : undefined,
       })
-      const result = await response.json() as { error?: string }
+      const result = await response.json() as { error?: string; patternSelectionRequired?: boolean }
       if (!response.ok) throw new Error(result.error ?? "Chat request failed")
-      if (action === "send") { updateDraft(""); followLatest.current = true }
+      if (action === "send" && !result.patternSelectionRequired) { updateDraft(""); followLatest.current = true }
     } catch (error) { if (!abort.signal.aborted) setError(error instanceof Error ? error.message : "Chat connection failed") }
     finally { if (!abort.signal.aborted) setPending(false) }
   }
@@ -92,9 +95,11 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat }: { apiBaseUrl: s
       {chat?.truncated && <p className="chat-notice">Showing the latest 40 messages with bounded text. Earlier conversation remains in OpenCode.</p>}
     </div>
     <div className="chat-feedback" role="status">
+      {patternError && <p className="chart-error">{patternError}</p>}
       {error || chat?.error ? <p className="chart-error">{error || chat?.error}</p> : null}
       <span>{chat?.busy ? "Cairo is responding…" : chat?.outcome === "interrupted" ? "Reply canceled" : chat?.connected ? "Ready" : "Chat disconnected"}</span>
     </div>
+    {patternPicker && <BookmapPatternPicker key={patternPicker.id} picker={patternPicker} apiBaseUrl={apiBaseUrl} commandToken={commandToken} onComplete={() => { if (draft === patternPicker.text) updateDraft(""); followLatest.current = true }} />}
     <form className="composer-wrap" onSubmit={event => { event.preventDefault(); void command("send") }}>
       <label className="notes-label" htmlFor="cairo-message">Message Cairo</label>
       {menuOpen && <div className="skill-menu" id="cairo-skill-menu" role="listbox" aria-label="Cairo skills">
@@ -117,11 +122,11 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat }: { apiBaseUrl: s
             event.preventDefault(); setActiveSkill((selectedIndex + (event.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length); return
           }
           if (menuOpen && matches.length && !event.shiftKey && ["Enter", "Tab"].includes(event.key)) { event.preventDefault(); chooseSkill(matches[selectedIndex]); return }
-          if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (chat?.connected && !chat.busy && !pending && draft.trim()) void command("send") }
+          if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (canSend) void command("send") }
         }} />
       <div className="composer-tools"><span>{draft.length}/8000</span>
         {chat?.busy && <button type="button" className="chat-cancel" disabled={pending || !chat.connected} onClick={() => void command("cancel")}>Cancel reply</button>}
-        <button type="submit" className="chat-send" disabled={!chat?.connected || chat.busy || pending || !draft.trim()}>Send</button>
+        <button type="submit" className="chat-send" disabled={!canSend}>Send</button>
       </div>
     </form>
   </>

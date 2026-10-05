@@ -221,6 +221,9 @@ export interface CopilotChat {
 }
 
 export interface CairoSnapshot {
+  bookmapPatternTags: import("./BookmapPatterns.mts").BookmapPatternTag[]
+  bookmapPatternPicker: import("./BookmapPatterns.mts").BookmapPatternPicker | null
+  bookmapPatternError: string | null
   observationAttempts: import("../engine/EntryObserver.mts").ObservationAttempt[]
   bookmapProjection: import("../engine/BookmapReceiver.mts").BookmapProjection
   protectionReadback: import("../engine/ProtectionCoordinator.mts").ProtectionReadback[]

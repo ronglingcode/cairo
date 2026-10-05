@@ -4,7 +4,8 @@ Design proposal, October 5, 2026. This document describes proposed behavior; it
 does not mean these components have been implemented or approved for execution.
 
 The initial editable skill library and slash autocomplete are now implemented:
-`manage-trade`, `set-stop-loss`, and `set-targets`. See [Skill library](../SKILL-LIBRARY.md)
+`manage-trade`, `set-stop-loss`, `set-targets`, and `bookmap-pattern`.
+Bookmap tags and a side-filtered picker now route stop requests to pattern sources. See [Skill library](../SKILL-LIBRARY.md)
 for usage and editing. The remaining coordinator, event routing and response-contract
 changes below are still proposals.
 

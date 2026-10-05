@@ -46,6 +46,11 @@ export function createCairoPlugin(bridge: Bridge, skillsDirectory = process.env.
             execute: async (input, context) => ({ content: JSON.stringify(await bridge(operation, input, context)) }),
           })
         }
+        editor.add({ name: "read_bookmap_pattern", description: "Read the trader-confirmed Bookmap tag, side-filtered active candidates and the linked source tradebook for a current position. Do not infer a tag or substitute another pattern's stop. Unconfirmed tags require the /bookmap-pattern picker.",
+          input: { type: "object", properties: { positionId: { type: "string" } }, required: ["positionId"], additionalProperties: false },
+          options: { namespace: "cairo", codemode: false, permission: "cairo_read" },
+          execute: async (input, context) => ({ content: JSON.stringify(await bridge("read_bookmap_pattern", input, context)) }),
+        })
         editor.add({ name: "propose_notes", description: "Propose a replacement of preparation notes for review. Does not save notes or activate position guidance.",
           input: { type: "object", properties: { markdown: { type: "string", maxLength: 65_536 }, date: { type: ["string", "null"] }, symbol: { type: ["string", "null"] }, expectedRevision: { type: ["string", "null"] } }, required: ["markdown", "date", "symbol", "expectedRevision"], additionalProperties: false },
           options: { namespace: "cairo", codemode: false, permission: "cairo_propose" },
