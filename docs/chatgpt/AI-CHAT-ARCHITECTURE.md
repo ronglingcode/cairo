@@ -8,6 +8,9 @@ The initial editable skill library and slash autocomplete are now implemented:
 for usage and editing. The remaining coordinator, event routing and response-contract
 changes below are still proposals.
 
+The [per-trade knowledge base plan](TRADE-KNOWLEDGE-BASE-PLAN.md) expands journal
+capture, searchable personal lessons and retrieval into live invocation context.
+
 ## Decision
 
 Keep the pinned OpenCode harness and the existing Cairo engine. Add a Cairo-owned
