@@ -1,6 +1,6 @@
 import { TicketPermissions } from "../src/copilot/TicketPermissions.mts"
 import { BookmapReceiver } from "../src/engine/BookmapReceiver.mts"
-import { homedir } from "node:os"
+import { stat } from "node:fs/promises"
 import { EntryObserver } from "../src/engine/EntryObserver.mts"
 import { RecoveryBootstrap } from "../src/engine/RecoveryBootstrap.mts"
 import { UnknownReconciler } from "../src/engine/UnknownReconciler.mts"
@@ -13,7 +13,7 @@ import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { BookmapPatterns } from "../src/engine/BookmapPatterns.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
 import { ManagementTimeline } from "../src/engine/ManagementTimeline.mts"
-import { app, BrowserWindow, shell, Notification, ipcMain } from "electron"
+import { app, BrowserWindow, shell, Notification, ipcMain, dialog } from "electron"
 import path from "node:path"
 import { CairoEngine } from "../src/engine/CairoEngine.mts"
 import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
@@ -137,11 +137,15 @@ function createWindow(apiBaseUrl: string, config: PublicConfiguration, view: "pl
 
 app.whenReady().then(async () => {
   const configStore = new LocalConfiguration(app.getPath("userData"))
-  const config = await configStore.load()
+  let config = await configStore.load()
   bookmapReceiver.start(config.bookmapEndpoint)
-  apiServer.setPreparationStore(new PreparationStore(app.getPath("userData")))
+  const tradebookPath = config.tradebooks_root_path
+  try { apiServer.setPreparationStore(await PreparationStore.forTradebooksRoot(tradebookPath, app.getPath("userData"))) }
+  catch (error) {
+    engine.updateSnapshot({ preparationError: "Preparation notes could not be migrated. Existing files were preserved." })
+    console.error("Cannot migrate preparation notes", error)
+  }
   await apiServer.loadPreparation()
-  const tradebookPath = path.resolve(process.env.CAIRO_TRADEBOOK_PATH || path.join(homedir(), "code", "Backtest", "tradebooks"))
   const tradebookStore = new TradebookStore(app.getPath("userData"), tradebookPath)
   const bookmapPatterns = new BookmapPatterns(engine, app.getPath("userData"), tradebookPath)
   apiServer.setBookmapPatterns(bookmapPatterns)
@@ -176,6 +180,44 @@ app.whenReady().then(async () => {
     return { status: result.status, error: result.error }
   })
   const apiBaseUrl = await apiServer.start()
+  ipcMain.handle("cairo:document-settings", async (event, action: unknown, value: unknown) => {
+    const window = [...managedWindows].find(window => window.webContents === event.sender)
+    if (!window) throw new Error("Unknown Cairo window")
+    if (action === "read") return { config, activeRoot: tradebookPath, activeSecretsFile: configStore.values.secretsFile }
+    if (action === "derive" && typeof value === "string" && path.isAbsolute(value.trim())) {
+      const root = path.resolve(value.trim())
+      return { workspace_root_path: root, tradebooks_root_path: path.join(root, "Backtest", "tradebooks"), secretsFile: path.join(root, "secrets", "storeSecrets.js") }
+    }
+    if (action === "browse") {
+      const file = value === "secretsFile"
+      const workspace = value === "workspace_root_path"
+      const result = await dialog.showOpenDialog(window, { title: file ? "Secrets file path" : workspace ? "Workspace root path" : "Tradebooks root path", defaultPath: file ? config.secretsFile : workspace ? config.workspace_root_path : config.tradebooks_root_path, properties: [file ? "openFile" : "openDirectory"] })
+      return result.canceled ? null : result.filePaths[0]
+    }
+    if (action !== "save" || (!value || (typeof value !== "string" && typeof value !== "object"))) throw new Error("Invalid settings request")
+    const input = typeof value === "string" ? { tradebooks_root_path: value, workspace_root_path: config.workspace_root_path, secretsFile: config.secretsFile } : value as Record<string, unknown>
+    if (["tradebooks_root_path", "workspace_root_path", "secretsFile"].some(key => typeof input[key] !== "string")) throw new Error("Invalid settings paths")
+    const candidate = (input.tradebooks_root_path as string).trim()
+    const workspace = (input.workspace_root_path as string).trim()
+    const secretsFile = (input.secretsFile as string).trim()
+    if (!candidate || !path.isAbsolute(candidate)) throw new Error("Tradebooks root path must be an absolute path")
+    let directory
+    try { directory = await stat(candidate) } catch { throw new Error("Tradebooks root path must be an existing folder") }
+    if (!directory.isDirectory()) throw new Error("Tradebooks root path must be a folder")
+    if (!workspace || !path.isAbsolute(workspace)) throw new Error("Workspace root path must be an absolute path")
+    try { if (!(await stat(workspace)).isDirectory()) throw new Error() } catch { throw new Error("Workspace root path must be an existing folder") }
+    if (secretsFile) {
+      if (!path.isAbsolute(secretsFile)) throw new Error("Secrets file path must be an absolute path")
+      try { if (!(await stat(secretsFile)).isFile()) throw new Error() } catch { throw new Error("Secrets file path must be an existing file") }
+    }
+    // Saving paths must not change credentials used by the running trading session.
+    const nextStore = new LocalConfiguration(app.getPath("userData"))
+    await nextStore.load()
+    config = await nextStore.save({ ...nextStore.values, tradebooks_root_path: candidate, workspace_root_path: workspace, secretsFile })
+    const settings = { config, activeRoot: tradebookPath, activeSecretsFile: configStore.values.secretsFile }
+    broadcast("cairo:document-settings-changed", settings)
+    return settings
+  })
   ipcMain.handle("cairo:chat-window", (event, action: unknown) => {
     if (![...managedWindows].some(window => window.webContents === event.sender)) throw new Error("Unknown Cairo window")
     if (action === "detach") {

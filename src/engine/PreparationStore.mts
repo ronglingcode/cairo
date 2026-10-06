@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { constants } from "node:fs"
 import path from "node:path"
 import type { PreparationNotes, TradebookAssignment } from "../shared/contracts.mts"
 
@@ -18,6 +19,20 @@ export class PreparationStore {
   private pending: Promise<unknown> = Promise.resolve()
 
   constructor(userDataPath: string) { this.file = path.join(userDataPath, "preparation.json") }
+
+  /** Preserve legacy profile notes, and never replace documents in the selected root. */
+  static async forTradebooksRoot(root: string, legacyProfile: string): Promise<PreparationStore> {
+    const store = new PreparationStore(path.join(root, "preparation"))
+    // Validate before copying; malformed legacy data must not enter the document root.
+    if (await store.load()) return store
+    const legacy = new PreparationStore(legacyProfile)
+    if (await legacy.load()) {
+      await mkdir(path.dirname(store.file), { recursive: true })
+      try { await copyFile(legacy.file, store.file, constants.COPYFILE_EXCL) }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error }
+    }
+    return store
+  }
 
   async load(): Promise<PreparationNotes | null> {
     let raw: string

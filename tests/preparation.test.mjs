@@ -13,6 +13,19 @@ async function setup(t) {
   return { directory, store: new PreparationStore(directory) }
 }
 
+test("preparation migrates beneath document root without overwriting either source", async t => {
+  const { directory, store: legacy } = await setup(t)
+  const original = await legacy.save({ markdown: "Legacy notes", date: null, symbol: null }, null)
+  const root = path.join(directory, "documents")
+  const migrated = await PreparationStore.forTradebooksRoot(root, directory)
+  assert.deepEqual(await migrated.load(), original)
+  assert.deepEqual(await legacy.load(), original)
+  const updated = await migrated.save({ markdown: "Root notes", date: null, symbol: null }, original.revision)
+  assert.deepEqual(await (await PreparationStore.forTradebooksRoot(root, directory)).load(), updated)
+  assert.deepEqual(await legacy.load(), original)
+  assert.equal(JSON.parse(await readFile(path.join(root, "preparation", "preparation.json"), "utf8")).markdown, "Root notes")
+})
+
 test("preparation retains original wording and reopens without an interpretation or AI", async t => {
   const { directory, store } = await setup(t)
   assert.equal(await store.load(), null)

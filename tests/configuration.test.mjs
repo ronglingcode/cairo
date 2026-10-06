@@ -5,6 +5,26 @@ import os from "node:os"
 import path from "node:path"
 import { LocalConfiguration } from "../src/engine/LocalConfiguration.mts"
 
+test("document root persists, rejects relative paths, and takes precedence over legacy environment", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "cairo documents "))
+  const previous = process.env.CAIRO_TRADEBOOK_PATH
+  try {
+    process.env.CAIRO_TRADEBOOK_PATH = root
+    const store = new LocalConfiguration(root)
+    assert.equal((await store.load()).tradebooks_root_path, root)
+    const selected = path.join(root, "chosen documents")
+    await store.save({ ...store.values, tradebooks_root_path: selected })
+    process.env.CAIRO_TRADEBOOK_PATH = path.join(root, "other")
+    assert.equal((await new LocalConfiguration(root).load()).tradebooks_root_path, selected)
+    await assert.rejects(store.save({ ...store.values, tradebooks_root_path: "relative/folder" }), /absolute path/)
+    assert.equal(store.values.tradebooks_root_path, selected)
+  } finally {
+    if (previous === undefined) delete process.env.CAIRO_TRADEBOOK_PATH
+    else process.env.CAIRO_TRADEBOOK_PATH = previous
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test("local configuration creates defaults under app data paths containing spaces", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "cairo user data "))
   try {

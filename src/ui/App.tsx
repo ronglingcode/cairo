@@ -9,12 +9,14 @@ import { ChartView } from "./ChartView"
 import { PreparationEditor } from "./PreparationEditor"
 import { LiveContext } from "./LiveContext"
 import { CopilotPanel } from "./CopilotPanel"
+import { SettingsPanel } from "./SettingsPanel"
 
 const EMPTY_STATUS: SourceStatus = { source: "chart", state: "unknown", updatedAt: null, detail: "Engine snapshot unavailable" }
 
 export function App() {
   const detachedView = window.cairo?.view === "chat"
   const [liveMode, setLiveMode] = useState(detachedView)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [chatDetached, setChatDetached] = useState(false)
   const [windowError, setWindowError] = useState<string | null>(null)
   useEffect(() => {
@@ -124,16 +126,17 @@ export function App() {
   }).format(new Date()).toUpperCase()
 
   return (
-    <main className={`shell ${liveMode ? "live-mode" : ""} ${detachedView ? "detached-view" : ""} ${chatDetached && !detachedView ? "chat-detached" : ""}`}>
+    <main className={`shell ${liveMode && !settingsOpen ? "live-mode" : ""} ${detachedView ? "detached-view" : ""} ${settingsOpen || (chatDetached && !detachedView) ? "chat-detached" : ""}`}>
       <header className="topbar">
         <div className="brand"><span className="brand-mark">C</span><span>Cairo</span></div>
         <div className="environment"><span className={`status-dot ${connectionTone(connectionState)}`} />LOCAL · {apiBaseUrl ? (window.cairo?.config?.provider ?? "fake").toUpperCase() : "PREVIEW"}</div>
-        {!detachedView && <div className="view-switch" aria-label="Workspace view"><button aria-pressed={!liveMode} onClick={() => setLiveMode(false)}>Planning</button><button aria-pressed={liveMode} onClick={() => setLiveMode(true)}>Live chat</button></div>}
+        {!detachedView && <div className="view-switch" aria-label="Workspace view"><button aria-pressed={!liveMode && !settingsOpen} onClick={() => { setSettingsOpen(false); setLiveMode(false) }}>Planning</button><button aria-pressed={liveMode && !settingsOpen} onClick={() => { setSettingsOpen(false); setLiveMode(true) }}>Live chat</button><button aria-pressed={settingsOpen} onClick={() => setSettingsOpen(true)}>Settings</button></div>}
         {detachedView && <button className="quiet-button dock-button" onClick={() => void changeChatWindow("dock")}>Dock chat</button>}
       </header>
 
       <section className="workspace">
-        <section className="main-column" hidden={liveMode}>
+        {settingsOpen && <section className="main-column"><SettingsPanel /></section>}
+        <section className="main-column" hidden={liveMode || settingsOpen}>
           <div className="page-heading">
             <div><p className="eyebrow">{sessionDate}</p><h1>Preparation &amp; trading</h1></div>
             <span className="market-pill"><span className={`status-dot ${connectionTone(connectionState)}`} />Engine {connectionLabel(connectionState)}</span>
@@ -187,8 +190,8 @@ export function App() {
                 <span>Revision {selectedTradebook.revision} · {selectedTradebook.interpretation ? `${selectedTradebook.interpretation.clauses.length} reviewed clauses` : "Interpretation not reviewed"}</span>
                 <details><summary>Original narrative and coverage</summary><pre className="narrative-text">{selectedTradebook.markdown}</pre>{selectedTradebook.interpretation?.clauses.map(clause => <div className="clause-readback" key={clause.clauseId}><strong>{clause.coverage}</strong><blockquote>{clause.sourceText}</blockquote><p>{clause.explanation}</p></div>) ?? <p>Guidance needs interpretation and review before attachment.</p>}</details>
               </div>
-            ) : <div className="empty-inline">No tradebooks loaded. Add Markdown files in Backtest/tradebooks.</div>}
-            <p className="chart-footnote">Read-only · Edit tradebooks in Backtest/tradebooks, then restart Cairo to reload. Selection changes focus only; it does not attach or activate a plan.</p>
+            ) : <div className="empty-inline">No tradebooks loaded. Check Tradebooks root path in Settings.</div>}
+            <p className="chart-footnote">Read-only · Edit tradebooks in your configured root, then restart Cairo to reload. Selection changes focus only; it does not attach or activate a plan.</p>
           </section>
 
           <section className="positions-card">
@@ -224,8 +227,8 @@ export function App() {
           {snapshot && <ExitReview snapshot={snapshot} />}
         </section>
 
-        {chatDetached && !detachedView && <aside className="detached-placeholder"><h2>Chat is in its own window</h2><p>Keep planning here, or focus chat for live trading.</p><button className="quiet-button" onClick={() => void changeChatWindow("detach")}>Show chat window</button><button className="quiet-button" onClick={() => void changeChatWindow("dock")}>Dock chat</button>{windowError && <p role="alert">{windowError}</p>}</aside>}
-        <aside className="copilot-column" hidden={chatDetached && !detachedView}>
+        {!settingsOpen && chatDetached && !detachedView && <aside className="detached-placeholder"><h2>Chat is in its own window</h2><p>Keep planning here, or focus chat for live trading.</p><button className="quiet-button" onClick={() => void changeChatWindow("detach")}>Show chat window</button><button className="quiet-button" onClick={() => void changeChatWindow("dock")}>Dock chat</button>{windowError && <p role="alert">{windowError}</p>}</aside>}
+        <aside className="copilot-column" hidden={settingsOpen || (chatDetached && !detachedView)}>
           <div className="copilot-heading"><div><span className="eyebrow">CAIRO COPILOT</span><h2>Trade assistant</h2></div><div className="chat-heading-actions"><span className={`online-tag ${connectionTone(copilotStatus.state)}`}>{sourceLabel(copilotStatus.state).toUpperCase()}</span>{!detachedView && window.cairo?.chatWindow && <button className="quiet-button" onClick={() => void changeChatWindow("detach")}>Pop out chat ↗</button>}</div></div>
           {windowError && <p className="chart-error" role="alert">{windowError}</p>}
           <LiveContext snapshot={snapshot} connectionState={connectionState} />

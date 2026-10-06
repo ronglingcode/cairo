@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("cairo", {
   mode: "fake",
   apiBaseUrl,
   config,
+  documentSettings: (action: "read" | "browse" | "save" | "derive", value?: unknown) => ipcRenderer.invoke("cairo:document-settings", action, value),
+  onDocumentSettings: (callback: (settings: unknown) => void) => subscribe("cairo:document-settings-changed", callback),
   commandToken,
   view: process.argv.includes("--cairo-view=chat") ? "chat" : "planning",
   chatWindow: (action: "detach" | "dock" | "state") => ipcRenderer.invoke("cairo:chat-window", action),

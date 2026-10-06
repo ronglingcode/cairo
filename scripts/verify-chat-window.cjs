@@ -10,8 +10,9 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), "cairo-chat-window-"))
 process.env.CAIRO_USER_DATA = profile
 process.env.CAIRO_WINDOW_TEST_MODE = "hidden"
 process.env.CAIRO_TRADEBOOK_PATH = profile
+fs.writeFileSync(path.join(profile, "activeTradebooks.md"), "# Active tradebooks\n")
 fs.writeFileSync(path.join(profile, "config.json"), JSON.stringify({
-  provider: "fake", selectedAccountId: "", secretsFile: "",
+  provider: "fake", selectedAccountId: "", secretsFile: "", workspace_root_path: profile,
   schwabTokenFile: path.join(profile, "no-broker-tokens.json"),
   bookmapEndpoint: "ws://127.0.0.1:1",
 }))
@@ -58,6 +59,33 @@ app.once("quit", () => {
   assert.ok(chat)
   await ready(chat)
   assert.equal(chat.isVisible(), false, "Pop-out verification must stay hidden")
+  // Settings persist a new document root while retaining the active root until restart.
+  const documentRoot = path.join(profile, "human documents")
+  fs.mkdirSync(documentRoot)
+  const derived = await evaluate(main, `window.cairo.documentSettings("derive", ${JSON.stringify(profile)})`)
+  assert.equal(derived.tradebooks_root_path, path.join(profile, "Backtest", "tradebooks"))
+  assert.equal(derived.secretsFile, path.join(profile, "secrets", "storeSecrets.js"))
+  const fakeSecrets = path.join(profile, "fake-storeSecrets.js")
+  fs.writeFileSync(fakeSecrets, 'localStorage.setItem("cairo.openai", JSON.stringify({apiKey: "synthetic-qa-key"}));')
+  await evaluate(main, 'document.querySelectorAll(".view-switch button")[2].click()')
+  await until(async () => await evaluate(main, 'Boolean(document.querySelector("#tradebooks-root-path"))'))
+  await assert.rejects(evaluate(main, 'window.cairo.documentSettings("save", "relative/path")'), /absolute path/)
+  await assert.rejects(evaluate(main, `window.cairo.documentSettings("save", ${JSON.stringify(path.join(profile, "missing"))})`), /existing folder/)
+  const settings = await evaluate(main, `window.cairo.documentSettings("save", ${JSON.stringify(documentRoot)})`)
+  assert.equal(settings.config.tradebooks_root_path, documentRoot)
+  assert.equal(settings.activeRoot, profile)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(profile, "config.json"), "utf8")).tradebooks_root_path, documentRoot)
+  await until(async () => await evaluate(main, 'document.querySelector("#tradebooks-root-path").value') === documentRoot)
+  assert.equal(await evaluate(main, 'document.querySelector(".settings-card").innerText.includes("Restart Cairo")'), true)
+  const secretSettings = await evaluate(main, `window.cairo.documentSettings("save", ${JSON.stringify({ workspace_root_path: profile, tradebooks_root_path: documentRoot, secretsFile: fakeSecrets })})`)
+  assert.equal(secretSettings.config.secretsFile, fakeSecrets)
+  assert.equal(secretSettings.activeSecretsFile, "", "Saved credentials only apply after restart")
+  assert.equal(JSON.stringify(secretSettings).includes("synthetic-qa-key"), false)
+  if (process.env.CAIRO_SETTINGS_SCREENSHOT) {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    fs.writeFileSync(process.env.CAIRO_SETTINGS_SCREENSHOT, (await main.webContents.capturePage()).toPNG())
+  }
+  await evaluate(main, 'document.querySelectorAll(".view-switch button")[0].click()')
   await until(async () => await evaluate(chat, 'document.querySelector("#cairo-message").value') === "preserved trading question")
   assert.equal(await evaluate(chat, 'window.cairo.view'), "chat")
   assert.equal(await evaluate(chat, 'fetch(`${window.cairo.apiBaseUrl}/snapshot`).then(r => r.json()).then(s => s.runtimeInstanceId)'), runtime)
@@ -83,7 +111,7 @@ app.once("quit", () => {
   }
   chat.close()
   await until(async () => await evaluate(main, 'document.querySelector(".copilot-column").hidden') === false)
-  await evaluate(main, 'document.querySelector(".view-switch button:last-child").click()')
+  await evaluate(main, 'document.querySelectorAll(".view-switch button")[1].click()')
   await until(async () => await evaluate(main, 'document.querySelector(".main-column").hidden') === true)
   await evaluate(main, 'window.cairo.chatWindow("detach")')
   const secondChat = BrowserWindow.getAllWindows().find(window => window !== main)
@@ -103,6 +131,6 @@ app.once("quit", () => {
   assert.equal(await evaluate(restored, 'window.cairo.view'), "planning")
   assert.equal(await evaluate(restored, 'window.cairo.chatDraft()'), "updated from detached chat")
   assert.deepEqual(shownWindows, [], "No verification window may show or take focus")
-  console.log("PASS: singleton pop-out, shared engine, draft handoff, narrow layout, close, dock, live view, and planning restoration")
+  console.log("PASS: document settings persistence and validation; singleton pop-out, shared engine, draft handoff, narrow layout, close, dock, live view, and planning restoration")
   app.quit()
 })().catch(error => { console.error(error); exitCode = 1; app.quit() })

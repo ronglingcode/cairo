@@ -1,10 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { existsSync } from "node:fs"
+import { homedir } from "node:os"
 import { readReferencedSecrets, type ReferencedSecrets } from "./ReferencedSecrets.mts"
 
 export type ProviderSelection = "openai" | "fake"
 
 export interface CairoConfig {
+  workspace_root_path: string
+  tradebooks_root_path: string
   selectedAccountId: string
   bookmapEndpoint: string
   schwabTokenFile: string
@@ -17,6 +21,8 @@ export interface CairoConfig {
 }
 
 export interface PublicConfiguration {
+  workspace_root_path: string
+  tradebooks_root_path: string
   configPath: string
   selectedAccountId: string | null
   bookmapEndpoint: string
@@ -32,6 +38,8 @@ export interface PublicConfiguration {
 }
 
 const DEFAULTS: CairoConfig = {
+  workspace_root_path: "",
+  tradebooks_root_path: "",
   selectedAccountId: "",
   bookmapEndpoint: "ws://127.0.0.1:8765",
   schwabTokenFile: path.join(process.env.USERPROFILE ?? process.env.HOME ?? ".", "bmtrader", "secrets.json"),
@@ -51,6 +59,8 @@ export class LocalConfiguration {
 
   constructor(userDataPath: string) {
     this.configPath = path.join(userDataPath, "config.json")
+    this.current.tradebooks_root_path = defaultTradebooksRoot()
+    this.current.workspace_root_path = path.join(homedir(), "trading")
   }
 
   async load(): Promise<PublicConfiguration> {
@@ -81,6 +91,8 @@ export class LocalConfiguration {
 
   private publicView(): PublicConfiguration {
     return {
+      workspace_root_path: this.current.workspace_root_path,
+      tradebooks_root_path: this.current.tradebooks_root_path,
       configPath: this.configPath,
       selectedAccountId: this.values.selectedAccountId || null,
       bookmapEndpoint: this.current.bookmapEndpoint,
@@ -109,6 +121,8 @@ function validateConfig(input: unknown): CairoConfig {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Cairo config must be an object")
   const value = input as Record<string, unknown>
   const result: CairoConfig = {
+    workspace_root_path: optionalString(value.workspace_root_path, path.join(homedir(), "trading")),
+    tradebooks_root_path: optionalString(value.tradebooks_root_path, defaultTradebooksRoot()),
     selectedAccountId: optionalString(value.selectedAccountId, DEFAULTS.selectedAccountId),
     bookmapEndpoint: optionalString(value.bookmapEndpoint, DEFAULTS.bookmapEndpoint),
     schwabTokenFile: optionalString(value.schwabTokenFile, DEFAULTS.schwabTokenFile),
@@ -125,7 +139,17 @@ function validateConfig(input: unknown): CairoConfig {
   if (!Number.isFinite(result.brokerPollIntervalMs) || result.brokerPollIntervalMs < 5_000 || result.brokerPollIntervalMs > 300_000) throw new Error("brokerPollIntervalMs must be between 5000 and 300000")
   if (result.provider !== "openai" && result.provider !== "fake") throw new Error("provider must be openai or fake")
   if (result.secretsFile && !path.isAbsolute(result.secretsFile)) throw new Error("secretsFile must be an absolute path")
+  if (!result.tradebooks_root_path || !path.isAbsolute(result.tradebooks_root_path)) throw new Error("Tradebooks root path must be an absolute path")
+  if (!result.workspace_root_path || !path.isAbsolute(result.workspace_root_path)) throw new Error("Workspace root path must be an absolute path")
+  result.workspace_root_path = path.resolve(result.workspace_root_path)
+  result.tradebooks_root_path = path.resolve(result.tradebooks_root_path)
   return result
+}
+
+function defaultTradebooksRoot(): string {
+  if (process.env.CAIRO_TRADEBOOK_PATH?.trim()) return path.resolve(process.env.CAIRO_TRADEBOOK_PATH.trim())
+  const workspaceRoot = path.join(homedir(), "trading", "Backtest", "tradebooks")
+  return existsSync(workspaceRoot) ? workspaceRoot : path.join(homedir(), "code", "Backtest", "tradebooks")
 }
 
 function optionalString(value: unknown, fallback: string): string {

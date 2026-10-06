@@ -78,6 +78,9 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; }
 .notes-context label span { color: #748bab; }
 .notes-context input { width: 170px; padding: 8px; border: 1px solid #c9dbf2; border-radius: 6px; background: #f7faff; color: #17345f; color-scheme: light; font: inherit; }
 .notes-label { display: block; margin-bottom: 7px; color: #294569; font-size: 11px; }
+.root-path-controls { display: flex; gap: 8px; margin-bottom: 14px; }
+.root-path-controls input { min-width: 0; flex: 1; padding: 9px; border: 1px solid #c9dbf2; border-radius: 6px; background: #f7faff; color: #17345f; font: inherit; }
+.settings-card { margin-top: 18px; }
 .preparation-card textarea { display: block; width: 100%; min-height: 190px; resize: vertical; padding: 12px; background: #f7faff; color: #17345f; border: 1px solid #c9dbf2; border-radius: 7px; font: 13px/1.6 'Segoe UI', sans-serif; }
 .preparation-card textarea:focus,.notes-context input:focus { outline: 2px solid #2374f5; outline-offset: 2px; }
 .notes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }

@@ -36,14 +36,31 @@ After building, run `node_modules/.bin/electron scripts/verify-chat-window.cjs`
 for the native window lifecycle and layout check with a disposable fake profile.
 Verification windows stay hidden and do not take focus.
 
+Open **Settings → Tradebooks root path** to type or browse for the folder containing
+all human-authored trading documents. Save and restart Cairo to apply a folder change.
+**Workspace root path** selects the shared parent folder (for example,
+`C:\Users\lingr\trading`). **Use paths from workspace root** fills
+`Backtest\tradebooks` and `secrets\storeSecrets.js` beneath it; both paths can also
+be changed separately. **Secrets file path** references the provisioning script;
+its contents are never sent to the settings view. Path changes apply after restart.
+The absolute path is stored as `tradebooks_root_path` in Cairo's local `config.json`.
 The strategy selector reads only top-level `.md` tradebooks linked under `## Long`
-and `## Short` in `activeTradebooks.md` in the configured tradebooks root.
-That index controls active choices and matching by position side; unlisted books
-are unavailable. A missing index or broken link prevents the library from loading.
-Restart Cairo after index edits.
+and `## Short` in `activeTradebooks.md` there. That index controls active choices
+and matching by position side; unlisted books are unavailable. A missing index or
+broken link prevents the library from loading. Restart Cairo after index edits.
+Bookmap sources use `bookmap_patterns/activePatterns.md` and its linked
+files beneath the same root. Preparation notes are saved in `preparation/preparation.json`.
+Existing profile preparation is copied once when the root has no preparation notes;
+the original is preserved and existing root notes are never replaced by migration.
+Other human-authored document features should place their files beneath this root.
+The credentials source stays at the selected secrets file; reviewed interpretations,
+broker recovery and runtime state remain in Cairo's profile. Changing roots leaves
+documents in the old root untouched.
 
-Set `CAIRO_TRADEBOOK_PATH` before launching to use another directory. Restart
-Cairo to reload source edits. Narratives appear without interpretation files;
+For configurations without a saved root, `CAIRO_TRADEBOOK_PATH` supplies the initial
+default; otherwise Cairo uses `%USERPROFILE%\trading\Backtest\tradebooks` if it exists,
+falling back to `%USERPROFILE%\code\Backtest\tradebooks`. The saved setting takes precedence.
+Restart Cairo to reload source edits. Narratives appear without interpretation files;
 reviewed interpretations stay in Cairo's profile and are used only while their
 hash matches the source narrative. Cairo tradebooks are read-only: edit their Markdown files in Backtest. Cairo cannot
 create or replace tradebooks, including through AI proposals. Preparation notes
