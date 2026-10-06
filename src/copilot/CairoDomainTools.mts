@@ -19,6 +19,8 @@ export interface NoteProposal {
 }
 
 export class CairoDomainTools {
+  private atrTargets?: (symbol: string, side: string) => ReturnType<typeof import("../engine/AtrTargets.mts").atrTargetContext>
+  setAtrTargets(reader: NonNullable<CairoDomainTools['atrTargets']>): void { this.atrTargets = reader }
   private bookmapEvidence?: import("../engine/BookmapEvidence.mts").BookmapEvidence
   setBookmapEvidence(evidence: import("../engine/BookmapEvidence.mts").BookmapEvidence): void { this.bookmapEvidence = evidence }
   private bookmapPatterns?: import("../engine/BookmapPatterns.mts").BookmapPatterns
@@ -91,6 +93,7 @@ export class CairoDomainTools {
         accountId: current.brokerFacts!.accountId, factsRevision: current.brokerFactsRevision,
         position: pattern.position, bookmapPattern: pattern, tradebook: positionTradebook(current, pattern.position),
         sizing: targetPositionContext(current, pattern.position, this.now()),
+        atrTargets: this.atrTargets?.(pattern.position.symbol, pattern.position.side) ?? { available: false, reason: "Bookmap ATR/day-low source unavailable", levels: [] },
         liquidity: this.bookmapEvidence?.targetLiquidity(pattern.position.symbol, pattern.position.side, this.now()) ??
           { available: false, reason: "Bookmap evidence recorder unavailable", levels: [] },
         preparation: current.preparationError ? { available: false, error: current.preparationError } : current.preparation ?? { available: false },

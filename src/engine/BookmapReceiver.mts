@@ -2,6 +2,7 @@ import { BookmapEntryArchive } from "./BookmapEntryArchive.mts"
 import { BookmapEvidence } from "./BookmapEvidence.mts"
 import { parseBookmapObservation, type BookmapObservation } from "../shared/contracts.mts"
 import type { CairoEngine } from "./CairoEngine.mts"
+import { atrTargetContext, type AtrMarket } from "./AtrTargets.mts"
 export const ALLOWED_PATTERNS = ["BID_STEP_UP", "BID_REAPPEAR"] as const
 export interface ObservedEpisode { observation: BookmapObservation; receivedAt: string; freshEvent: boolean }
 export interface BookmapProjection { sourceInstanceId: string | null; heartbeatAt: string | null; symbols: Record<string, { mode: string; readiness: string; heartbeatAt: string }>; episodes: ObservedEpisode[] }
@@ -14,6 +15,8 @@ export class BookmapReceiver {
   private engine: CairoEngine; private now: () => number; private socket?: WebSocket; private retry?: ReturnType<typeof setTimeout>; private stopped = true
   private projection: BookmapProjection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
   constructor(engine: CairoEngine, now = Date.now) { this.engine = engine; this.now = now }
+  private targetMarkets = new Map<string, AtrMarket>()
+  atrTargets(symbol: string, side: string) { return atrTargetContext(this.targetMarkets.get(symbol), side, this.now()) }
   private accountActivity?: () => void
   setAccountActivityHandler(handler: () => void): void { this.accountActivity = handler }
   start(endpoint: string): void {
@@ -22,20 +25,28 @@ export class BookmapReceiver {
     const connect = () => {
       if (this.stopped) return
       this.evidence.reset()
+      this.targetMarkets.clear()
       this.projection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
       const socket = new WebSocket(endpoint); this.socket = socket
       socket.addEventListener("open", () => { if (socket === this.socket && !this.stopped) this.accountActivity?.() })
       socket.addEventListener("message", event => { if (socket === this.socket && typeof event.data === "string") this.receive(event.data) })
       socket.addEventListener("error", () => socket.close())
-      socket.addEventListener("close", () => { if (this.stopped || socket !== this.socket) return; this.publish("disconnected", "Bookmap disconnected; reconnecting"); this.retry = setTimeout(connect, 2000) })
+      socket.addEventListener("close", () => { if (this.stopped || socket !== this.socket) return; this.targetMarkets.clear(); this.publish("disconnected", "Bookmap disconnected; reconnecting"); this.retry = setTimeout(connect, 2000) })
     }
     connect()
   }
-  stop(): void { this.archive?.capture(); this.stopped = true; clearTimeout(this.retry); clearTimeout(this.publishTimer); this.socket?.close(); this.socket = undefined; this.publish("disconnected", "Observation receiver stopped") }
+  stop(): void { this.archive?.capture(); this.stopped = true; this.targetMarkets.clear(); clearTimeout(this.retry); clearTimeout(this.publishTimer); this.socket?.close(); this.socket = undefined; this.publish("disconnected", "Observation receiver stopped") }
   receive(raw: string): boolean {
     try {
       if (raw.length > 131_072) return false
       const value = JSON.parse(raw)
+      if (value.type === "cairo_target_market") {
+        if (typeof value.symbol !== 'string' || !/^[A-Z0-9.\-]{1,16}$/.test(value.symbol) || typeof value.sessionDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.sessionDate) || !Number.isSafeInteger(value.timestamp) || value.timestamp > this.now() + 5000 || value.timestamp < this.now() - 60_000 || ![value.atr, value.lowOfDay, value.highOfDay].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0) || value.highOfDay < value.lowOfDay) return false
+        if ((this.targetMarkets.get(value.symbol)?.timestamp ?? 0) > value.timestamp) return false
+        this.targetMarkets.set(value.symbol, { symbol: value.symbol, sessionDate: value.sessionDate, timestamp: value.timestamp, atr: value.atr, lowOfDay: value.lowOfDay, highOfDay: value.highOfDay })
+        if (this.targetMarkets.size > 100) this.targetMarkets.delete(this.targetMarkets.keys().next().value!)
+        return true
+      }
       if (value.type === "cairo_account_activity") {
         if (!Number.isSafeInteger(value.receivedAt) || value.receivedAt > this.now() + 5000 || value.receivedAt < this.now() - 60_000 || !Array.isArray(value.messageTypes) || value.messageTypes.length > 32 || !value.messageTypes.every((type: unknown) => typeof type === "string" && /^[A-Za-z0-9_]{1,80}$/.test(type))) return false
         this.accountActivity?.()

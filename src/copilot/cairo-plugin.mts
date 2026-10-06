@@ -74,7 +74,7 @@ export function createCairoPlugin(bridge: Bridge, skillsDirectory = process.env.
           options: { namespace: "cairo", codemode: false, permission: "cairo_read" },
           execute: async (input, context) => ({ content: JSON.stringify(await bridge("read_bookmap_pattern", input, context)) }),
         })
-        editor.add({ name: "read_target_context", description: "Read target context in one call: confirmed trade/pattern, notes and attached plan, initial/remaining shares, reconciled partial fills and prices, code-calculated remaining 10-30% initial-share early-partial budget and 70% reserve, working exits, and exact live Bookmap large displayed levels sorted in profit direction. Missing history is explicit. Advisory only; do not invent T1/T2 allocations or treat wall size as a fill.",
+        editor.add({ name: "read_target_context", description: "Read target context in one call: confirmed trade/pattern, notes and attached plan, initial/remaining shares, reconciled partial fills, early-partial budget and reserve, working exits, live Bookmap liquidity, and atrTargets containing configured ATR, session low of day and code-calculated long reference prices (low + multiple * ATR). Use saved multiples only; show dollar prices. Missing/stale inputs are explicit. Advisory only; do not invent allocations or treat wall size as a fill.",
           input: { type: "object", properties: { positionId: { type: "string" } }, required: ["positionId"], additionalProperties: false },
           options: { namespace: "cairo", codemode: false, permission: "cairo_read" },
           execute: async (input, context) => ({ content: JSON.stringify(await bridge("read_target_context", input, context)) }),

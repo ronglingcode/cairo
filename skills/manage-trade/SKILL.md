@@ -15,6 +15,8 @@ Both workflows share the included [trade-context](../trade-context/SKILL.md) pre
 
 Read relevant broker facts and source freshness to ground the stop and targets. Do not assert a live stop/target trigger from a chart snapshot or unknown observations.
 
+For ATR long targets, always call `cairo.read_target_context` and show the calculated dollar prices from its `atrTargets` context alongside the saved multiples: `targets: preparation T1 $105.00 (0.5 ATR); T2 $108.00 (0.8 ATR)`. The formula is low of day + multiple × ATR. This requirement takes precedence over the short word-count guidance below; bare `T1 0.5 ATR` is insufficient when the inputs are available. If unavailable, name the missing input briefly. Do not invent a price.
+
 For an automatic review after a partial, show supported stop and target rules in the same two numbered lines. When either field is unsupported, replace bare `undefined` with `unavailable — <specific missing rule or input>`. Add at most one short next-step sentence naming how the trader can supply that missing context. This exception takes precedence over the bare invocation's format below. Never guess a rule, price or confirmed pattern to fill the gap.
 
 For a bare `/manage-trade` invocation or an immediate live-management request, return exactly this two-line numbered format:

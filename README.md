@@ -63,6 +63,9 @@ Reconnecting also requests fresh facts. Cairo has no recurring broker polling lo
 it refreshes once at startup, on Bookmap notifications/reconnects, on manual refresh,
 and around its own explicitly approved broker actions. Legacy polling settings are ignored.
 Broker request time and model response time still add to end-to-end latency.
+ATR long targets include calculated dollar prices using Bookmap's configured ATR
+and current session low of day: `lowOfDay + multiple * ATR`. Cairo preserves the
+saved target multiples and preparation qualifier; missing or stale inputs remain explicit.
 When the response completes, Cairo shows a notification, plays a sound and speaks
 the symbol with a reminder to review its stop loss and targets. Click the
 notification to focus chat. **Stop management** pauses these reminders; the checkbox

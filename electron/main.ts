@@ -307,6 +307,7 @@ app.whenReady().then(async () => {
   })
   domainTools.setExitTickets(tickets)
   domainTools.setBookmapPatterns(bookmapPatterns)
+  domainTools.setAtrTargets((symbol, side) => bookmapReceiver.atrTargets(symbol, side))
   domainTools.setBookmapEvidence(bookmapReceiver.evidence)
   ticketPermissions = new TicketPermissions(tickets, () => sidecar?.client)
   domainTools.setTicketPermissions(ticketPermissions)
