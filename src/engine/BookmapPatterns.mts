@@ -174,6 +174,12 @@ export class BookmapPatterns {
     if (current.facts.accountId !== facts.accountId || !current.facts.positions.some(item => item.positionId === position.positionId && item.side === position.side && item.symbol === position.symbol && item.quantity > 0) || (this.tagFor(facts.accountId, position.positionId, position.side)?.revision ?? null) !== (tag?.revision ?? null) || pattern && !this.usable(tag)) throw new Error("Trade or Bookmap tag changed; read context again")
     return { position: current.facts.positions.find(item => item.positionId === position.positionId)!, tag, confirmed: Boolean(pattern), candidates, pattern: pattern ?? null, markdown, source: pattern?.sourceFile ? `bookmap_patterns/${pattern.sourceFile}` : null }
   }
+  async managementRequest(positionId: string): Promise<string> {
+    const context = await this.read(positionId)
+    const text = `/manage-trade ${context.position.symbol} ${context.position.side}`
+    if (context.pattern) return this.bind(text, context.position, context.pattern)
+    return `${text}\nSelected current trade: ${context.position.symbol} ${context.position.side}; positionId: ${positionId}. Bookmap pattern: unconfirmed\nAutomatic review after a 30% partial. Use undefined for unsupported stop or targets; never infer a saved pattern from history.`
+  }
   private bind(text: string, position: { positionId: string; symbol: string; side: string }, pattern: BookmapPattern): string {
     const bound = `${text}\nSelected current trade: ${position.symbol} ${position.side}; positionId: ${position.positionId}. Bookmap pattern: ${pattern.name} (saved)`
     if (bound.length > 8000) throw new Error("Message is too long to include the selected trade")

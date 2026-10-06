@@ -25,4 +25,5 @@ contextBridge.exposeInMainWorld("cairo", {
   onChatDetached: (callback: (detached: boolean) => void) => subscribe("cairo:chat-detached", callback),
   chatDraft: (draft?: string) => ipcRenderer.invoke("cairo:chat-draft", draft),
   onChatDraft: (callback: (draft: string) => void) => subscribe("cairo:chat-draft", callback),
+  onManagementAlert: (callback: (symbol: string) => void) => subscribe("cairo:management-alert", callback),
 })

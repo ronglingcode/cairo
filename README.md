@@ -42,6 +42,21 @@ reviews never disable your message composer. **Cancel reply** stops your respons
 **Stop auto** stops automatic analysis and pauses automatic updates. The former
 shared conversation remains visible in this timeline when upgrading.
 
+**Manage trade + voice after 30% partial** is on by default. While Cairo is running,
+it tracks each held position's starting size and new broker fills. Once confirmed
+closing fills reach 30% (rounded down to whole shares, at least one share), with
+shares still held, Cairo runs `/manage-trade` for that position once. Adds increase
+the size basis; quantity changes without matching fills do not trigger a review.
+Busy automatic analysis queues the review; manual chat remains available. The
+response uses the saved Bookmap pattern and current stop/target context, in the
+same timeline. Missing confirmed patterns remain undefined rather than inferred.
+When the response completes, Cairo shows a notification, plays a sound and speaks
+the symbol with a reminder to review its stop loss and targets. Click the
+notification to focus chat. **Stop auto** also pauses these reminders; the checkbox
+re-enables them. Closed trades and canceled/failed responses do not sound a ready
+alert. Tracking starts with current broker facts on launch; earlier partials are
+not replayed. Windows voice uses the installed system voice without a network service.
+
 Type `/` to choose a skill; `/s` shows `set-stop-loss` and `set-targets`.
 `manage-trade` includes both workflows. `/bookmap-pattern` tags the current trade;
 stop, target and management requests share a trade/pattern picker when context is missing. Assign each stock's long/short tradebooks under **Tradebooks by stock and side** in preparation; held positions resolve the matching side automatically. Humans and AI editors share the Markdown

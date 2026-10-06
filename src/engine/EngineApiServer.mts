@@ -47,6 +47,8 @@ export class EngineApiServer {
   setPolicyReview(review: PolicyReview): void { this.policyReview = review }
   private waker: CopilotWaker | undefined
   setCopilotWaker(waker: CopilotWaker): void { this.waker = waker }
+  private partialManagement?: import("../copilot/PartialManagement.mts").PartialManagement
+  setPartialManagement(partial: import("../copilot/PartialManagement.mts").PartialManagement): void { this.partialManagement = partial }
   private tickets: ExitTickets | undefined
   setExitTickets(tickets: ExitTickets): void { this.tickets = tickets }
   private writer: ExitWriter | undefined
@@ -205,6 +207,10 @@ export class EngineApiServer {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(value => { if (!this.waker || typeof value.enabled !== "boolean") throw new Error("Event settings unavailable"); this.waker.setEnabled(value.enabled); this.json(response, 200, { ok: true }) }).catch(() => this.json(response, 400, { error: "Invalid event setting" })); return
     }
+    if (url.pathname === "/copilot/partial-management" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.readCommand(request).then(value => { if (!this.partialManagement || typeof value.enabled !== "boolean") throw new Error("Partial reminders unavailable"); this.partialManagement.setEnabled(value.enabled); this.json(response, 200, { ok: true }) }).catch(() => this.json(response, 400, { error: "Invalid partial reminder setting" })); return
+    }
     if (["/proposals/accept", "/proposals/reject"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.reviewProposal(url.pathname, request, response); return
@@ -306,7 +312,7 @@ export class EngineApiServer {
   private async chatCommand(route: string, request: IncomingMessage, response: ServerResponse, chat: CopilotChat): Promise<void> {
     try {
       if (route.endsWith("/connect")) await chat.connect()
-      else if (route.endsWith("/cancel")) { const session = chat.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await chat.cancel() }
+      else if (route.endsWith("/cancel")) { const session = chat.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await chat.cancel(); if (route.startsWith("/copilot/automatic/")) this.partialManagement?.setEnabled(false) }
       else {
         const chunks: Buffer[] = []
         let bytes = 0

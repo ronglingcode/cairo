@@ -20,6 +20,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [chatDetached, setChatDetached] = useState(false)
   const [windowError, setWindowError] = useState<string | null>(null)
+  useEffect(() => window.cairo?.onManagementAlert?.(() => { setLiveMode(true); setSettingsOpen(false) }), [])
   useEffect(() => {
     let active = true
     const unsubscribe = window.cairo?.onChatDetached?.(value => { if (active) setChatDetached(value) })
@@ -235,6 +236,11 @@ export function App() {
           {windowError && <p className="chart-error" role="alert">{windowError}</p>}
           <LiveContext snapshot={snapshot} connectionState={connectionState} />
           <div className="chat-runtime">
+            <label><input type="checkbox" checked={snapshot?.copilotPartialManagement.enabled ?? true} disabled={!snapshot || !apiBaseUrl} onChange={event => { void fetch(`${apiBaseUrl}/copilot/partial-management`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify({ enabled: event.target.checked }) }).then(response => { if (!response.ok) setCopilotRestartError("Partial reminders could not be changed") }).catch(() => setCopilotRestartError("Partial reminders unavailable")) }} /> Manage trade + voice after 30% partial</label>
+            {snapshot?.copilotPartialManagement.activeSymbol && <p role="status">{snapshot.copilotPartialManagement.activeSymbol}: reviewing stop loss and targets…</p>}
+            {Boolean(snapshot?.copilotPartialManagement.pending) && <p role="status">30% partial detected · management review queued</p>}
+            {snapshot?.copilotPartialManagement.lastReminder && <p role="status">{snapshot.copilotPartialManagement.lastReminder.symbol}: manage trade response ready</p>}
+            {snapshot?.copilotPartialManagement.error && <p className="chart-error" role="status">{snapshot.copilotPartialManagement.error}</p>}
             <label><input type="checkbox" checked={snapshot?.copilotWake.enabled ?? false} disabled={!snapshot || !apiBaseUrl} onChange={event => { void fetch(`${apiBaseUrl}/copilot/events`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify({ enabled: event.target.checked }) }).then(response => { if (!response.ok) setCopilotRestartError("Event updates could not be changed") }).catch(() => setCopilotRestartError("Event updates unavailable")) }} /> AI updates for account changes</label>
             {snapshot?.copilotWake.error && <p role="status">{snapshot.copilotWake.error}</p>}
             {snapshot?.copilotWake.pending && <p role="status">Latest changes queued for AI review</p>}

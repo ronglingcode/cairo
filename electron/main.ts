@@ -9,6 +9,8 @@ import { ExitTickets } from "../src/engine/ExitTickets.mts"
 import { RecoveryStore } from "../src/engine/RecoveryStore.mts"
 import { ExitWriter } from "../src/engine/ExitWriter.mts"
 import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
+import { PartialManagement } from "../src/copilot/PartialManagement.mts"
+import { managementAlert } from "./managementAlert"
 import { TradebookStore } from "../src/engine/TradebookStore.mts"
 import { BookmapPatterns } from "../src/engine/BookmapPatterns.mts"
 import { PolicyReview } from "../src/engine/PolicyReview.mts"
@@ -40,7 +42,7 @@ import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 app.setPath("userData", prepareUserDataDirectory(app.getPath("userData")))
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); partialManagement?.cycle(); if (!partialManagement?.ownsAutomaticChat) waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const bookmapReceiver = new BookmapReceiver(engine)
 const entryObserver = new EntryObserver(engine)
@@ -58,6 +60,7 @@ let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined
 let automaticChat: CopilotChat | undefined
 let waker: CopilotWaker | undefined
+let partialManagement: PartialManagement | undefined
 let writer: ExitWriter | undefined
 let protection: ProtectionCoordinator | undefined
 let uncertainty: UnknownReconciler | undefined
@@ -273,6 +276,15 @@ app.whenReady().then(async () => {
   apiServer.setCopilotAutomaticChat(automaticChat)
   waker = new CopilotWaker(engine, automaticChat)
   apiServer.setCopilotWaker(waker)
+  partialManagement = new PartialManagement(engine, automaticChat, id => bookmapPatterns.managementRequest(id), symbol => {
+    broadcast("cairo:management-alert", symbol)
+    managementAlert(symbol, () => {
+      const window = chatWindow ?? planningWindow
+      if (window) focusWindow(window)
+      broadcast("cairo:management-alert", symbol)
+    })
+  })
+  apiServer.setPartialManagement(partialManagement)
   apiServer.setCopilotRestarter(async () => { await ticketPermissions?.stop(); await Promise.all([chat!.stop(), automaticChat!.stop()]); const ok = await sidecar!.restart(); if (ok) await Promise.all([chat!.connect(), automaticChat!.connect()]); return ok })
   const domainTools = new CairoDomainTools(engine, async id => {
     const client = sidecar?.client

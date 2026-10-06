@@ -20,6 +20,7 @@ declare global {
       onChatDetached?: (callback: (detached: boolean) => void) => () => void
       chatDraft?: (draft?: string) => Promise<string>
       onChatDraft?: (callback: (draft: string) => void) => () => void
+      onManagementAlert?: (callback: (symbol: string) => void) => () => void
     }
   }
 }

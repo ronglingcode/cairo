@@ -69,6 +69,10 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = n
   }, [])
   useEffect(() => () => { controller.current?.abort(); automaticController.current?.abort() }, [])
   useEffect(() => { if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight }, [chat?.messages, automaticChat?.messages])
+  useEffect(() => window.cairo?.onManagementAlert?.(() => {
+    followLatest.current = true
+    if (history.current) history.current.scrollTop = history.current.scrollHeight
+  }), [])
   async function command(action: "send" | "cancel" | "connect", automatic = false) {
     if (!apiBaseUrl || !commandToken || (automatic ? automaticPending : pending)) return
     const abort = new AbortController()

@@ -12,6 +12,7 @@ import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
 import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 import { build } from "esbuild"
 import { BOOKMAP_CARD_ERRORS } from "../src/shared/BookmapCardErrors.mts"
+import { SkillLibrary } from "../src/copilot/SkillLibrary.mts"
 
 async function until(predicate) {
   for (let count = 0; count < 150; count++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 50)) }
@@ -41,6 +42,19 @@ function fixture() {
   const chat = new CopilotChat({ engine, client: () => client, workspace: "C:/owned", model: { providerID: "fixture", id: "model" }, fake: true, configured: () => true })
   return { engine, client, chat, setContext: value => { context = value }, lose: () => loseStream(), prompts: () => prompts, maxSubscriptions: () => maxSubscriptions }
 }
+
+test("machine management uses a skill prompt without granting trading approval", async t => {
+  const f = fixture(); t.after(() => f.chat.stop())
+  let delivered
+  const original = f.client.session.prompt
+  f.client.session.prompt = async input => { delivered = input; await original(input) }
+  await f.chat.connect()
+  await f.chat.sendAutomatic("/manage-trade AAA long", "partial-command-001")
+  assert.equal(delivered.text, "/manage-trade AAA long")
+  assert.equal(delivered.metadata.cairoMachine, true)
+  assert.equal(delivered.metadata.grantsApproval, false)
+  assert.equal(f.chat.snapshot.busy, true)
+})
 
 test("chat cancels, recovers snapshots, and keeps one subscription without resending", async t => {
   const f = fixture()
@@ -172,9 +186,9 @@ test("actual pinned runtime streams, cancels, and reuses a Cairo session after r
   const pluginPath = path.join(root, "plugin.js")
   await build({ entryPoints: ["src/copilot/cairo-plugin.mts"], bundle: true, platform: "node", format: "esm", outfile: pluginPath })
   const sidecar = new OpenCodeSidecar({ binary: path.resolve("node_modules/@opencode/cli/bin/opencode.exe"), userDataPath: root, pluginPath, config: selected.config,
-    environment: { CAIRO_TOOL_ENDPOINT: `${base}/copilot/tools`, CAIRO_TOOL_TOKEN: api.toolToken, CAIRO_OPENAI_API_KEY: "fixture-env-key" }, onStatus: () => {} })
+    environment: { CAIRO_TOOL_ENDPOINT: `${base}/copilot/tools`, CAIRO_TOOL_TOKEN: api.toolToken, CAIRO_OPENAI_API_KEY: "fixture-env-key", CAIRO_SKILLS_DIRECTORY: path.resolve("skills") }, onStatus: () => {} })
   const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true })
-  const automatic = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true, channel: "automatic" })
+  const automatic = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true, channel: "automatic", skills: new SkillLibrary(path.resolve("skills")) })
   api.setDomainTools(new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace))
   t.after(async () => { await Promise.all([chat.stop(), automatic.stop()]); await sidecar.stop(); await provider.stop(); await api.stop(); await rm(root, { recursive: true, force: true }) })
   assert.equal(await sidecar.start(), true)
@@ -211,6 +225,13 @@ test("actual pinned runtime streams, cancels, and reuses a Cairo session after r
   await until(() => !automatic.snapshot.busy && automatic.snapshot.outcome === "succeeded")
   assert.ok(!chat.snapshot.messages.some(message => message.text.includes("Machine observation only; review chart context.")))
   assert.ok(!automatic.snapshot.messages.some(message => message.text.includes("My on-demand question")))
+  await automatic.sendAutomatic("/manage-trade AAA long", "partial-runtime-001")
+  await until(() => !automatic.snapshot.busy && automatic.snapshot.outcome === "succeeded")
+  const managementContext = await sidecar.client.session.context({ sessionID: automatic.snapshot.sessionId })
+  const managementPrompt = managementContext.find(message => message.type === "user" && message.metadata?.cairoCommand === "partial-runtime-001")
+  assert.equal(managementPrompt.metadata.cairoMachine, true)
+  assert.equal(managementPrompt.metadata.grantsApproval, false)
+  assert.deepEqual(managementPrompt.metadata.cairoSkills.map(skill => skill.name), ["trade-context", "set-stop-loss", "set-targets", "manage-trade"])
   assert.ok(!(await readFile(path.join(sidecar.workspace, "opencode.json"), "utf8")).includes("CAIRO_TOOL_TOKEN"))
   assert.ok(!(await readFile(path.join(sidecar.workspace, "opencode.json"), "utf8")).includes("fixture-env-key"))
 })

@@ -4,6 +4,7 @@ export function chatTimeline(chat: CopilotChat | null, automaticChat: CopilotCha
   const displayText = (message: CopilotChatMessage) => message.role === "user"
     ? message.text
       .replace(/(^|\n)Selected current trade: ([^;\r\n]+); positionId: [^\r\n]+?\. Bookmap pattern: ([^\r\n]+) \(saved\)(?=\r?$)/gm, "$1$2 · Bookmap: $3 (saved)")
+      .replace(/(^|\n)Selected current trade: ([^;\r\n]+); positionId: [^\r\n]+?\. Bookmap pattern: unconfirmed(?=\r?$)/gm, "$1$2 · Bookmap: unconfirmed")
       .replace(/(^|\n)Selected current trade: ([^;\r\n]+); positionId: [^\r\n]+?\. Use its saved Bookmap tag\./g, "$1$2")
     : message.text
   return [

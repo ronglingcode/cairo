@@ -95,7 +95,8 @@ export class CopilotChat {
       this.publish()
     } catch { if (generation === this.generation) this.fail("Chat could not reconnect. Retry without resending your last message.") }
   }
-  send(text: unknown, commandId: unknown): Promise<void> {
+  sendAutomatic(text: string, commandId: string): Promise<void> { return this.send(text, commandId, true) }
+  send(text: unknown, commandId: unknown, machine = false): Promise<void> {
     return this.serial(async () => {
       if (typeof text !== "string" || !text.trim() || text.length > 8000 || typeof commandId !== "string" || !/^[a-zA-Z0-9-]{8,80}$/.test(commandId)) throw new Error("Message must contain 1–8000 characters and a command ID")
       if (this.commands.has(commandId)) {
@@ -115,7 +116,7 @@ export class CopilotChat {
       this.publish()
       const generation = this.generation
       try {
-        await this.client.session.prompt({ sessionID: this.state.sessionId, text, metadata: { cairoCommand: commandId } }, { signal: AbortSignal.timeout(10_000) })
+        await this.client.session.prompt({ sessionID: this.state.sessionId, text, metadata: { cairoCommand: commandId, ...(machine ? { cairoMachine: true, grantsApproval: false } : {}) } }, { signal: AbortSignal.timeout(10_000) })
         await this.refresh(generation)
       } catch {
         if (generation === this.generation) this.fail("Message delivery is uncertain. Reconnect to inspect the session; Cairo will not resend it.")
