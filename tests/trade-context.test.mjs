@@ -46,6 +46,21 @@ test("symbol and broker side resolve the assigned book and preserve attachment c
   assert.equal(positionTradebook(snapshot, position).status, "missing-source")
 })
 
+test("position matching rejects inactive and wrong-side assignments even with an attachment", () => {
+  const snapshot = positionEngine().getSnapshot()
+  const position = snapshot.positions[0]
+  snapshot.tradebooks[0].activeSides = ["long"]
+  snapshot.tradebooks[1].activeSides = ["short"]
+  snapshot.preparation = { tradebookAssignments: [{ symbol: "AAA", side: "long", tradebookId: "whole" }] }
+  assert.equal(positionTradebook(snapshot, position).status, "missing-source")
+  snapshot.preparation.tradebookAssignments[0].tradebookId = "partial"
+  assert.equal(positionTradebook(snapshot, position).book.id, "partial")
+  snapshot.attachments = [{ accountId: snapshot.brokerFacts.accountId, positionId: position.positionId, symbol: "AAA", state: "active", baseline: { side: "long" }, tradebookId: "partial" }]
+  snapshot.tradebooks = snapshot.tradebooks.filter(book => book.id !== "partial")
+  assert.equal(positionTradebook(snapshot, position).status, "missing-source")
+  assert.equal(positionTradebook(snapshot, position).book, null)
+})
+
 test("assignments persist, reject duplicate sides, and survive AI note proposals", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "cairo-context-"))
   t.after(() => rm(root, { recursive: true, force: true }))

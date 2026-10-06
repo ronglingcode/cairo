@@ -131,6 +131,7 @@ export interface TradebookInterpretation {
 
 export interface Tradebook {
   id: string
+  activeSides?: ("long" | "short")[]
   title: string
   markdown: string
   revision: string

@@ -27,8 +27,9 @@ export function positionTradebook(snapshot: CairoSnapshot, position: BrokerPosit
   const attachment = candidates[0] ?? null
   const assignment = assignments[0] ?? null
   const tradebookId = assignment?.tradebookId ?? attachment?.tradebookId
-  const book = snapshot.tradebooks.find(book => book.id === tradebookId) ?? null
+  const book = snapshot.tradebooks.find(book => book.id === tradebookId && (!book.activeSides || book.activeSides.includes(position.side))) ?? null
   if (!tradebookId) return { status: "unassigned", book: null, attachment }
   if (assignment && attachment && assignment.tradebookId !== attachment.tradebookId) return { status: "conflict", book, attachment }
+  if (tradebookId && !book) return { status: "missing-source", book: null, attachment }
   return { status: book || attachment ? "resolved" : "missing-source", book, attachment }
 }

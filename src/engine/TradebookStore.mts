@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { homedir } from "node:os"
 import type { PositionAttachment, Tradebook, TradebookInterpretation } from "../shared/contracts.mts"
@@ -20,19 +20,55 @@ export class TradebookStore {
     this.sourceRoot = sourceRoot ?? path.join(homedir(), "code", "Backtest", "tradebooks")
   }
   async list(): Promise<Tradebook[]> {
-    const entries = await readdir(this.sourceRoot, { withFileTypes: true })
+    const entries = await this.activeEntries()
     const books: Tradebook[] = []
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.toLowerCase() === "index.md") continue
-      const book = await this.loadTradebook(entry.name.slice(0, -3))
-      if (book) books.push(book)
+    for (const [id, sides] of entries) {
+      const book = await this.readTradebook(id, sides)
+      if (!book) throw new Error(`Active tradebook source is missing: ${id}.md`)
+      books.push(book)
     }
     return books
   }
 
   async loadTradebook(id: string): Promise<Tradebook | null> {
     const safeId = safeIdentifier(id)
-    if (safeId.toLowerCase() === "index") return null
+    let entries: Map<string, ("long" | "short")[]>
+    try { entries = await this.activeEntries() } catch (error) {
+      if (isMissing(error)) return null
+      throw error
+    }
+    const sides = entries.get(safeId)
+    return sides ? this.readTradebook(safeId, sides) : null
+  }
+
+  private async activeEntries(): Promise<Map<string, ("long" | "short")[]>> {
+    const markdown = await readFile(path.join(this.sourceRoot, "activeTradebooks.md"), "utf8")
+    const entries = new Map<string, ("long" | "short")[]>()
+    let side: "long" | "short" | null = null
+    let fenced = false
+    for (const line of markdown.split(/\r?\n/)) {
+      if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue }
+      if (fenced) continue
+      const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(line)
+      if (heading) {
+        const name = heading[1].toLowerCase()
+        side = name === "long" || name === "short" ? name : null
+        continue
+      }
+      if (!side) continue
+      for (const link of line.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+        const target = link[1].trim().replace(/^\.\//, "")
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\.md$/.test(target) || /^(index|activeTradebooks)\.md$/i.test(target)) throw new Error(`Invalid active tradebook link: ${link[1]}; use a top-level tradebook .md file`)
+        const id = target.slice(0, -3)
+        const sides = entries.get(id) ?? []
+        if (!sides.includes(side)) sides.push(side)
+        entries.set(id, sides)
+      }
+    }
+    return entries
+  }
+
+  private async readTradebook(safeId: string, activeSides: ("long" | "short")[]): Promise<Tradebook | null> {
     let markdown: string
     try {
       markdown = await readFile(path.join(this.sourceRoot, `${safeId}.md`), "utf8")
@@ -47,7 +83,7 @@ export class TradebookStore {
       rawInterpretation = await readFile(path.join(this.root, `${safeId}.interpretation.json`), "utf8")
       interpretation = validateInterpretation(JSON.parse(rawInterpretation), safeId, hash(markdown), markdown)
     } catch { rawInterpretation = "" }
-    return { id: safeId, title: titleFromMarkdown(markdown), markdown, contentHash: hash(markdown), revision: hash(`${markdown}\n${rawInterpretation}`), interpretation }
+    return { id: safeId, activeSides, title: titleFromMarkdown(markdown), markdown, contentHash: hash(markdown), revision: hash(`${markdown}\n${rawInterpretation}`), interpretation }
   }
 
   async loadPlan(): Promise<ActivePlan | null> {

@@ -36,8 +36,12 @@ After building, run `node_modules/.bin/electron scripts/verify-chat-window.cjs`
 for the native window lifecycle and layout check with a disposable fake profile.
 Verification windows stay hidden and do not take focus.
 
-The strategy selector reads the top-level `.md` files in
-`%USERPROFILE%\code\Backtest\tradebooks`, excluding `index.md` and subfolders.
+The strategy selector reads only top-level `.md` tradebooks linked under `## Long`
+and `## Short` in `activeTradebooks.md` in the configured tradebooks root.
+That index controls active choices and matching by position side; unlisted books
+are unavailable. A missing index or broken link prevents the library from loading.
+Restart Cairo after index edits.
+
 Set `CAIRO_TRADEBOOK_PATH` before launching to use another directory. Restart
 Cairo to reload source edits. Narratives appear without interpretation files;
 reviewed interpretations stay in Cairo's profile and are used only while their
