@@ -109,7 +109,8 @@ export class BookmapPatterns {
     if (current.facts.accountId !== facts.accountId || current.snapshot.brokerFactsRevision !== snapshot.brokerFactsRevision) throw new Error("Account facts changed; invoke the skill again")
     const positions = tradeCandidates(text, facts.positions)
     const choices = positions.map(position => ({ position, tradeInstanceId: this.trades.get(this.tradeKey(facts.accountId, position))!, tag: this.tagFor(facts.accountId, position.positionId, position.side), candidates: catalog.filter(pattern => pattern.side === position.side) }))
-    if (!manual && choices.length === 1 && this.usable(choices[0].tag) && choices[0].candidates.some(pattern => pattern.id === choices[0].tag!.patternId)) return { text: this.bind(text, choices[0].position), picker: null }
+    const savedPattern = choices.length === 1 && this.usable(choices[0].tag) ? choices[0].candidates.find(pattern => pattern.id === choices[0].tag!.patternId) : undefined
+    if (!manual && savedPattern) return { text: this.bind(text, choices[0].position, savedPattern), picker: null }
     const picker: BookmapPatternPicker = { id: randomUUID(), text, commandId, accountId: facts.accountId, factsRevision: snapshot.brokerFactsRevision, manual, positions: choices }
     this.engine.updateSnapshot({ bookmapPatternPicker: picker, bookmapPatternError: null })
     return { text, picker }
@@ -154,7 +155,7 @@ export class BookmapPatterns {
       this.engine.updateSnapshot({ bookmapPatternPicker: null })
       if (!stillHeld) { await this.persist(); throw new Error("Trade changed while saving the pattern; invoke the skill again") }
       this.facts()
-      return { text: this.bind(picker.text, choice.position), commandId: picker.commandId, manual: picker.manual }
+      return { text: this.bind(picker.text, choice.position, pattern), commandId: picker.commandId, manual: picker.manual }
     })
   }
   cancel(pickerId: unknown): void {
@@ -173,8 +174,8 @@ export class BookmapPatterns {
     if (current.facts.accountId !== facts.accountId || !current.facts.positions.some(item => item.positionId === position.positionId && item.side === position.side && item.symbol === position.symbol && item.quantity > 0) || (this.tagFor(facts.accountId, position.positionId, position.side)?.revision ?? null) !== (tag?.revision ?? null) || pattern && !this.usable(tag)) throw new Error("Trade or Bookmap tag changed; read context again")
     return { position: current.facts.positions.find(item => item.positionId === position.positionId)!, tag, confirmed: Boolean(pattern), candidates, pattern: pattern ?? null, markdown, source: pattern?.sourceFile ? `bookmap_patterns/${pattern.sourceFile}` : null }
   }
-  private bind(text: string, position: { positionId: string; symbol: string; side: string }): string {
-    const bound = `${text}\nSelected current trade: ${position.symbol} ${position.side}; positionId: ${position.positionId}. Use its saved Bookmap tag.`
+  private bind(text: string, position: { positionId: string; symbol: string; side: string }, pattern: BookmapPattern): string {
+    const bound = `${text}\nSelected current trade: ${position.symbol} ${position.side}; positionId: ${position.positionId}. Bookmap pattern: ${pattern.name} (saved)`
     if (bound.length > 8000) throw new Error("Message is too long to include the selected trade")
     return bound
   }
