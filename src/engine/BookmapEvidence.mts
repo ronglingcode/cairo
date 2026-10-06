@@ -160,6 +160,26 @@ export class BookmapEvidence {
     }
     if(price!==undefined) s.low=Math.min(s.low,price)
   }
+  targetLiquidity(symbol: string, side: "long" | "short", now: number) {
+    const s = this.states.get(symbol)
+    if (!s) return { available: false, reason: "No Bookmap order-book evidence", levels: [] }
+    const ageMs = now - Date.parse(s.value.receivedAt)
+    const marketAgeMs = now - ms(s.value.asOf)
+    const available = s.value.mode === "live" && s.value.readiness === "ready" && s.value.coverage === "continuous" &&
+      ageMs >= 0 && ageMs <= 10_000 && marketAgeMs >= 0 && marketAgeMs <= 10_000 && s.bestBid !== null && s.bestAsk !== null
+    const referencePrice = side === "long" ? s.bestAsk : s.bestBid
+    // Use maintained wall state, not the bounded timeline or historical peak size.
+    const levels = available ? [...s.walls.values()].filter(w => !w.ended && w.event.bid === (side === "short") &&
+      Number.isFinite(w.event.threshold) && w.event.threshold! > 0 && w.event.size! >= w.event.threshold! &&
+      (side === "long" ? w.event.price! >= referencePrice! : w.event.price! <= referencePrice!))
+      .sort((a,b) => side === "long" ? a.event.price! - b.event.price! : b.event.price! - a.event.price!)
+      .slice(0, 8).map(w => ({ wallId: w.event.wallId, evidenceId: w.event.id, price: w.event.price,
+        displayedSize: w.event.size, largeOrderThreshold: w.event.threshold, thresholdMultiple: w.event.size! / w.event.threshold!,
+        updatedAt: w.event.eventTime })) : []
+    return { available, reason: available ? null : "Bookmap must be fresh, live, ready and continuous with current BBO",
+      mode: s.value.mode, coverage: s.value.coverage, receivedAt: s.value.receivedAt, asOf: s.value.asOf,
+      referencePrice, tickSize: s.value.tickSize, levels, coverageScope: "Observed large displayed levels; not the complete order book" }
+  }
   timeline(symbol:string,start?:string,end?:string): { status:EvidenceSymbol; events:EvidenceEvent[] } {
     const s=this.states.get(symbol); if(!s) throw new Error("No recorded evidence for this symbol")
     if(start && !/^\d{1,19}$/.test(start) || end && !/^\d{1,19}$/.test(end)) throw new Error("Timeline times must be nanosecond strings")

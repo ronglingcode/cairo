@@ -61,3 +61,9 @@ $env:CAIRO_SKILLS_DIRECTORY = 'C:\Users\lingr\code\cairo\skills'
 ```
 
 The launcher passes this same directory to the chat API and OpenCode plugin. Updates to these files can be reviewed and committed with the application source.
+
+## Remaining-share targets
+
+`/set-targets` uses `cairo.read_target_context` for one combined read of the shared trade context, saved notes/attached plan, initial and remaining shares, observed partial fill quantities/prices, working exits and Bookmap liquidity. Code sorts the next observed large displayed levels by profit direction (offers for longs, bids for shorts) and calculates the cumulative 10-30% initial-share early-partial budget after existing reductions, reserving at least 70% for the notes' T1/T2. Smaller early partials leave more for the plan. The tool uses the existing bookmap-plugin `cairo_evidence` wall stream, including current sizes and configured large-order thresholds; it does not require a plugin change.
+
+Bookmap levels require fresh live, ready, continuous evidence and current BBO; pulled/below-threshold walls and historical peak sizes are excluded. Missing initial size or unreconciled broker changes withhold exact allocations. Older same-symbol fills are marked unverified because the broker supplies no round-trip ID. T1/T2 levels and allocations stay as written; unusually large liquidity can justify an explained advisory exception, without creating an automatic threshold or activating guidance. All results remain read-only advice.

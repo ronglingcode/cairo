@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto"
 import { CairoEngine } from "../engine/CairoEngine.mts"
 import { validateContent, type PreparationContent } from "../engine/PreparationStore.mts"
 import { positionTradebook } from "../engine/TradeContext.mts"
+import { targetPositionContext } from "../engine/TargetContext.mts"
 
 export interface NoteProposal {
   id: string
@@ -79,13 +80,22 @@ export class CairoDomainTools {
       this.engine.updateSnapshot({bookmapEvidence:this.bookmapEvidence.snapshot()})
       return {ok:true,advisory:true,observationOnly:true}
     }
-    if (operation === "read_bookmap_pattern" || operation === "read_trade_context") {
+    if (operation === "read_bookmap_pattern" || operation === "read_trade_context" || operation === "read_target_context") {
       if (!this.bookmapPatterns) throw new Error("Bookmap pattern library unavailable")
       if (Object.keys(value).some(key => key !== "positionId")) throw new Error("Unexpected pattern field")
       const selected = await this.bookmapPatterns.read(value.positionId)
       const pattern = { ...selected, inferredEntries: snapshot.bookmapEvidence.entries.filter(e=>e.accountId===snapshot.brokerFacts?.accountId && e.symbol===selected.position.symbol).slice(-5) }
       if (operation === "read_bookmap_pattern") return pattern
       const current = this.engine.getSnapshot()
+      if (operation === "read_target_context") return {
+        accountId: current.brokerFacts!.accountId, factsRevision: current.brokerFactsRevision,
+        position: pattern.position, bookmapPattern: pattern, tradebook: positionTradebook(current, pattern.position),
+        sizing: targetPositionContext(current, pattern.position, this.now()),
+        liquidity: this.bookmapEvidence?.targetLiquidity(pattern.position.symbol, pattern.position.side, this.now()) ??
+          { available: false, reason: "Bookmap evidence recorder unavailable", levels: [] },
+        preparation: current.preparationError ? { available: false, error: current.preparationError } : current.preparation ?? { available: false },
+        advisory: true,
+      }
       return { accountId: current.brokerFacts!.accountId, factsRevision: current.brokerFactsRevision,
         position: pattern.position, bookmapPattern: pattern, tradebook: positionTradebook(current, pattern.position) }
     }
