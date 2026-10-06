@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import type { BrokerFacts, CairoSnapshot, SourceStatus } from "../shared/contracts.mts"
+import type { BrokerFacts, SourceStatus } from "../shared/contracts.mts"
 import { CairoEngine } from "./CairoEngine.mts"
 import type { SchwabAccountReader } from "./SchwabAccountReader.mts"
 import type { SchwabOrderReader } from "./SchwabOrderReader.mts"
@@ -16,23 +16,24 @@ export class BrokerRefreshCoordinator {
   private readonly engine: CairoEngine
   private readonly accountReader: SchwabAccountReader
   private readonly orderReader: SchwabOrderReader
-  private readonly intervalMs: number
   private readonly now: () => number
+  private readonly onRefresh: () => void
   private pending: Promise<BrokerRefreshResult> | undefined
   private timer: ReturnType<typeof setTimeout> | undefined
   private started = false
+  private activityPending = false
+  private activityTimer = false
   private refreshSequence = 0
   private factsRevision = 0
   private lastFingerprint: string | null = null
   private lastFacts: BrokerFacts | null = null
 
-  constructor(engine: CairoEngine, accountReader: SchwabAccountReader, orderReader: SchwabOrderReader, options: { intervalMs: number; now?: () => number }) {
+  constructor(engine: CairoEngine, accountReader: SchwabAccountReader, orderReader: SchwabOrderReader, options: { now?: () => number; onRefresh?: () => void } = {}) {
     this.engine = engine
     this.accountReader = accountReader
     this.orderReader = orderReader
-    this.intervalMs = options.intervalMs
     this.now = options.now ?? Date.now
-    if (!Number.isFinite(this.intervalMs) || this.intervalMs < 5_000 || this.intervalMs > 300_000) throw new RangeError("broker polling interval is invalid")
+    this.onRefresh = options.onRefresh ?? (() => {})
   }
 
   get isStarted(): boolean { return this.started }
@@ -46,19 +47,38 @@ export class BrokerRefreshCoordinator {
 
   async stop(): Promise<void> {
     this.started = false
+    this.activityPending = false
+    this.activityTimer = false
     if (this.timer !== undefined) clearTimeout(this.timer)
     this.timer = undefined
     await this.pending
   }
 
+  /** Coalesce bursts, but never lose an activity received during an older REST read. */
+  accountActivity(): void {
+    if (!this.started) return
+    if (this.pending) { this.activityPending = true; return }
+    if (this.activityTimer) return
+    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer = undefined
+    this.activityTimer = true
+    this.schedule(100)
+  }
+
   refresh(): Promise<BrokerRefreshResult> {
     if (this.pending) return this.pending
+    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer = undefined
+    this.activityTimer = false
     const sequence = ++this.refreshSequence
     const pending = this.runRefresh(sequence).catch((error) => this.publishFailure(sequence, error instanceof Error ? error.message : "Schwab refresh failed"))
     this.pending = pending
     void pending.finally(() => {
       if (this.pending === pending) this.pending = undefined
-      if (this.started) this.schedule(this.intervalMs)
+      const followUp = this.activityPending
+      this.activityPending = false
+      if (this.started && followUp) this.schedule(100)
+      if (this.started) this.onRefresh()
     })
     return pending
   }
@@ -125,6 +145,7 @@ export class BrokerRefreshCoordinator {
     if (!this.started || this.timer !== undefined) return
     this.timer = setTimeout(() => {
       this.timer = undefined
+      this.activityTimer = false
       void this.refresh()
     }, delay)
   }

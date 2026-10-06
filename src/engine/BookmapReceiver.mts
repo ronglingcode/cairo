@@ -14,6 +14,8 @@ export class BookmapReceiver {
   private engine: CairoEngine; private now: () => number; private socket?: WebSocket; private retry?: ReturnType<typeof setTimeout>; private stopped = true
   private projection: BookmapProjection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
   constructor(engine: CairoEngine, now = Date.now) { this.engine = engine; this.now = now }
+  private accountActivity?: () => void
+  setAccountActivityHandler(handler: () => void): void { this.accountActivity = handler }
   start(endpoint: string): void {
     const url = new URL(endpoint); if (!["ws:", "wss:"].includes(url.protocol) || url.hostname !== "127.0.0.1" || url.username || url.password) throw new Error("Bookmap must use loopback")
     this.stopped = false
@@ -22,6 +24,7 @@ export class BookmapReceiver {
       this.evidence.reset()
       this.projection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
       const socket = new WebSocket(endpoint); this.socket = socket
+      socket.addEventListener("open", () => { if (socket === this.socket && !this.stopped) this.accountActivity?.() })
       socket.addEventListener("message", event => { if (socket === this.socket && typeof event.data === "string") this.receive(event.data) })
       socket.addEventListener("error", () => socket.close())
       socket.addEventListener("close", () => { if (this.stopped || socket !== this.socket) return; this.publish("disconnected", "Bookmap disconnected; reconnecting"); this.retry = setTimeout(connect, 2000) })
@@ -33,6 +36,11 @@ export class BookmapReceiver {
     try {
       if (raw.length > 131_072) return false
       const value = JSON.parse(raw)
+      if (value.type === "cairo_account_activity") {
+        if (!Number.isSafeInteger(value.receivedAt) || value.receivedAt > this.now() + 5000 || value.receivedAt < this.now() - 60_000 || !Array.isArray(value.messageTypes) || value.messageTypes.length > 32 || !value.messageTypes.every((type: unknown) => typeof type === "string" && /^[A-Za-z0-9_]{1,80}$/.test(type))) return false
+        this.accountActivity?.()
+        return true
+      }
       if (value.type === "cairo_evidence") {
         if (!this.evidence.receive(value, this.now())) return false
         const facts = this.engine.getSnapshot().brokerFacts

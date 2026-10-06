@@ -56,7 +56,13 @@ then runs trade management automatically once; `/bookmap-pattern SYMBOL` also
 resumes it. Tagging does not block manual chat. Closed trades and stopped management
 reviews do not resume after a later tag. Cairo does not spend a model call returning two undefined fields. With
 a confirmed pattern, missing stop/target rules identify the specific missing
-context and next step.
+context and next step. Bookmap forwards Schwab ACCT_ACTIVITY events to Cairo,
+which coalesces bursts for 100 ms and immediately refreshes account and order facts.
+An event during an older refresh schedules a follow-up, so it cannot be lost.
+Reconnecting also requests fresh facts. Cairo has no recurring broker polling loop:
+it refreshes once at startup, on Bookmap notifications/reconnects, on manual refresh,
+and around its own explicitly approved broker actions. Legacy polling settings are ignored.
+Broker request time and model response time still add to end-to-end latency.
 When the response completes, Cairo shows a notification, plays a sound and speaks
 the symbol with a reminder to review its stop loss and targets. Click the
 notification to focus chat. **Stop management** pauses these reminders; the checkbox

@@ -42,7 +42,7 @@ import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 app.setPath("userData", prepareUserDataDirectory(app.getPath("userData")))
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); partialManagement?.cycle(); waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); partialManagement?.cycle(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const bookmapReceiver = new BookmapReceiver(engine)
 const entryObserver = new EntryObserver(engine)
@@ -170,7 +170,8 @@ app.whenReady().then(async () => {
   const tokenProvider = new BookmapTokenProvider(() => ({ selectedAccountId: configStore.values.selectedAccountId, schwabTokenFile: configStore.values.schwabTokenFile }))
   const accountReader = new SchwabAccountReader(http, tokenProvider)
   const orderReader = new SchwabOrderReader(http, tokenProvider)
-  brokerCoordinator = new BrokerRefreshCoordinator(engine, accountReader, orderReader, { intervalMs: configStore.values.brokerPollIntervalMs })
+  brokerCoordinator = new BrokerRefreshCoordinator(engine, accountReader, orderReader, { onRefresh: () => uncertainty?.tick() })
+  bookmapReceiver.setAccountActivityHandler(() => brokerCoordinator?.accountActivity())
   const recovery = new RecoveryStore(app.getPath("userData"))
   let recoveryReady = false
   try {

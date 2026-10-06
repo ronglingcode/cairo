@@ -15,7 +15,6 @@ export interface CairoConfig {
   secretsFile: string
   chartSymbol: string
   chartDate: string
-  brokerPollIntervalMs: number
   provider: ProviderSelection
   model: string
 }
@@ -31,7 +30,6 @@ export interface PublicConfiguration {
   secretsError: string | null
   chartSymbol: string
   chartDate: string
-  brokerPollIntervalMs: number
   provider: ProviderSelection
   model: string
   setupRequired: boolean
@@ -46,7 +44,6 @@ const DEFAULTS: CairoConfig = {
   secretsFile: "",
   chartSymbol: "SPY",
   chartDate: new Date().toISOString().slice(0, 10),
-  brokerPollIntervalMs: 30_000,
   provider: "fake",
   model: "",
 }
@@ -101,7 +98,6 @@ export class LocalConfiguration {
       secretsError: this.secretsError,
       chartSymbol: this.current.chartSymbol,
       chartDate: this.current.chartDate,
-      brokerPollIntervalMs: this.current.brokerPollIntervalMs,
       provider: this.current.provider,
       model: this.current.model,
       setupRequired: !this.values.selectedAccountId || (this.current.provider === "openai" && !this.current.model) || Boolean(this.secretsError),
@@ -129,14 +125,12 @@ function validateConfig(input: unknown): CairoConfig {
     secretsFile: optionalString(value.secretsFile, DEFAULTS.secretsFile),
     chartSymbol: optionalString(value.chartSymbol, DEFAULTS.chartSymbol).toUpperCase(),
     chartDate: optionalString(value.chartDate, DEFAULTS.chartDate),
-    brokerPollIntervalMs: value.brokerPollIntervalMs === undefined ? DEFAULTS.brokerPollIntervalMs : Number(value.brokerPollIntervalMs),
     provider: value.provider === undefined ? DEFAULTS.provider : value.provider as ProviderSelection,
     model: optionalString(value.model, DEFAULTS.model),
   }
   if (!result.bookmapEndpoint.startsWith("ws://127.0.0.1:") && !result.bookmapEndpoint.startsWith("wss://127.0.0.1:")) throw new Error("Bookmap endpoint must use loopback")
   if (!result.chartSymbol || !/^[A-Z0-9.\-]{1,16}$/.test(result.chartSymbol)) throw new Error("chartSymbol is invalid")
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.chartDate) || !Number.isFinite(Date.parse(`${result.chartDate}T00:00:00Z`))) throw new Error("chartDate must use YYYY-MM-DD")
-  if (!Number.isFinite(result.brokerPollIntervalMs) || result.brokerPollIntervalMs < 5_000 || result.brokerPollIntervalMs > 300_000) throw new Error("brokerPollIntervalMs must be between 5000 and 300000")
   if (result.provider !== "openai" && result.provider !== "fake") throw new Error("provider must be openai or fake")
   if (result.secretsFile && !path.isAbsolute(result.secretsFile)) throw new Error("secretsFile must be an absolute path")
   if (!result.tradebooks_root_path || !path.isAbsolute(result.tradebooks_root_path)) throw new Error("Tradebooks root path must be an absolute path")

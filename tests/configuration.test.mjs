@@ -50,6 +50,8 @@ test("local configuration validates changes and only exposes sanitized settings"
     assert.equal(view.selectedAccountId, "acct-2")
     assert.equal(JSON.stringify(view).includes("API_KEY"), false)
     await assert.rejects(store.save({ ...store.values, bookmapEndpoint: "ws://example.com:8765" }), /loopback/)
-    await assert.rejects(store.save({ ...store.values, brokerPollIntervalMs: 1 }), /between/)
+    const legacy = await store.save({ ...store.values, brokerPollIntervalMs: 5000 })
+    assert.equal('brokerPollIntervalMs' in legacy, false)
+    assert.equal('brokerPollIntervalMs' in store.values, false)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
