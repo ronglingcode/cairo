@@ -11,6 +11,7 @@ import { OpenCodeSidecar } from "../src/copilot/OpenCodeSidecar.mts"
 import { FakeModelServer } from "../src/copilot/FakeModelServer.mts"
 import { modelConfiguration } from "../src/copilot/ModelConfiguration.mts"
 import { build } from "esbuild"
+import { BOOKMAP_CARD_ERRORS } from "../src/shared/BookmapCardErrors.mts"
 
 async function until(predicate) {
   for (let count = 0; count < 150; count++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 50)) }
@@ -79,6 +80,18 @@ test("uncertain delivery blocks new sends until session inspection; chat API req
   await assert.rejects(f.chat.send("retry", "command-004"), /Reconnect/)
   assert.equal((await fetch(`${base}/copilot/send`, { method: "POST", headers: { Authorization: `Bearer ${api.toolToken}` } })).status, 403)
   assert.equal(f.engine.getSnapshot().tickets.length, 0)
+})
+
+test("chat exposes only safe Bookmap card validation details",async t=>{
+  const f=fixture();t.after(()=>f.chat.stop())
+  f.setContext([{type:"assistant",id:"card-errors",content:[
+    {type:"tool",name:"cairo_interpret_bookmap_observation",state:{status:"error",error:{type:"unknown",message:BOOKMAP_CARD_ERRORS['unmeasured-price']}}},
+    {type:"tool",name:"cairo_interpret_bookmap_observation",state:{status:"error",error:{type:"unknown",message:"private-provider-detail"}}},
+  ]},{type:"idle",outcome:"succeeded"}])
+  await f.chat.connect()
+  assert.equal(f.chat.snapshot.messages[0].tools[0].error,BOOKMAP_CARD_ERRORS['unmeasured-price'])
+  assert.equal(f.chat.snapshot.messages[0].tools[1].error,undefined)
+  assert.ok(!JSON.stringify(f.chat.snapshot).includes('private-provider-detail'))
 })
 
 test("actual pinned runtime streams, cancels, and reuses a Cairo session after restart", { timeout: 45_000 }, async t => {

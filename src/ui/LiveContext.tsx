@@ -1,3 +1,4 @@
+import { BookmapSetupCards } from "./BookmapSetupCards"
 import type { CairoSnapshot } from "../shared/contracts.mts"
 import type { RendererConnectionState } from "../renderer/EngineConnection.mts"
 import { ProposalReview } from "./ProposalReview"
@@ -17,6 +18,7 @@ export function LiveContext({ snapshot, connectionState }: { snapshot: CairoSnap
     })}</div>}
     {(staged > 0 || recommendations > 0) && <p className="live-review-notice" role="status">{staged} staged tickets · {recommendations} current recommendations · open Trading context to review</p>}
     {snapshot?.recoveryError && <p role="alert" className="chart-error">{snapshot.recoveryError}</p>}
+    <BookmapSetupCards snapshot={snapshot} />
     <details className="live-context-details"><summary>Trading context · {snapshot?.positions.length ?? 0} positions · {snapshot?.tickets.length ?? 0} tickets</summary><div className="live-context-body">
       {!snapshot && <p>Waiting for the engine snapshot.</p>}
       {snapshot && <>

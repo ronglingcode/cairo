@@ -1,3 +1,4 @@
+import { BOOKMAP_CARD_ERRORS } from "../shared/BookmapCardErrors.mts"
 import path from "node:path"
 import type { CopilotChat as ChatState, CopilotChatMessage } from "../shared/contracts.mts"
 import type { CairoEngine } from "../engine/CairoEngine.mts"
@@ -120,7 +121,7 @@ export class CopilotChat {
       if (!this.client || !this.state.sessionId || !this.state.connected || this.state.busy) throw new Error("Copilot is unavailable or busy")
       this.state.busy = true; this.state.outcome = null; this.publish()
       try {
-        await this.client.session.synthetic({ sessionID: this.state.sessionId, id: `msg_${id}`, text: text.slice(0, 8000), description: "Cairo observed account changes", metadata: { cairoMachine: true, grantsApproval: false }, delivery: "queue", resume: true }, { signal: AbortSignal.timeout(10_000) })
+        await this.client.session.synthetic({ sessionID: this.state.sessionId, id: `msg_${id}`, text: text.slice(0, 8000), description: "Cairo observed changes", metadata: { cairoMachine: true, grantsApproval: false }, delivery: "queue", resume: true }, { signal: AbortSignal.timeout(10_000) })
         await this.refresh(this.generation)
       } catch { this.fail("Event update delivery is uncertain; automatic updates paused. Inspect the session before enabling them again."); throw new Error("Event delivery uncertain") }
     })
@@ -184,7 +185,11 @@ export class CopilotChat {
     const messages: CopilotChatMessage[] = []
     for (const message of context) {
       if (message.type === "user") messages.push({ id: message.id, role: "user", text: message.text.slice(0, 8000), tools: [] })
-      if (message.type === "assistant") messages.push({ id: message.id, role: "assistant", text: message.content.filter(part => part.type === "text").map(part => part.text).join("").slice(0, 16_000), tools: message.content.filter(part => part.type === "tool").map(part => ({ name: part.name, state: part.state.status })).slice(0, 20) })
+      if (message.type === "assistant") messages.push({ id: message.id, role: "assistant", text: message.content.filter(part => part.type === "text").map(part => part.text).join("").slice(0, 16_000), tools: message.content.filter(part => part.type === "tool").map(part => {
+        const reason=part.state.status==="error" ? part.state.error.message : undefined
+        const cardError=reason && ["cairo_interpret_bookmap_setup","cairo_interpret_bookmap_observation"].includes(part.name) && Object.values(BOOKMAP_CARD_ERRORS).some(message=>message===reason) ? reason : undefined
+        return {name:part.name,state:part.state.status,...(cardError ? {error:cardError} : {})}
+      }).slice(0, 20) })
     }
     for (const message of messages) {
       const streamed = this.streamedText.get(message.id)

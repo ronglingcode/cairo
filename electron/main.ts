@@ -66,6 +66,7 @@ let fakeModel: FakeModelServer | undefined
 installShutdownHook(app, {
   stop: async () => {
     bookmapReceiver.stop()
+    await bookmapReceiver.flushArchive()
     await ticketPermissions?.stop()
     await chat?.stop()
     await writer?.stop()
@@ -138,6 +139,7 @@ function createWindow(apiBaseUrl: string, config: PublicConfiguration, view: "pl
 app.whenReady().then(async () => {
   const configStore = new LocalConfiguration(app.getPath("userData"))
   let config = await configStore.load()
+  await bookmapReceiver.enableEntryArchive(app.getPath("userData"))
   bookmapReceiver.start(config.bookmapEndpoint)
   const tradebookPath = config.tradebooks_root_path
   try { apiServer.setPreparationStore(await PreparationStore.forTradebooksRoot(tradebookPath, app.getPath("userData"))) }
@@ -274,6 +276,7 @@ app.whenReady().then(async () => {
   })
   domainTools.setExitTickets(tickets)
   domainTools.setBookmapPatterns(bookmapPatterns)
+  domainTools.setBookmapEvidence(bookmapReceiver.evidence)
   ticketPermissions = new TicketPermissions(tickets, () => sidecar?.client)
   domainTools.setTicketPermissions(ticketPermissions)
   apiServer.setTicketPermissions(ticketPermissions)

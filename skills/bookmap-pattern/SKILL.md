@@ -10,3 +10,5 @@ Use current Cairo broker context to identify the account, position ID, symbol an
 The trader’s click saves the tag for that account and trade. Never infer or save a tag on the trader’s behalf. Existing tags can be changed using the same command. Saved tags require one-click reconfirmation after restart and are retired when Cairo observes the trade going flat or changing side.
 
 Use `cairo.read_bookmap_pattern` to inspect the confirmed tag and linked source rules. If invoked without the picker, direct the trader to `/bookmap-pattern`. Tagging does not activate guidance or submit a broker order. `/set-stop-loss` routes to the confirmed pattern’s own stop rule; missing mappings and missing rules must be stated, never invented.
+
+For recognition questions, inspect `cairo.read_setup_candidates` and `cairo.read_bookmap_timeline`, compare bounce timing and original pattern rules, then publish `cairo.interpret_bookmap_setup`. These inferred observations do not confirm a trade tag. The trader may accept a current live candidate on the setup card or use this picker to correct it.

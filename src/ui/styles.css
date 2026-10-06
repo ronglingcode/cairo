@@ -188,3 +188,15 @@ button:focus-visible, summary:focus-visible, textarea:focus-visible { outline: 2
 .pattern-options button { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; border: 1px solid #b6cfee; border-radius: 6px; background: white; text-align: left; }
 .pattern-options button:hover, .pattern-options button:focus-visible { border-color: #2374f5; background: #e2edff; }
 .pattern-options span, .pattern-previous { font-size: 11px; color: #526b8b; }
+
+.bookmap-setups { margin: 8px 0; padding: 10px; border: 1px solid #7a9ab7; border-radius: 8px; max-height: 38vh; overflow-y: auto; font-size: 12px; }
+.bookmap-setup { border-top: 1px solid #8b9dac; margin-top: 8px; padding-top: 6px; }
+.bookmap-setup button { margin: 4px; }
+.bookmap-heading, .bookmap-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bookmap-heading label { white-space: nowrap; }
+.bookmap-setups .bookmap-result { font-size: 14px; margin: 5px 0; }
+.bookmap-context-label { font-size: 11px; font-weight: normal; opacity: .75; }
+.bookmap-setups .bookmap-feed, .bookmap-setups .bookmap-metrics, .bookmap-setups .bookmap-ai { margin: 5px 0; }
+.bookmap-setups details { margin: 5px 0; }
+.bookmap-setups summary { cursor: pointer; }
+.bookmap-feed-details { font-size: 11px; }

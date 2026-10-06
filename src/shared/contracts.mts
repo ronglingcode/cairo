@@ -209,7 +209,7 @@ export interface CopilotChatMessage {
   id: string
   role: "user" | "assistant"
   text: string
-  tools: Array<{ name: string; state: string }>
+  tools: Array<{ name: string; state: string; error?: string }>
 }
 
 export interface CopilotChat {
@@ -229,6 +229,7 @@ export interface CairoSnapshot {
   bookmapPatternPicker: import("./BookmapPatterns.mts").BookmapPatternPicker | null
   bookmapPatternError: string | null
   observationAttempts: import("../engine/EntryObserver.mts").ObservationAttempt[]
+  bookmapEvidence: import("../engine/BookmapEvidence.mts").BookmapEvidenceProjection
   bookmapProjection: import("../engine/BookmapReceiver.mts").BookmapProjection
   protectionReadback: import("../engine/ProtectionCoordinator.mts").ProtectionReadback[]
   brokerAttempts: import("../engine/RecoveryStore.mts").BrokerAttempt[]

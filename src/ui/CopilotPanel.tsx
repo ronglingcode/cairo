@@ -90,7 +90,7 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, pa
       {!chat?.messages.length && <div className="chat-intro"><h3>Prepare with Cairo</h3><p>Save your notes and refresh a one-minute chart, then discuss your scenarios here.</p><p>Chart knowledge is a timestamped snapshot. Notes do not activate position guidance.</p></div>}
       {chat?.messages.map(message => <article className={`chat-message ${message.role}`} key={message.id}>
         <strong>{message.role === "user" ? "You" : "Cairo"}</strong><div className="chat-text">{message.text}</div>
-        {message.tools.map((tool, index) => <div className="chat-tool" key={`${tool.name}-${index}`}>{tool.name} · {tool.state}</div>)}
+        {message.tools.map((tool, index) => <div className="chat-tool" key={`${tool.name}-${index}`}>{tool.name==="cairo_interpret_bookmap_observation"?"Observation card update":tool.name==="cairo_interpret_bookmap_setup"?"Setup card update":tool.name} · {tool.state==="error"?"failed":tool.state}{tool.error && <p>{tool.error}</p>}</div>)}
       </article>)}
       {chat?.truncated && <p className="chat-notice">Showing the latest 40 messages with bounded text. Earlier conversation remains in OpenCode.</p>}
     </div>

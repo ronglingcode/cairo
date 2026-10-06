@@ -1,3 +1,4 @@
+import { BookmapCardError } from "../shared/BookmapCardErrors.mts"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { randomBytes } from "node:crypto"
 import type { ChartSnapshot, EngineEvent } from "../shared/contracts.mts"
@@ -172,11 +173,12 @@ export class EngineApiServer {
         else { if (this.permissions?.has(String(value.id))) await this.permissions.reject(String(value.id)); else this.tickets.dismiss(String(value.id)); this.json(response, 200, { ok: true }) }
       }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Ticket request failed" })); return
     }
-    if (["/bookmap-pattern/select", "/bookmap-pattern/cancel"].includes(url.pathname) && request.method === "POST") {
+    if (["/bookmap-pattern/select", "/bookmap-pattern/cancel", "/bookmap-pattern/accept-setup"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(async value => {
         if (!this.bookmapPatterns) throw new Error("Bookmap pattern selection unavailable")
-        if (url.pathname === "/bookmap-pattern/cancel") this.bookmapPatterns.cancel(value.pickerId)
+        if (url.pathname === "/bookmap-pattern/accept-setup") await this.bookmapPatterns.acceptSetup(value)
+          else if (url.pathname === "/bookmap-pattern/cancel") this.bookmapPatterns.cancel(value.pickerId)
         else {
           if (this.chat?.snapshot.busy) throw new Error("Wait for the current reply before tagging")
           const selected = await this.bookmapPatterns.select(value)
@@ -192,6 +194,10 @@ export class EngineApiServer {
         this.json(response, 400, { error: detail })
       })
       return
+    }
+    if (url.pathname === "/bookmap/ai" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response,403,{error:"forbidden"}); return }
+      void this.readCommand(request).then(value => { if (!this.waker) throw new Error("AI scheduler unavailable"); this.waker.setBookmapEnabled(value.enabled as boolean); this.json(response,200,{ok:true}) }).catch(error => this.json(response,400,{error:String(error)})); return
     }
     if (url.pathname === "/copilot/events" && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
@@ -412,7 +418,10 @@ export class EngineApiServer {
       response.once("close", () => { if (!response.writableEnded && value.operation === "stage_exit" && typeof value.sessionId === "string") void this.domainTools?.cancelSession(value.sessionId) })
       const result = await this.domainTools!.execute(value.operation, value.input, value.sessionId, value.source as import("../copilot/TicketPermissions.mts").ToolSource | undefined)
       this.json(response, 200, result)
-    } catch { this.json(response, 400, { error: "Cairo tool request was rejected. Read current context before continuing." }) }
+    } catch (error) {
+      if (error instanceof BookmapCardError) { this.json(response,400,{code:error.code,error:error.message}); return }
+      this.json(response, 400, { error: "Cairo tool request was rejected. Read current context before continuing." })
+    }
   }
 
   private async refreshChart(request: IncomingMessage, response: ServerResponse): Promise<void> {

@@ -1,9 +1,16 @@
+import { BookmapEntryArchive } from "./BookmapEntryArchive.mts"
+import { BookmapEvidence } from "./BookmapEvidence.mts"
 import { parseBookmapObservation, type BookmapObservation } from "../shared/contracts.mts"
 import type { CairoEngine } from "./CairoEngine.mts"
 export const ALLOWED_PATTERNS = ["BID_STEP_UP", "BID_REAPPEAR"] as const
 export interface ObservedEpisode { observation: BookmapObservation; receivedAt: string; freshEvent: boolean }
 export interface BookmapProjection { sourceInstanceId: string | null; heartbeatAt: string | null; symbols: Record<string, { mode: string; readiness: string; heartbeatAt: string }>; episodes: ObservedEpisode[] }
 export class BookmapReceiver {
+  readonly evidence = new BookmapEvidence({ bounceTicks: Number(process.env.CAIRO_BOOKMAP_BOUNCE_TICKS || 2), bounceDurationMs: Number(process.env.CAIRO_BOOKMAP_BOUNCE_MS || 200), noBounceCoverageMs: Number(process.env.CAIRO_BOOKMAP_COVERAGE_MS || 5000), offerMaxOvershootPct: Number(process.env.CAIRO_BOOKMAP_OFFER_MAX_OVERSHOOT_PCT || 1), offerReturnMs: Number(process.env.CAIRO_BOOKMAP_OFFER_RETURN_MS || 5000), offerHoldBelowMs: Number(process.env.CAIRO_BOOKMAP_OFFER_HOLD_MS || 1000) })
+  private archive?: BookmapEntryArchive
+  async enableEntryArchive(directory: string): Promise<void> { this.archive=new BookmapEntryArchive(directory,this.evidence); await this.archive.load(); this.tick() }
+  async flushArchive(): Promise<void> { await this.archive?.flush() }
+  private publishTimer?: ReturnType<typeof setTimeout>
   private engine: CairoEngine; private now: () => number; private socket?: WebSocket; private retry?: ReturnType<typeof setTimeout>; private stopped = true
   private projection: BookmapProjection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
   constructor(engine: CairoEngine, now = Date.now) { this.engine = engine; this.now = now }
@@ -12,6 +19,7 @@ export class BookmapReceiver {
     this.stopped = false
     const connect = () => {
       if (this.stopped) return
+      this.evidence.reset()
       this.projection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
       const socket = new WebSocket(endpoint); this.socket = socket
       socket.addEventListener("message", event => { if (socket === this.socket && typeof event.data === "string") this.receive(event.data) })
@@ -20,11 +28,21 @@ export class BookmapReceiver {
     }
     connect()
   }
-  stop(): void { this.stopped = true; clearTimeout(this.retry); this.socket?.close(); this.socket = undefined; this.publish("disconnected", "Observation receiver stopped") }
+  stop(): void { this.archive?.capture(); this.stopped = true; clearTimeout(this.retry); clearTimeout(this.publishTimer); this.socket?.close(); this.socket = undefined; this.publish("disconnected", "Observation receiver stopped") }
   receive(raw: string): boolean {
     try {
-      if (raw.length > 32_768) return false
-      const value = JSON.parse(raw); if (value.type !== "cairo_observation") return false
+      if (raw.length > 131_072) return false
+      const value = JSON.parse(raw)
+      if (value.type === "cairo_evidence") {
+        if (!this.evidence.receive(value, this.now())) return false
+        const facts = this.engine.getSnapshot().brokerFacts
+        if (facts) this.evidence.associate(facts)
+        if (!this.publishTimer) this.publishTimer=setTimeout(()=>{this.publishTimer=undefined;this.tick()},100)
+        // First batch establishes status immediately; later batches coalesce to protect rendering.
+        if (!Object.keys(this.engine.getSnapshot().bookmapEvidence.symbols).length) this.tick()
+        return true
+      }
+      if (value.type !== "cairo_observation") return false
       const observation = parseBookmapObservation(value)
       if (!/^[A-Z0-9.\-]{1,16}$/.test(observation.symbol.canonical) || observation.symbol.source.split(/[:@]/)[0].toUpperCase() !== observation.symbol.canonical || !Number.isSafeInteger(observation.sequence) || !Number.isSafeInteger(observation.revision)) return false
       if (observation.kind === "episode" && (!ALLOWED_PATTERNS.includes(observation.pattern as typeof ALLOWED_PATTERNS[number]) || observation.price === null || observation.price <= 0 || !observation.eventTime)) return false
@@ -45,8 +63,13 @@ export class BookmapReceiver {
     } catch { return false }
   }
   tick(): void {
-    const fresh = this.projection.heartbeatAt !== null && this.now() - Date.parse(this.projection.heartbeatAt) <= 6000
+    const facts = this.engine.getSnapshot().brokerFacts
+    if (facts) this.evidence.associate(facts)
+    this.archive?.capture()
+    const evidence = this.evidence.snapshot()
+    const evidenceFresh = Object.values(evidence.symbols).some(s => this.now() - Date.parse(s.receivedAt) <= 6000)
+    const fresh = evidenceFresh || this.projection.heartbeatAt !== null && this.now() - Date.parse(this.projection.heartbeatAt) <= 6000
     this.publish(fresh ? "connected" : "stale", fresh ? "Observations connected; live eligibility requires proven live mode and ready depth" : "Heartbeat unavailable or stale; observations cannot trigger actions")
   }
-  private publish(state: "connected" | "disconnected" | "stale", detail: string): void { this.engine.updateSnapshot({ bookmap: { source: "bookmap", state, updatedAt: this.projection.heartbeatAt, detail }, bookmapProjection: this.projection }) }
+  private publish(state: "connected" | "disconnected" | "stale", detail: string): void { this.engine.updateSnapshot({ bookmap: { source: "bookmap", state, updatedAt: this.projection.heartbeatAt, detail }, bookmapProjection: this.projection, bookmapEvidence: this.evidence.snapshot() }) }
 }

@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { mkdtemp, cp, readFile, writeFile, rm } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { BookmapPatterns, parseActivePatterns } from "../src/engine/BookmapPatterns.mts"
@@ -11,7 +11,21 @@ import { positionEngine } from "./fixtures/positions.mjs"
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "cairo-patterns-"))
   const source = path.join(root, "tradebooks")
-  await cp(path.resolve("../Backtest/tradebooks/bookmap_patterns"), path.join(source, "bookmap_patterns"), { recursive: true })
+  // Isolated library fixture: trader-authored catalogs may change independently of these tests.
+  await mkdir(path.join(source,"bookmap_patterns"),{recursive:true})
+  await writeFile(path.join(source,"bookmap_patterns/activePatterns.md"), `## Long
+| ID | Pattern | Tradebook |
+| --- | --- | --- |
+| bid-vwap-shape-recovery | bid vwap shape recovery | — |
+| bid-reappear | bid reappear | [Bid reappear](bid_reappear.md) |
+| bid-step-up | bid step up | [Bid step up](bid_step_up.md) |
+## Short
+| ID | Pattern | Tradebook |
+| --- | --- | --- |
+| bid-breakdown | bid breakdown | — |
+`)
+  await writeFile(path.join(source,"bookmap_patterns/bid_step_up.md"),"# Bid Step Up\n* Stop loss: low of the day\n")
+  await writeFile(path.join(source,"bookmap_patterns/bid_reappear.md"),"# Bid Reappear\n* Setup: bid reappears\n")
   const engine = positionEngine()
   const snapshot = engine.getSnapshot()
   snapshot.brokerFacts.positions[1].side = "short"

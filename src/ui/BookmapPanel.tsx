@@ -1,3 +1,4 @@
+import { BookmapSetupCards } from "./BookmapSetupCards"
 import type { CairoSnapshot } from "../shared/contracts.mts"
 import { useState } from "react"
 export function BookmapPanel({ snapshot }: { snapshot: CairoSnapshot | null }) {
@@ -7,7 +8,7 @@ export function BookmapPanel({ snapshot }: { snapshot: CairoSnapshot | null }) {
     try { const response = await fetch(`${window.cairo?.apiBaseUrl}/observation/${route}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify(body) }); const result = await response.json(); setError(response.ok ? null : result.error) } catch { setError("Observation command unavailable") }
   }
   const projection = snapshot?.bookmapProjection
-  return <section className="panel"><h3>Bookmap observations</h3><p>{snapshot?.bookmap.detail ?? "Waiting for companion"}</p>
+  return <section className="panel"><BookmapSetupCards snapshot={snapshot} /><h3>Bookmap observations</h3><p>{snapshot?.bookmap.detail ?? "Waiting for companion"}</p>
     {Object.entries(projection?.symbols ?? {}).map(([symbol, status]) => <p key={symbol}>{symbol} · {status.mode} · {status.readiness} · heartbeat {status.heartbeatAt}</p>)}
     {projection?.episodes.slice(-5).reverse().map(({ observation, freshEvent }) => <p key={`${observation.symbol.canonical}:${observation.episodeId}`}>{observation.symbol.canonical} · {observation.pattern} · ${observation.price} · revision {observation.revision} · {freshEvent ? "event evidence" : "context only"}</p>)}
     <details><summary>Review an observer attempt</summary><p>Entry recommendations last five minutes. Enter through your existing platform. Review all discretionary setup conditions before activating.</p>

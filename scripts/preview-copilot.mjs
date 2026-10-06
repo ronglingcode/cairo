@@ -1,3 +1,4 @@
+import { BookmapReceiver } from "../src/engine/BookmapReceiver.mts"
 import { createServer } from "node:http"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import path from "node:path"
@@ -23,6 +24,8 @@ import { CopilotWaker } from "../src/copilot/CopilotWaker.mts"
 // Source preview with synthetic market facts and disposable storage; no real provider/broker.
 const root = await mkdtemp(path.join(os.tmpdir(), "Cairo preview "))
 const engine = new CairoEngine()
+const receiver = new BookmapReceiver(engine)
+if(process.argv.includes("--bookmap")) receiver.start(process.env.CAIRO_BOOKMAP_ENDPOINT || "ws://127.0.0.1:8765")
 const api = new EngineApiServer(engine)
 api.setPreparationStore(new PreparationStore(root))
 await api.loadPreparation()
@@ -51,6 +54,7 @@ if (process.argv.includes("--management")) {
 }
 const managementTimer = setInterval(() => {
   if (process.argv.includes("--management") || process.argv.includes("--patterns")) { const facts = engine.getSnapshot().brokerFacts; facts.asOf = new Date().toISOString(); facts.source.updatedAt = facts.asOf; engine.updateSnapshot({ brokerFacts: facts, broker: facts.source }) }
+  if(process.argv.includes("--bookmap")) receiver.tick()
   guidance.reconcile(); monitor.cycle(); timeline.capture(); tickets.cycle()
 }, 1000)
 const base = await api.start()
@@ -65,7 +69,7 @@ const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: 
 api.setCopilotChat(chat)
 const tools = new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace)
 tools.setExitTickets(tickets); api.setDomainTools(tools)
-tools.setBookmapPatterns(patterns)
+tools.setBookmapPatterns(patterns); tools.setBookmapEvidence(receiver.evidence)
 const waker = new CopilotWaker(engine, chat); api.setCopilotWaker(waker)
 const wakeTimer = setInterval(() => waker.cycle(), 1000)
 api.setCopilotRestarter(async () => { await chat.stop(); const ok = await sidecar.restart(); if (ok) await chat.connect(); return ok })
@@ -95,7 +99,7 @@ async function stop() {
   if (stopping) return
   stopping = true
   clearInterval(managementTimer); clearInterval(wakeTimer)
-  patterns.stop()
+  receiver.stop(); patterns.stop()
   server.closeAllConnections()
   await new Promise(resolve => server.close(resolve))
   await chat.stop(); await sidecar.stop(); await provider.stop(); await api.stop(); await engine.stop()

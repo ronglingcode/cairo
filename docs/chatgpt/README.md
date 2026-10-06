@@ -18,6 +18,10 @@ The MVP execution boundary is confirmed: **observer for entries, and up to assis
 
 ## Current planning source of truth
 
+The proposed [AI Bookmap assistance plan](AI-BOOKMAP-ASSISTANCE-PLAN.md) extends the earlier two-pattern broadcast scope with temporal evidence, independent Cairo recognition of bid-breakdown/bounce setups, prior offer-rejection context, and live entry assessment. It is a separate implementation proposal; the existing task completion flags below are unchanged.
+
+The [first implemented AI Bookmap slice](AI-BOOKMAP-IMPLEMENTATION.md) includes the default-enabled plugin evidence flag, independent Cairo candidates, AI interpretation tools, setup cards and replay verification. Read its replay guide before testing; broader calibration and extensions remain tracked by the plan.
+
 | File | Purpose |
 | --- | --- |
 | [CODING-PLAN.md](CODING-PLAN.md) | Authoritative coding handoff: 50 tasks, completion flags, checks, and per-task commits |

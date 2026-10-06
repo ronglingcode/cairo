@@ -1,3 +1,4 @@
+import { BOOKMAP_CARD_ERRORS, type BookmapCardErrorCode } from "../shared/BookmapCardErrors.mts"
 import { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { injectTradingContext } from "./TradingContext.mts"
@@ -46,6 +47,28 @@ export function createCairoPlugin(bridge: Bridge, skillsDirectory = process.env.
             execute: async (input, context) => ({ content: JSON.stringify(await bridge(operation, input, context)) }),
           })
         }
+        editor.add({ name:"read_entry_setup", description:"Read the frozen Bookmap assessment for a broker fill in the currently selected account. This preserves before/after bounce evidence available at execution; later market movement is separate. Archived evidence never proves a current live trigger.",
+          input:{type:"object",properties:{fillId:{type:"string"}},required:["fillId"],additionalProperties:false},
+          options:{namespace:"cairo",codemode:false,permission:"cairo_read"},
+          execute:async(input,context)=>({content:JSON.stringify(await bridge("read_entry_setup",input,context))}),
+        })
+        for (const operation of ["read_bookmap_timeline", "read_setup_candidates"]) {
+          editor.add({ name: operation, description: "Read causal Bookmap measurements, independently recognized bounce candidates, offer breakout/rejection observations, recognition parameters, coverage and original source rules. Offer observations are context/confirmation, not trade setups. A rejection requires a small measured high above the offer, quick return and measured hold below. Price crossing does not prove order consumption. Replay is analysis only. Times are nanosecond strings, prices USD. Never fabricate a level or confirm a trader tag.",
+            input: { type: "object", properties: { symbol: { type: "string" }, start: { type: "string" }, end: { type: "string" } }, required: ["symbol"], additionalProperties: false },
+            options: { namespace: "cairo", codemode: false, permission: "cairo_read" },
+            execute: async (input, context) => ({content: JSON.stringify(await bridge(operation,input,context))}),
+          })
+        }
+        editor.add({ name: "interpret_bookmap_setup", description: "Update the local card with an advisory AI interpretation on the live/replay setup card after reading the timeline and pattern rules. Write explanation as one short sentence of at most 180 characters, covering setup and main confirmation or uncertainty. Cite actual evidence IDs in their separate field. Revisions are checked. This does not confirm tags or authorize orders. Numeric levels must come from evidence; describe the exact selected bounce, before/after relation and prior offer rejection.",
+          input: { type: "object", properties: { setupId: {type:"string"}, revision:{type:"integer"}, patternId:{type:["string","null"]}, selectedBounceId:{type:["string","null"]}, explanation:{type:"string",maxLength:2000}, evidenceIds:{type:"array",items:{type:"string"},minItems:1,maxItems:30} }, required:["setupId","revision","patternId","explanation","evidenceIds"], additionalProperties:false },
+          options:{namespace:"cairo",codemode:false,permission:"cairo_propose"},
+          execute: async (input,context)=>({content:JSON.stringify(await bridge("interpret_bookmap_setup",input,context))}),
+        })
+        editor.add({name:"interpret_bookmap_observation",description:"Update the local observation card with an explanation of an observed large-offer breakout or failed breakout/rejection after reading read_setup_candidates and read_bookmap_timeline. Use the current observation ID and revision, cite its evidence IDs. Write explanation as one short sentence of at most 180 characters: result plus the main reason or uncertainty. Do not repeat metrics already shown on the card or include revision IDs/technical boilerplate. These are observation/confirmation only; never promote them into a trade pattern or claim that the offer was consumed from price alone.",
+          input:{type:"object",properties:{observationId:{type:"string"},revision:{type:"integer"},explanation:{type:"string",maxLength:2000},evidenceIds:{type:"array",items:{type:"string"},minItems:1,maxItems:30}},required:["observationId","revision","explanation","evidenceIds"],additionalProperties:false},
+          options:{namespace:"cairo",codemode:false,permission:"cairo_propose"},
+          execute:async(input,context)=>({content:JSON.stringify(await bridge("interpret_bookmap_observation",input,context))}),
+        })
         editor.add({ name: "read_bookmap_pattern", description: "Read the trader-confirmed Bookmap tag, side-filtered active candidates and the linked source tradebook for a current position. Do not infer a tag or substitute another pattern's stop. Unconfirmed tags require the /bookmap-pattern picker.",
           input: { type: "object", properties: { positionId: { type: "string" } }, required: ["positionId"], additionalProperties: false },
           options: { namespace: "cairo", codemode: false, permission: "cairo_read" },
@@ -83,7 +106,11 @@ export default createCairoPlugin(async (operation, input, context) => {
   const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ operation, input, sessionId: context.sessionID, source: context.messageID && context.id ? { messageID: context.messageID, id: context.id, agent: context.agent } : undefined }), signal: AbortSignal.any([context.signal, AbortSignal.timeout(operation === "stage_exit" ? 65_000 : 10_000)]),
   })
-  if (!response.ok) throw new Error("Cairo rejected the tool request; refresh context before continuing")
+  if (!response.ok) {
+    const detail=await response.json().catch(()=>null) as {code?:string} | null
+    if (detail?.code && Object.hasOwn(BOOKMAP_CARD_ERRORS,detail.code)) throw new Error(BOOKMAP_CARD_ERRORS[detail.code as BookmapCardErrorCode])
+    throw new Error("Cairo rejected the tool request; refresh context before continuing")
+  }
   return response.json()
 })
 

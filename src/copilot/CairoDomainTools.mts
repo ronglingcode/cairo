@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 import { GuidanceProposals } from "../engine/GuidanceProposals.mts"
 import type { ExitTickets } from "../engine/ExitTickets.mts"
 import type { ExitIntent } from "../engine/ExitEligibility.mts"
@@ -16,6 +18,8 @@ export interface NoteProposal {
 }
 
 export class CairoDomainTools {
+  private bookmapEvidence?: import("../engine/BookmapEvidence.mts").BookmapEvidence
+  setBookmapEvidence(evidence: import("../engine/BookmapEvidence.mts").BookmapEvidence): void { this.bookmapEvidence = evidence }
   private bookmapPatterns?: import("../engine/BookmapPatterns.mts").BookmapPatterns
   setBookmapPatterns(patterns: import("../engine/BookmapPatterns.mts").BookmapPatterns): void { this.bookmapPatterns = patterns }
   private drafts: NoteProposal[] = []
@@ -47,10 +51,39 @@ export class CairoDomainTools {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Tool input must be an object")
     const value = input as Record<string, unknown>
     const snapshot = this.engine.getSnapshot()
+    if (operation === "read_entry_setup") {
+      if(typeof value.fillId!=="string" || Object.keys(value).some(k=>k!=="fillId")) throw new Error("Fill ID required")
+      const entry=snapshot.bookmapEvidence.entries.find(e=>e.fillId===value.fillId && e.accountId===snapshot.brokerFacts?.accountId)
+      if(!entry) throw new Error("Frozen entry evidence unavailable for this account/fill")
+      return {entry, archived:true, currentLiveTrigger:false}
+    }
+    if (operation === "read_bookmap_timeline" || operation === "read_setup_candidates") {
+      if (!this.bookmapEvidence) throw new Error("Bookmap evidence recorder unavailable")
+      if (typeof value.symbol !== "string" || Object.keys(value).some(key => !["symbol", "start", "end"].includes(key))) throw new Error("Symbol and optional nanosecond range required")
+      const result = this.bookmapEvidence.timeline(value.symbol, value.start as string | undefined, value.end as string | undefined)
+      const catalog = await this.bookmapPatterns?.catalog()
+      const rules = catalog ? await Promise.all(catalog.filter(p => p.side === "short").map(async p => ({...p, markdown: p.sourceFile ? await readFile(path.join(this.bookmapPatterns!.directory, p.sourceFile), "utf8") : null }))) : []
+      return operation === "read_setup_candidates" ? { status: {...result.status, events: undefined}, rules, parameters: snapshot.bookmapEvidence.parameters } : { ...result, rules }
+    }
+    if (operation === "interpret_bookmap_setup") {
+      if (!this.bookmapEvidence) throw new Error("Bookmap evidence unavailable")
+      if (Object.keys(value).some(key => !["setupId", "revision", "patternId", "selectedBounceId", "explanation", "evidenceIds"].includes(key))) throw new Error("Unexpected interpretation field")
+      this.bookmapEvidence.analyse(value as unknown as Omit<import("../engine/BookmapEvidence.mts").SetupAnalysis, "receivedAt">, this.now())
+      this.engine.updateSnapshot({bookmapEvidence:this.bookmapEvidence.snapshot()})
+      return {ok:true, advisory:true}
+    }
+    if (operation === "interpret_bookmap_observation") {
+      if (!this.bookmapEvidence) throw new Error("Bookmap evidence unavailable")
+      if (Object.keys(value).some(key=>!["observationId","revision","explanation","evidenceIds"].includes(key))) throw new Error("Unexpected observation interpretation field")
+      this.bookmapEvidence.analyseObservation(value as unknown as Omit<import("../engine/BookmapEvidence.mts").ObservationAnalysis,"receivedAt">,this.now())
+      this.engine.updateSnapshot({bookmapEvidence:this.bookmapEvidence.snapshot()})
+      return {ok:true,advisory:true,observationOnly:true}
+    }
     if (operation === "read_bookmap_pattern" || operation === "read_trade_context") {
       if (!this.bookmapPatterns) throw new Error("Bookmap pattern library unavailable")
       if (Object.keys(value).some(key => key !== "positionId")) throw new Error("Unexpected pattern field")
-      const pattern = await this.bookmapPatterns.read(value.positionId)
+      const selected = await this.bookmapPatterns.read(value.positionId)
+      const pattern = { ...selected, inferredEntries: snapshot.bookmapEvidence.entries.filter(e=>e.accountId===snapshot.brokerFacts?.accountId && e.symbol===selected.position.symbol).slice(-5) }
       if (operation === "read_bookmap_pattern") return pattern
       const current = this.engine.getSnapshot()
       return { accountId: current.brokerFacts!.accountId, factsRevision: current.brokerFactsRevision,
@@ -122,6 +155,7 @@ export class CairoDomainTools {
         error: snapshot.bookmapPatternError,
         pickerOpen: Boolean(snapshot.bookmapPatternPicker),
       },
+      bookmapEvidence: { parameters:snapshot.bookmapEvidence.parameters, entries:snapshot.bookmapEvidence.entries.slice(-5), analyses:snapshot.bookmapEvidence.analyses.slice(-5), observationAnalyses:snapshot.bookmapEvidence.observationAnalyses.slice(-8), symbols: Object.fromEntries(Object.entries(snapshot.bookmapEvidence.symbols).slice(-8).map(([symbol,status]) => [symbol,{...status,events:[],setups:status.setups.slice(-2)}])) },
       bookmap: { status: snapshot.bookmap, ...snapshot.bookmapProjection, episodes: snapshot.bookmapProjection.episodes.slice(-20) },
       observationAttempts: snapshot.observationAttempts.slice(-5),
       capabilities: { noteProposals: true, guidanceAttachment: true, exitStaging: Boolean(this.tickets), brokerWrites: false, bookmap: "observations-only; proven live mode required" },
