@@ -189,8 +189,10 @@ test("actual pinned runtime streams, cancels, and reuses a Cairo session after r
     environment: { CAIRO_TOOL_ENDPOINT: `${base}/copilot/tools`, CAIRO_TOOL_TOKEN: api.toolToken, CAIRO_OPENAI_API_KEY: "fixture-env-key", CAIRO_SKILLS_DIRECTORY: path.resolve("skills") }, onStatus: () => {} })
   const chat = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true })
   const automatic = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true, channel: "automatic", skills: new SkillLibrary(path.resolve("skills")) })
+  const account = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true, channel: "account" })
+  const management = new CopilotChat({ engine, client: () => sidecar.client, workspace: sidecar.workspace, model: selected.model, fake: true, configured: () => true, channel: "management", skills: new SkillLibrary(path.resolve("skills")) })
   api.setDomainTools(new CairoDomainTools(engine, async id => (await sidecar.client.session.get({ sessionID: id })).location.directory === sidecar.workspace))
-  t.after(async () => { await Promise.all([chat.stop(), automatic.stop()]); await sidecar.stop(); await provider.stop(); await api.stop(); await rm(root, { recursive: true, force: true }) })
+  t.after(async () => { await Promise.all([chat.stop(), automatic.stop(), account.stop(), management.stop()]); await sidecar.stop(); await provider.stop(); await api.stop(); await rm(root, { recursive: true, force: true }) })
   assert.equal(await sidecar.start(), true)
   await chat.connect()
   const id = chat.snapshot.sessionId
@@ -225,9 +227,25 @@ test("actual pinned runtime streams, cancels, and reuses a Cairo session after r
   await until(() => !automatic.snapshot.busy && automatic.snapshot.outcome === "succeeded")
   assert.ok(!chat.snapshot.messages.some(message => message.text.includes("Machine observation only; review chart context.")))
   assert.ok(!automatic.snapshot.messages.some(message => message.text.includes("My on-demand question")))
-  await automatic.sendAutomatic("/manage-trade AAA long", "partial-runtime-001")
-  await until(() => !automatic.snapshot.busy && automatic.snapshot.outcome === "succeeded")
-  const managementContext = await sidecar.client.session.context({ sessionID: automatic.snapshot.sessionId })
+  await Promise.all([account.connect(), management.connect()])
+  assert.equal(new Set([chat, automatic, account, management].map(channel => channel.snapshot.sessionId)).size, 4)
+  await Promise.all([
+    automatic.notify("Routine Bookmap observation", "independent-bookmap-001"),
+    account.notify("Machine account review", "independent-account-001"),
+    management.sendAutomatic("/manage-trade AAA long", "partial-runtime-001"),
+    chat.send("Independent manual question", "independent-manual-001"),
+  ])
+  assert.ok([chat, automatic, account, management].every(channel => channel.snapshot.busy))
+  await automatic.cancel()
+  assert.equal(automatic.snapshot.outcome, "interrupted")
+  await until(() => [chat, account, management].every(channel => !channel.snapshot.busy && channel.snapshot.outcome === "succeeded"))
+  assert.equal(engine.getSnapshot().copilotAccountChat.sessionId, account.snapshot.sessionId)
+  assert.equal(engine.getSnapshot().copilotManagementChat.sessionId, management.snapshot.sessionId)
+  assert.ok(!management.snapshot.messages.some(message => message.text.includes("Routine Bookmap") || message.text.includes("Machine account review")))
+  const managementId = management.snapshot.sessionId
+  await management.stop(); await management.connect()
+  assert.equal(management.snapshot.sessionId, managementId)
+  const managementContext = await sidecar.client.session.context({ sessionID: management.snapshot.sessionId })
   const managementPrompt = managementContext.find(message => message.type === "user" && message.metadata?.cairoCommand === "partial-runtime-001")
   assert.equal(managementPrompt.metadata.cairoMachine, true)
   assert.equal(managementPrompt.metadata.grantsApproval, false)

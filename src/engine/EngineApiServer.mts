@@ -41,6 +41,10 @@ export class EngineApiServer {
   private domainTools: CairoDomainTools | undefined
   private chat: CopilotChat | undefined
   private automaticChat: CopilotChat | undefined
+  private accountChat: CopilotChat | undefined
+  private managementChat: CopilotChat | undefined
+  setCopilotAccountChat(chat: CopilotChat): void { this.accountChat = chat }
+  setCopilotManagementChat(chat: CopilotChat): void { this.managementChat = chat }
   private guidance: PositionGuidance | undefined
   private monitor: ManagementMonitor | undefined
   private policyReview: PolicyReview | undefined
@@ -184,7 +188,7 @@ export class EngineApiServer {
         if (url.pathname === "/bookmap-pattern/accept-setup") await this.bookmapPatterns.acceptSetup(value)
           else if (url.pathname === "/bookmap-pattern/cancel") this.bookmapPatterns.cancel(value.pickerId)
         else {
-          if (this.chat?.snapshot.busy) throw new Error("Wait for the current reply before tagging")
+          if (this.chat?.snapshot.busy && !this.engine.getSnapshot().bookmapPatternPicker?.manual) throw new Error("Wait for the current reply before tagging")
           const selected = await this.bookmapPatterns.select(value)
           if (!selected.manual) {
             if (!this.chat) throw new Error("Pattern saved. Reconnect chat and invoke /set-stop-loss again.")
@@ -211,6 +215,10 @@ export class EngineApiServer {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.readCommand(request).then(value => { if (!this.partialManagement || typeof value.enabled !== "boolean") throw new Error("Partial reminders unavailable"); this.partialManagement.setEnabled(value.enabled); this.json(response, 200, { ok: true }) }).catch(() => this.json(response, 400, { error: "Invalid partial reminder setting" })); return
     }
+    if (url.pathname === "/copilot/partial-management/tag" && request.method === "POST") {
+      if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
+      void this.readCommand(request).then(async value => { if (!this.partialManagement) throw new Error("Partial reminders unavailable"); await this.partialManagement.requestPattern(value.positionId); this.json(response, 200, { ok: true }) }).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Tagging unavailable" })); return
+    }
     if (["/proposals/accept", "/proposals/reject"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
       void this.reviewProposal(url.pathname, request, response); return
@@ -232,9 +240,9 @@ export class EngineApiServer {
       void this.chat.listSkills().then(skills => this.json(response, 200, { skills })).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Skill library unavailable" }))
       return
     }
-    if (["/copilot/send", "/copilot/cancel", "/copilot/connect", "/copilot/automatic/cancel", "/copilot/automatic/connect"].includes(url.pathname) && request.method === "POST") {
+    if (["/copilot/send", "/copilot/cancel", "/copilot/connect", "/copilot/automatic/cancel", "/copilot/automatic/connect", "/copilot/account/cancel", "/copilot/account/connect", "/copilot/management/cancel", "/copilot/management/connect"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
-      const selectedChat = url.pathname.startsWith("/copilot/automatic/") ? this.automaticChat : this.chat
+      const selectedChat = url.pathname.startsWith("/copilot/automatic/") ? this.automaticChat : url.pathname.startsWith("/copilot/account/") ? this.accountChat : url.pathname.startsWith("/copilot/management/") ? this.managementChat : this.chat
       if (!selectedChat) { this.json(response, 503, { error: "Chat is unavailable" }); return }
       void this.chatCommand(url.pathname, request, response, selectedChat)
       return
@@ -312,7 +320,7 @@ export class EngineApiServer {
   private async chatCommand(route: string, request: IncomingMessage, response: ServerResponse, chat: CopilotChat): Promise<void> {
     try {
       if (route.endsWith("/connect")) await chat.connect()
-      else if (route.endsWith("/cancel")) { const session = chat.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await chat.cancel(); if (route.startsWith("/copilot/automatic/")) this.partialManagement?.setEnabled(false) }
+      else if (route.endsWith("/cancel")) { const session = chat.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await chat.cancel(); if (route.startsWith("/copilot/management/")) this.partialManagement?.setEnabled(false); else if (route.startsWith("/copilot/account/")) this.waker?.setEnabled(false); else if (route.startsWith("/copilot/automatic/")) this.waker?.setBookmapEnabled(false) }
       else {
         const chunks: Buffer[] = []
         let bytes = 0

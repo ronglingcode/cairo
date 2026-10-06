@@ -25,7 +25,7 @@ export function BookmapPatternPicker({ picker, apiBaseUrl, commandToken, onCompl
       {choice.tag && <p className="pattern-previous">{choice.tag.active ? "Saved" : "Previous trade"} pattern: {choice.candidates.find(pattern => pattern.id === choice.tag?.patternId)?.name ?? choice.tag.patternId}. Click to confirm or change.</p>}
       <div className="pattern-options">{choice.candidates.map(pattern => <button type="button" key={pattern.id} disabled={pending || !apiBaseUrl || !commandToken} onClick={() => void command("select", pattern.id)}><strong>{pattern.name}</strong>{choice.tag?.patternId === pattern.id && <span>Previously tagged</span>}</button>)}</div>
       {!choice.candidates.length && <p>No active patterns for this side.</p>}
-      <small>{picker.manual ? "Click a pattern to save it for this trade." : "Click to save the pattern and continue your request."}</small>
+      <small>{picker.origin === "partial-management" ? "Confirm a pattern to automatically review this trade’s stop loss and targets." : picker.manual ? "Click a pattern to save it for this trade." : "Click to save the pattern and continue your request."}</small>
     </>}
     {pending && <p role="status">Saving…</p>}
     {error && <p className="chart-error" role="alert">{error}</p>}

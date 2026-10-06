@@ -7,6 +7,7 @@ import { BookmapPatterns, parseActivePatterns } from "../src/engine/BookmapPatte
 import { EngineApiServer } from "../src/engine/EngineApiServer.mts"
 import { CairoDomainTools } from "../src/copilot/CairoDomainTools.mts"
 import { positionEngine } from "./fixtures/positions.mjs"
+import { PartialManagement } from "../src/copilot/PartialManagement.mts"
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "cairo-patterns-"))
@@ -59,8 +60,8 @@ test("active catalog filters each side and routes only the tagged pattern's sour
   const reused = await patterns.preflight("/set-stop-loss AAA", "pattern-command-002")
   assert.equal(reused.picker, null)
   assert.match(reused.text, /Bookmap pattern: bid step up \(saved\)$/)
-  assert.match(await patterns.managementRequest("position-0"), /^\/manage-trade AAA long\nSelected current trade: AAA long; positionId: position-0\. Bookmap pattern: bid step up \(saved\)$/)
-  assert.match(await patterns.managementRequest("position-1"), /Bookmap pattern: unconfirmed/)
+  assert.match(await patterns.managementRequest("position-0"), /^\/manage-trade AAA long\nSelected current trade: AAA long; positionId: position-0\. Bookmap pattern: bid step up \(saved\)\nAutomatic review/)
+  await assert.rejects(patterns.managementRequest("position-1"), /Tag or confirm the Bookmap pattern first/)
   assert.equal(engine.getSnapshot().bookmapPatternPicker, null, "automatic review never blocks the manual composer with a picker")
   updatePositions(engine, engine.getSnapshot().positions.map(position => ({ ...position, quantity: 5 })))
   assert.equal((await patterns.read("position-0")).confirmed, true)
@@ -72,6 +73,39 @@ test("active catalog filters each side and routes only the tagged pattern's sour
   tools.setBookmapPatterns(patterns)
   assert.equal((await tools.execute("read_bookmap_pattern", { positionId: "position-0" }, "session")).pattern.id, "bid-step-up")
   await assert.rejects(tools.execute("read_bookmap_pattern", { positionId: "position-0" }, ""), /session/)
+})
+
+test("30% partial -> remind to tag -> confirmation -> automatic management without blocking manual chat", async t => {
+  const {engine,patterns}=await fixture(t)
+  const baseline=engine.getSnapshot().brokerFacts;baseline.asOf=new Date(Date.now()-1000).toISOString();engine.updateSnapshot({brokerFacts:baseline})
+  const sent=[],alerts=[]
+  const manager=new PartialManagement(engine,{snapshot:{connected:true,busy:false,outcome:null,messages:[]},sendAutomatic:async text=>sent.push(text)},id=>patterns.managementRequest(id),(...args)=>alerts.push(args),Date.now,id=>patterns.managementPicker(id))
+  const facts=engine.getSnapshot().brokerFacts;facts.positions[0].quantity=7;facts.recentFills=[{fillId:"partial",orderId:"exit",symbol:"AAA",side:"sell",quantity:3,price:21,filledAt:new Date(Date.now()-1).toISOString()}]
+  facts.asOf=new Date().toISOString();engine.updateSnapshot({brokerFacts:facts});manager.cycle()
+  for(let i=0;i<100 && !engine.getSnapshot().copilotPartialManagement.notice;i++)await new Promise(resolve=>setTimeout(resolve,5))
+  assert.deepEqual(sent,[])
+  assert.deepEqual(engine.getSnapshot().copilotPartialManagement.waitingForPattern,["AAA"])
+  assert.match(engine.getSnapshot().copilotPartialManagement.notice.text,/management will run automatically after confirmation/)
+  assert.deepEqual(alerts,[["AAA",true]])
+  const api=new EngineApiServer(engine);api.setBookmapPatterns(patterns);api.setPartialManagement(manager)
+  api.setCopilotChat({snapshot:{busy:true},send:async()=>assert.fail("must not send to busy manual chat")})
+  const base=await api.start();t.after(()=>api.stop())
+  const post=(route,body,token=api.commandToken)=>fetch(`${base}${route}`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(body)})
+  assert.equal((await post("/copilot/partial-management/tag",{positionId:"position-0"},api.toolToken)).status,403)
+  assert.equal((await post("/copilot/partial-management/tag",{positionId:"position-1"})).status,400)
+  assert.equal((await post("/copilot/partial-management/tag",{positionId:"position-0"})).status,200)
+  const picker=engine.getSnapshot().bookmapPatternPicker
+  assert.equal(picker.origin,"partial-management")
+  assert.equal(picker.manual,true)
+  assert.equal((await post("/bookmap-pattern/select",{pickerId:picker.id,positionId:"position-0",patternId:"bid-step-up"})).status,200)
+  manager.cycle()
+  for(let i=0;i<100 && !sent.length;i++)await new Promise(resolve=>setTimeout(resolve,5))
+  assert.equal(sent.length,1)
+  assert.match(sent[0],/Bookmap pattern: bid step up \(saved\)/)
+  assert.deepEqual(engine.getSnapshot().copilotPartialManagement.waitingForPattern,[])
+  assert.equal(engine.getSnapshot().copilotPartialManagement.notice,undefined)
+  for(let i=0;i<10;i++)manager.cycle()
+  assert.equal(sent.length,1,"confirmation resumes the original review exactly once")
 })
 
 test("manual tagging persists, reconfirms on restart and preserves undefined source/rule gaps", async t => {

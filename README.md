@@ -35,11 +35,12 @@ message draft. The chat includes source status, position summaries, and an expan
 **Trading context** drawer with protection, management, and exact exit review controls.
 Enter sends a message; Shift+Enter adds a line break.
 
-Your questions and automatic updates use independent AI sessions and can respond
-at the same time, with all replies shown chronologically in one conversation.
-Automatic replies are labeled **Automatic update**. Background Bookmap/account
-reviews never disable your message composer. **Cancel reply** stops your response;
-**Stop auto** stops automatic analysis and pauses automatic updates. The former
+Your questions, Bookmap reviews, account reviews and partial-management reviews
+each use an independent AI session and queue, and can respond at the same time.
+All replies appear chronologically in one conversation with timestamps and labels
+for the automatic review type. No tabs are needed. A busy, disconnected, canceled
+or failed review affects only its own type. **Cancel reply** stops your response;
+**Stop bookmap**, **Stop account** and **Stop management** each pause only that review. The former
 shared conversation remains visible in this timeline when upgrading.
 
 **Manage trade + voice after 30% partial** is on by default. While Cairo is running,
@@ -47,12 +48,18 @@ it tracks each held position's starting size and new broker fills. Once confirme
 closing fills reach 30% (rounded down to whole shares, at least one share), with
 shares still held, Cairo runs `/manage-trade` for that position once. Adds increase
 the size basis; quantity changes without matching fills do not trigger a review.
-Busy automatic analysis queues the review; manual chat remains available. The
+Management reviews run alongside background analysis; manual chat remains available. The
 response uses the saved Bookmap pattern and current stop/target context, in the
-same timeline. Missing confirmed patterns remain undefined rather than inferred.
+same timeline. Missing confirmed patterns produce an immediate local notice with
+a **Tag pattern** button and voice reminder. The review waits for a confirmed tag,
+then runs trade management automatically once; `/bookmap-pattern SYMBOL` also
+resumes it. Tagging does not block manual chat. Closed trades and stopped management
+reviews do not resume after a later tag. Cairo does not spend a model call returning two undefined fields. With
+a confirmed pattern, missing stop/target rules identify the specific missing
+context and next step.
 When the response completes, Cairo shows a notification, plays a sound and speaks
 the symbol with a reminder to review its stop loss and targets. Click the
-notification to focus chat. **Stop auto** also pauses these reminders; the checkbox
+notification to focus chat. **Stop management** pauses these reminders; the checkbox
 re-enables them. Closed trades and canceled/failed responses do not sound a ready
 alert. Tracking starts with current broker facts on launch; earlier partials are
 not replayed. Windows voice uses the installed system voice without a network service.

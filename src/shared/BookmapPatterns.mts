@@ -25,5 +25,6 @@ export interface BookmapPatternPicker {
   accountId: string
   factsRevision: number
   manual: boolean
+  origin?: "partial-management"
   positions: Array<{ position: BrokerPosition; tradeInstanceId: string; tag: BookmapPatternTag | null; candidates: BookmapPattern[] }>
 }

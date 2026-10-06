@@ -42,7 +42,7 @@ import { ManagementMonitor } from "../src/engine/ManagementMonitor.mts"
 app.setPath("userData", prepareUserDataDirectory(app.getPath("userData")))
 
 // Main-process lifetime owns the engine; BrowserWindow reloads only replace the renderer.
-const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); partialManagement?.cycle(); if (!partialManagement?.ownsAutomaticChat) waker?.cycle() } })
+const engine: CairoEngine = new CairoEngine({ runCycle: async (): Promise<void> => { bookmapReceiver.tick(); entryObserver.cycle(); startupRecovery?.cycle(); protection?.cycle(); guidance.reconcile(); monitor.cycle(); protection?.persist(monitor.checkpointState()); timeline.capture(); tickets.cycle(); writer?.reconcileKnown(); uncertainty?.tick(); partialManagement?.cycle(); waker?.cycle() } })
 const guidance = new PositionGuidance(engine)
 const bookmapReceiver = new BookmapReceiver(engine)
 const entryObserver = new EntryObserver(engine)
@@ -59,6 +59,8 @@ let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined
 let automaticChat: CopilotChat | undefined
+let accountChat: CopilotChat | undefined
+let managementChat: CopilotChat | undefined
 let waker: CopilotWaker | undefined
 let partialManagement: PartialManagement | undefined
 let writer: ExitWriter | undefined
@@ -74,6 +76,8 @@ installShutdownHook(app, {
     await ticketPermissions?.stop()
     await chat?.stop()
     await automaticChat?.stop()
+    await accountChat?.stop()
+    await managementChat?.stop()
     await writer?.stop()
     await uncertainty?.stop()
     await sidecar?.stop()
@@ -274,18 +278,26 @@ app.whenReady().then(async () => {
     channel: "automatic", skills, configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
   })
   apiServer.setCopilotAutomaticChat(automaticChat)
-  waker = new CopilotWaker(engine, automaticChat)
+  accountChat = new CopilotChat({ engine, client: () => sidecar?.client, workspace: sidecar.workspace, model: selectedModel.model, fake,
+    channel: "account", skills, configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
+  })
+  managementChat = new CopilotChat({ engine, client: () => sidecar?.client, workspace: sidecar.workspace, model: selectedModel.model, fake,
+    channel: "management", skills, configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
+  })
+  apiServer.setCopilotAccountChat(accountChat)
+  apiServer.setCopilotManagementChat(managementChat)
+  waker = new CopilotWaker(engine, automaticChat, Date.now, accountChat)
   apiServer.setCopilotWaker(waker)
-  partialManagement = new PartialManagement(engine, automaticChat, id => bookmapPatterns.managementRequest(id), symbol => {
+  partialManagement = new PartialManagement(engine, managementChat, id => bookmapPatterns.managementRequest(id), (symbol, needsContext) => {
     broadcast("cairo:management-alert", symbol)
     managementAlert(symbol, () => {
       const window = chatWindow ?? planningWindow
       if (window) focusWindow(window)
       broadcast("cairo:management-alert", symbol)
-    })
-  })
+    }, needsContext)
+  }, Date.now, id => bookmapPatterns.managementPicker(id))
   apiServer.setPartialManagement(partialManagement)
-  apiServer.setCopilotRestarter(async () => { await ticketPermissions?.stop(); await Promise.all([chat!.stop(), automaticChat!.stop()]); const ok = await sidecar!.restart(); if (ok) await Promise.all([chat!.connect(), automaticChat!.connect()]); return ok })
+  apiServer.setCopilotRestarter(async () => { await ticketPermissions?.stop(); await Promise.all([chat!.stop(), automaticChat!.stop(), accountChat!.stop(), managementChat!.stop()]); const ok = await sidecar!.restart(); if (ok) await Promise.all([chat!.connect(), automaticChat!.connect(), accountChat!.connect(), managementChat!.connect()]); return ok })
   const domainTools = new CairoDomainTools(engine, async id => {
     const client = sidecar?.client
     if (!client || !sidecar) return false
@@ -299,7 +311,7 @@ app.whenReady().then(async () => {
   domainTools.setTicketPermissions(ticketPermissions)
   apiServer.setTicketPermissions(ticketPermissions)
   apiServer.setDomainTools(domainTools)
-  void sidecar.start().then(ok => { if (ok) return Promise.all([chat!.connect(), automaticChat!.connect()]) })
+  void sidecar.start().then(ok => { if (ok) return Promise.all([chat!.connect(), automaticChat!.connect(), accountChat!.connect(), managementChat!.connect()]) })
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)
   })

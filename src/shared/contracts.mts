@@ -250,6 +250,8 @@ export interface CairoSnapshot {
   copilotWake: import("../copilot/CopilotWaker.mts").WakeStatus
   copilotChat: CopilotChat | null
   copilotAutomaticChat: CopilotChat | null
+  copilotAccountChat: CopilotChat | null
+  copilotManagementChat: CopilotChat | null
   copilotPartialManagement: import("../copilot/PartialManagement.mts").PartialManagementStatus
   positions: BrokerPosition[]
   tradebooks: Tradebook[]

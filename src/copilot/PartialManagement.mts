@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { CairoEngine } from "../engine/CairoEngine.mts"
 import type { BrokerPosition, CopilotChat } from "../shared/contracts.mts"
+import { ManagementContextRequired } from "../engine/BookmapPatterns.mts"
 
 export interface PartialManagementStatus {
   enabled: boolean
@@ -8,6 +9,8 @@ export interface PartialManagementStatus {
   activeSymbol: string | null
   lastReminder: { symbol: string; at: string } | null
   error: string | null
+  notice?: { text: string; at: string; positionId?: string }
+  waitingForPattern?: string[]
 }
 interface TrackedTrade {
   position: BrokerPosition
@@ -28,22 +31,31 @@ interface ManagementChat {
 export class PartialManagement {
   private trades = new Map<string, TrackedTrade>()
   private queue: Request[] = []
+  private waiting: Array<Request & { tagRevision: string | null }> = []
   private active: { request: Request; previousMessages: Set<string> } | null = null
   private sending = false
   private generation = 0
   private engine: CairoEngine
   private chat: ManagementChat
   private prepare: (positionId: string) => Promise<string>
-  private alert: (symbol: string) => void
+  private alert: (symbol: string, needsContext?: boolean) => void
   private now: () => number
+  private openPattern?: (positionId: string) => Promise<void>
   private state: PartialManagementStatus = { enabled: true, pending: 0, activeSymbol: null, lastReminder: null, error: null }
   constructor(
     engine: CairoEngine,
     chat: ManagementChat,
     prepare: (positionId: string) => Promise<string>,
-    alert: (symbol: string) => void,
+    alert: (symbol: string, needsContext?: boolean) => void,
     now: () => number = Date.now,
-  ) { this.engine = engine; this.chat = chat; this.prepare = prepare; this.alert = alert; this.now = now; this.observe(); this.publish() }
+    openPattern?: (positionId: string) => Promise<void>,
+  ) { this.engine = engine; this.chat = chat; this.prepare = prepare; this.alert = alert; this.now = now; this.openPattern = openPattern; this.observe(); this.publish() }
+
+  async requestPattern(positionId: unknown): Promise<void> {
+    this.observe()
+    if (!this.state.enabled || !this.openPattern || !this.waiting.some(request => request.trade.position.positionId === positionId && this.trades.get(request.key) === request.trade)) throw new Error("This trade is no longer waiting for a pattern")
+    await this.openPattern(positionId as string)
+  }
 
   get ownsAutomaticChat(): boolean { return this.sending || Boolean(this.active) || this.queue.length > 0 }
   setEnabled(enabled: boolean): void {
@@ -52,11 +64,24 @@ export class PartialManagement {
     this.state.error = null
     this.generation++
     this.queue = []
+    this.waiting = []
+    if (this.state.notice) this.state.lastReminder = null
+    this.state.notice = undefined
     this.active = null
     this.publish()
   }
   cycle(): void {
     this.observe()
+    this.waiting = this.waiting.filter(request => this.trades.get(request.key) === request.trade)
+    if (this.state.notice?.positionId && !this.waiting.some(request => request.trade.position.positionId === this.state.notice?.positionId)) this.state.notice = undefined
+    for (const request of [...this.waiting]) {
+      const tag = this.engine.getSnapshot().bookmapPatternTags.find(tag => tag.accountId === JSON.parse(request.key)[0] && tag.positionId === request.trade.position.positionId && tag.side === request.trade.position.side)
+      if (this.state.enabled && tag?.active && tag.runtimeInstanceId === this.engine.runtimeInstanceId && tag.revision !== request.tagRevision) {
+        this.waiting = this.waiting.filter(item => item !== request)
+        this.queue.push(request)
+        if (this.state.notice?.positionId === request.trade.position.positionId) this.state.notice = undefined
+      }
+    }
     if (this.active && !this.sending) {
       const chat = this.chat.snapshot
       if (chat.outcome === "interrupted") { this.setEnabled(false); return }
@@ -86,6 +111,7 @@ export class PartialManagement {
   }
   private async deliver(request: Request, generation: number): Promise<void> {
     try {
+      if (generation !== this.generation) { this.active = null; return }
       const text = await this.prepare(request.trade.position.positionId)
       this.observe()
       if (generation !== this.generation || this.trades.get(request.key) !== request.trade) { this.active = null; return }
@@ -93,6 +119,19 @@ export class PartialManagement {
     } catch (error) {
       if (generation !== this.generation) return
       this.active = null
+      if (error instanceof ManagementContextRequired) {
+        this.observe()
+        if (this.trades.get(request.key) !== request.trade) return
+        const at = new Date(this.now()).toISOString()
+        const tag = this.engine.getSnapshot().bookmapPatternTags.find(tag => tag.accountId === JSON.parse(request.key)[0] && tag.positionId === request.trade.position.positionId && tag.side === request.trade.position.side)
+        this.waiting.push({ ...request, tagRevision: tag?.revision ?? null })
+        this.state.notice = { text: error.message, at, positionId: request.trade.position.positionId }
+        this.state.lastReminder = { symbol: request.trade.position.symbol, at }
+        this.state.error = null
+        this.publish()
+        this.alert(request.trade.position.symbol, true)
+        return
+      }
       this.state.error = `${request.trade.position.symbol}: ${error instanceof Error ? error.message : "automatic management unavailable"}. Ask /manage-trade again`
     }
   }
@@ -128,6 +167,7 @@ export class PartialManagement {
         trade.triggered = true
         this.queue.push({ key, trade, id: `cairo-partial-${randomUUID()}` })
         this.state.error = null
+        this.state.notice = undefined
       }
     }
     for (const key of this.trades.keys()) if (!held.has(key)) this.trades.delete(key)
@@ -135,6 +175,7 @@ export class PartialManagement {
   private publish(): void {
     this.state.pending = this.queue.length
     this.state.activeSymbol = this.active?.request.trade.position.symbol ?? null
+    this.state.waitingForPattern = this.waiting.map(request => request.trade.position.symbol)
     if (JSON.stringify(this.engine.getSnapshot().copilotPartialManagement) !== JSON.stringify(this.state)) this.engine.updateSnapshot({ copilotPartialManagement: structuredClone(this.state) })
   }
 }

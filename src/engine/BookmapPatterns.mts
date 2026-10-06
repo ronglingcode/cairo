@@ -6,6 +6,8 @@ import type { BookmapPattern, BookmapPatternPicker, BookmapPatternTag } from "..
 import { requiresTradeContext, skillMentions } from "../shared/SkillCommands.mts"
 import { tradeCandidates } from "./TradeContext.mts"
 
+export class ManagementContextRequired extends Error {}
+
 export function parseActivePatterns(markdown: string): BookmapPattern[] {
   const patterns: BookmapPattern[] = []
   let side: "long" | "short" | undefined
@@ -177,8 +179,18 @@ export class BookmapPatterns {
   async managementRequest(positionId: string): Promise<string> {
     const context = await this.read(positionId)
     const text = `/manage-trade ${context.position.symbol} ${context.position.side}`
-    if (context.pattern) return this.bind(text, context.position, context.pattern)
-    return `${text}\nSelected current trade: ${context.position.symbol} ${context.position.side}; positionId: ${positionId}. Bookmap pattern: unconfirmed\nAutomatic review after a 30% partial. Use undefined for unsupported stop or targets; never infer a saved pattern from history.`
+    if (context.pattern) return `${this.bind(text, context.position, context.pattern)}\nAutomatic review after a 30% partial. If a stop or target is unsupported, state the specific missing rule or input and how to supply it; do not return bare undefined fields.`
+    throw new ManagementContextRequired(`${context.position.symbol}: 30% partial taken. Tag or confirm the Bookmap pattern first. Click Tag pattern or use /bookmap-pattern ${context.position.symbol}; trade management will run automatically after confirmation.`)
+  }
+  async managementPicker(positionId: string): Promise<void> {
+    return this.serial(async () => {
+      const existing = this.engine.getSnapshot().bookmapPatternPicker
+      if (existing) throw new Error("Finish or cancel the current pattern selection first")
+      const context = await this.read(positionId)
+      const result = await this.prepare(`/bookmap-pattern ${context.position.symbol} ${context.position.side}`, randomUUID())
+      if (!result.picker) throw new Error("Pattern selection unavailable")
+      this.engine.updateSnapshot({ bookmapPatternPicker: { ...result.picker, origin: "partial-management", positions: result.picker.positions.filter(choice => choice.position.positionId === positionId) } })
+    })
   }
   private bind(text: string, position: { positionId: string; symbol: string; side: string }, pattern: BookmapPattern): string {
     const bound = `${text}\nSelected current trade: ${position.symbol} ${position.side}; positionId: ${position.positionId}. Bookmap pattern: ${pattern.name} (saved)`

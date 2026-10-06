@@ -15,6 +15,8 @@ Both workflows share the included [trade-context](../trade-context/SKILL.md) pre
 
 Read relevant broker facts and source freshness to ground the stop and targets. Do not assert a live stop/target trigger from a chart snapshot or unknown observations.
 
+For an automatic review after a partial, show supported stop and target rules in the same two numbered lines. When either field is unsupported, replace bare `undefined` with `unavailable — <specific missing rule or input>`. Add at most one short next-step sentence naming how the trader can supply that missing context. This exception takes precedence over the bare invocation's format below. Never guess a rule, price or confirmed pattern to fill the gap.
+
 For a bare `/manage-trade` invocation or an immediate live-management request, return exactly this two-line numbered format:
 
 1. stop loss: <supported level or structural condition, or undefined>

@@ -238,8 +238,9 @@ export function App() {
           <div className="chat-runtime">
             <label><input type="checkbox" checked={snapshot?.copilotPartialManagement.enabled ?? true} disabled={!snapshot || !apiBaseUrl} onChange={event => { void fetch(`${apiBaseUrl}/copilot/partial-management`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify({ enabled: event.target.checked }) }).then(response => { if (!response.ok) setCopilotRestartError("Partial reminders could not be changed") }).catch(() => setCopilotRestartError("Partial reminders unavailable")) }} /> Manage trade + voice after 30% partial</label>
             {snapshot?.copilotPartialManagement.activeSymbol && <p role="status">{snapshot.copilotPartialManagement.activeSymbol}: reviewing stop loss and targets…</p>}
+            {Boolean(snapshot?.copilotPartialManagement.waitingForPattern?.length) && <p role="status">Tag pattern first: {snapshot?.copilotPartialManagement.waitingForPattern?.join(", ")} · management will follow automatically</p>}
             {Boolean(snapshot?.copilotPartialManagement.pending) && <p role="status">30% partial detected · management review queued</p>}
-            {snapshot?.copilotPartialManagement.lastReminder && <p role="status">{snapshot.copilotPartialManagement.lastReminder.symbol}: manage trade response ready</p>}
+            {snapshot?.copilotPartialManagement.lastReminder && <p role="status">{snapshot.copilotPartialManagement.lastReminder.symbol}: {snapshot.copilotPartialManagement.notice ? "Bookmap pattern needs reconfirmation" : "manage trade response ready"}</p>}
             {snapshot?.copilotPartialManagement.error && <p className="chart-error" role="status">{snapshot.copilotPartialManagement.error}</p>}
             <label><input type="checkbox" checked={snapshot?.copilotWake.enabled ?? false} disabled={!snapshot || !apiBaseUrl} onChange={event => { void fetch(`${apiBaseUrl}/copilot/events`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.cairo?.commandToken}` }, body: JSON.stringify({ enabled: event.target.checked }) }).then(response => { if (!response.ok) setCopilotRestartError("Event updates could not be changed") }).catch(() => setCopilotRestartError("Event updates unavailable")) }} /> AI updates for account changes</label>
             {snapshot?.copilotWake.error && <p role="status">{snapshot.copilotWake.error}</p>}
@@ -247,7 +248,7 @@ export function App() {
             <button className="quiet-button" disabled={!apiBaseUrl || restartingCopilot} onClick={() => void restartCopilot()}>{restartingCopilot ? "Restarting…" : "Restart AI"}</button>
             {copilotRestartError && <p className="chart-error" role="status">{copilotRestartError}</p>}
           </div>
-          <CopilotPanel apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} chat={snapshot?.copilotChat ?? null} automaticChat={snapshot?.copilotAutomaticChat ?? null} patternPicker={snapshot?.bookmapPatternPicker} patternError={snapshot?.bookmapPatternError} />
+          <CopilotPanel apiBaseUrl={apiBaseUrl} commandToken={window.cairo?.commandToken} chat={snapshot?.copilotChat ?? null} automaticChat={snapshot?.copilotAutomaticChat ?? null} accountChat={snapshot?.copilotAccountChat ?? null} managementChat={snapshot?.copilotManagementChat ?? null} managementNotice={snapshot?.copilotPartialManagement.notice} patternPicker={snapshot?.bookmapPatternPicker} patternError={snapshot?.bookmapPatternError} />
         </aside>
       </section>
       <footer className="statusbar"><span><span className="status-dot muted" />Observer-only entries</span><span>{snapshot ? `Runtime ${snapshot.runtimeInstanceId.slice(0, 8)} · sequence ${snapshot.sequence}` : connectionLabel(connectionState)}</span></footer>

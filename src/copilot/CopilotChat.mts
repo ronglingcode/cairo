@@ -14,7 +14,7 @@ export interface ChatOptions {
   fake: boolean
   configured(): boolean
   skills?: SkillLibrary
-  channel?: "foreground" | "automatic"
+  channel?: "foreground" | "automatic" | "account" | "management"
 }
 
 export class CopilotChat {
@@ -80,7 +80,8 @@ export class CopilotChat {
         const channel = this.options.channel ?? "foreground"
         // The old shared session contains automatic updates; keep it with that history.
         const existing = sessions.data.find(session => this.owned(session.location.directory) && session.metadata?.cairoChat === true && (session.metadata.cairoChannel ?? "automatic") === channel && session.model?.providerID === this.options.model.providerID && session.model?.id === this.options.model.id)
-        const session = existing ?? await client.session.create({ title: channel === "automatic" ? "Cairo automatic updates" : "Cairo trading preparation", location: { directory: this.options.workspace }, model: this.options.model, metadata: { cairoChat: true, cairoChannel: channel } }, request)
+        const titles = { foreground: "Cairo trading preparation", automatic: "Cairo Bookmap updates", account: "Cairo account updates", management: "Cairo partial management" }
+        const session = existing ?? await client.session.create({ title: titles[channel], location: { directory: this.options.workspace }, model: this.options.model, metadata: { cairoChat: true, cairoChannel: channel } }, request)
         this.state.sessionId = session.id
       }
       if (generation !== this.generation) return
@@ -219,7 +220,10 @@ export class CopilotChat {
     this.publish()
   }
   private fail(error: string): void { this.streamAbort?.abort(); this.state.connected = false; this.state.busy = false; this.state.error = error; this.publish() }
-  private publish(): void { this.options.engine.updateSnapshot(this.options.channel === "automatic" ? { copilotAutomaticChat: this.snapshot } : { copilotChat: this.snapshot }) }
+  private publish(): void {
+    const fields = { foreground: "copilotChat", automatic: "copilotAutomaticChat", account: "copilotAccountChat", management: "copilotManagementChat" } as const
+    this.options.engine.updateSnapshot({ [fields[this.options.channel ?? "foreground"]]: this.snapshot })
+  }
 }
 
 

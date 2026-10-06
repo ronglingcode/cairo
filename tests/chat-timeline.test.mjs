@@ -15,6 +15,12 @@ test("one timeline interleaves independent chat histories and keeps streaming up
   assert.equal(chatTimeline(foreground, automatic)[2].text, "Automatic answer continued")
   assert.equal(foreground.messages[0].text, "Your answer")
   assert.deepEqual(chatTimeline(null, null), [])
+  const notice={text:"AMD: Reconfirm Bookmap pattern",at:"2026-10-06T15:08:51.000Z"}
+  assert.equal(chatTimeline(null,null,null,null,notice)[0].text,notice.text)
+  assert.equal(chatTimeline(null,null,null,null,notice)[0].createdAt,Date.parse(notice.at))
+  const four = chatTimeline(foreground, automatic, { messages: [message("same-id", 250, "Account reply")] }, { messages: [message("same-id", 350, "Management reply")] })
+  assert.equal(new Set(four.map(item => item.key)).size, 6)
+  assert.deepEqual(four.map(item => item.label), ["Bookmap review", "", "Account review", "Bookmap review", "Trade management", ""])
   const bound = { messages: [{ id: "bound", role: "user", text: "/manage-trade\nSelected current trade: AMD long; positionId: account-hash:007903107:long. Use its saved Bookmap tag.", tools: [] }] }
   assert.equal(chatTimeline(bound, null)[0].text, "/manage-trade\nAMD long")
   assert.match(bound.messages[0].text, /positionId: account-hash:007903107:long/, "internal trade identity stays intact")

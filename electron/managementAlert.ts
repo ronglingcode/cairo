@@ -2,10 +2,10 @@ import { execFile } from "node:child_process"
 import { Notification, shell } from "electron"
 
 /** Windows speech runs outside the renderer, so muted/background chat windows still remind the trader. */
-export function managementAlert(symbol: string, focusChat: () => void): void {
-  const body = `${symbol}. Your manage trade response is ready. Please review the stop loss and targets.`
+export function managementAlert(symbol: string, focusChat: () => void, needsContext = false): void {
+  const body = needsContext ? `${symbol}. Partial taken. Your Bookmap pattern needs reconfirmation. Please check Cairo.` : `${symbol}. Your manage trade response is ready. Please review the stop loss and targets.`
   if (Notification.isSupported()) {
-    const notification = new Notification({ title: `${symbol} · Manage trade ready`, body, silent: true })
+    const notification = new Notification({ title: `${symbol} · ${needsContext ? "Confirm Bookmap pattern" : "Manage trade ready"}`, body, silent: true })
     notification.on("click", focusChat)
     notification.show()
   }

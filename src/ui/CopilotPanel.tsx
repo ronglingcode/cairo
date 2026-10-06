@@ -5,11 +5,12 @@ import type { BookmapPatternPicker as Picker } from "../shared/BookmapPatterns.m
 import { BookmapPatternPicker } from "./BookmapPatternPicker"
 import { chatTimeline } from "../shared/ChatTimeline.mts"
 
-export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = null, patternPicker, patternError }: { apiBaseUrl: string | null; commandToken?: string | null; chat: CopilotChat | null; automaticChat?: CopilotChat | null; patternPicker?: Picker | null; patternError?: string | null }) {
+export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = null, accountChat = null, managementChat = null, managementNotice, patternPicker, patternError }: { apiBaseUrl: string | null; commandToken?: string | null; chat: CopilotChat | null; automaticChat?: CopilotChat | null; accountChat?: CopilotChat | null; managementChat?: CopilotChat | null; managementNotice?: { text: string; at: string; positionId?: string }; patternPicker?: Picker | null; patternError?: string | null }) {
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
+  const [tagPending, setTagPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [automaticPending, setAutomaticPending] = useState(false)
+  const [automaticPending, setAutomaticPending] = useState<Record<string, boolean>>({})
   const [automaticError, setAutomaticError] = useState<string | null>(null)
   const [skills, setSkills] = useState<SkillSummary[]>([])
   const [skillError, setSkillError] = useState<string | null>(null)
@@ -21,7 +22,7 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = n
   const composer = useRef<HTMLTextAreaElement | null>(null)
   const skillController = useRef<AbortController | null>(null)
   const controller = useRef<AbortController | null>(null)
-  const automaticController = useRef<AbortController | null>(null)
+  const automaticControllers = useRef<Record<string, AbortController>>({})
   const history = useRef<HTMLDivElement | null>(null)
   const followLatest = useRef(true)
   const draftEdited = useRef(false)
@@ -29,8 +30,9 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = n
   const matches = query ? skills.filter(skill => skill.name.startsWith(query.query)) : []
   const menuOpen = focused && !dismissed && query !== null
   const selectedIndex = Math.min(activeSkill, Math.max(0, matches.length - 1))
-  const canSend = Boolean(apiBaseUrl && !chat?.busy && !pending && !patternPicker && draft.trim() && (chat?.connected || /^\/bookmap-pattern(?:\s|$)/.test(draft.trim())))
-  const messages = chatTimeline(chat, automaticChat)
+  const canSend = Boolean(apiBaseUrl && !chat?.busy && !pending && (!patternPicker || patternPicker.origin === "partial-management") && draft.trim() && (chat?.connected || /^\/bookmap-pattern(?:\s|$)/.test(draft.trim())))
+  const messages = chatTimeline(chat, automaticChat, accountChat, managementChat, managementNotice)
+  const automaticReviews = [{ channel: "automatic", label: "Bookmap", chat: automaticChat }, { channel: "account", label: "Account", chat: accountChat }, { channel: "management", label: "Management", chat: managementChat }]
   async function loadSkills() {
     if (!apiBaseUrl || !commandToken) return
     skillController.current?.abort()
@@ -67,23 +69,24 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = n
     void window.cairo?.chatDraft?.().then(value => { if (active && !draftEdited.current) setDraft(value) }).catch(() => {})
     return () => { active = false; unsubscribe?.() }
   }, [])
-  useEffect(() => () => { controller.current?.abort(); automaticController.current?.abort() }, [])
-  useEffect(() => { if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight }, [chat?.messages, automaticChat?.messages])
+  useEffect(() => () => { controller.current?.abort(); Object.values(automaticControllers.current).forEach(controller => controller.abort()) }, [])
+  useEffect(() => { if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight }, [chat?.messages, automaticChat?.messages, accountChat?.messages, managementChat?.messages, managementNotice])
   useEffect(() => window.cairo?.onManagementAlert?.(() => {
     followLatest.current = true
     if (history.current) history.current.scrollTop = history.current.scrollHeight
   }), [])
-  async function command(action: "send" | "cancel" | "connect", automatic = false) {
-    if (!apiBaseUrl || !commandToken || (automatic ? automaticPending : pending)) return
+  async function command(action: "send" | "cancel" | "connect", channel = "foreground") {
+    const automatic = channel !== "foreground"
+    if (!apiBaseUrl || !commandToken || (automatic ? automaticPending[channel] : pending)) return
     const abort = new AbortController()
-    const setRequestPending = automatic ? setAutomaticPending : setPending
+    const setRequestPending = automatic ? (value: boolean) => setAutomaticPending(previous => ({ ...previous, [channel]: value })) : setPending
     const setRequestError = automatic ? setAutomaticError : setError
-    if (automatic) automaticController.current = abort
+    if (automatic) automaticControllers.current[channel] = abort
     else controller.current = abort
     setRequestPending(true)
     setRequestError(null)
     try {
-      const response = await fetch(`${apiBaseUrl}/copilot/${automatic ? "automatic/" : ""}${action}`, { method: "POST", signal: abort.signal,
+      const response = await fetch(`${apiBaseUrl}/copilot/${automatic ? `${channel}/` : ""}${action}`, { method: "POST", signal: abort.signal,
         headers: { Authorization: `Bearer ${commandToken}`, "Content-Type": "application/json" },
         body: action === "send" ? JSON.stringify({ text: draft, commandId: crypto.randomUUID() }) : undefined,
       })
@@ -93,6 +96,16 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = n
     } catch (error) { if (!abort.signal.aborted) setRequestError(error instanceof Error ? error.message : "Chat connection failed") }
     finally { if (!abort.signal.aborted) setRequestPending(false) }
   }
+  async function tagPattern(positionId: string) {
+    if (!apiBaseUrl || !commandToken || tagPending) return
+    setTagPending(true); setAutomaticError(null)
+    try {
+      const response = await fetch(`${apiBaseUrl}/copilot/partial-management/tag`, { method: "POST", headers: { Authorization: `Bearer ${commandToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ positionId }) })
+      const result = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(result.error ?? "Pattern selection unavailable")
+    } catch (error) { setAutomaticError(error instanceof Error ? error.message : "Pattern selection unavailable") }
+    finally { setTagPending(false) }
+  }
   return <>
     <div className="chat-controls">
       <span>{chat?.fake ? "Local fake model · demo responses" : chat?.model || "Model not configured"}</span>
@@ -101,18 +114,22 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = n
     <div className="chat-history" ref={history} role="log" aria-label="Cairo conversation" onScroll={event => { const element = event.currentTarget; followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64 }}>
       {!messages.length && <div className="chat-intro"><h3>Prepare with Cairo</h3><p>Ask a question here. Automatic Bookmap and account updates appear in this same conversation.</p><p>Chart knowledge is a timestamped snapshot. Notes do not activate position guidance.</p></div>}
       {messages.map(message => <article className={`chat-message ${message.role}${message.automatic ? " automatic" : ""}`} key={message.key}>
-        <strong>{message.role === "user" ? "You" : "Cairo"}{message.automatic && <span className="automatic-label">Automatic update</span>}</strong><div className="chat-text">{message.text}</div>
+        <div className="chat-message-heading"><strong>{message.role === "user" ? "You" : "Cairo"}{message.automatic && <span className="automatic-label">{message.label}</span>}</strong><time className="chat-timestamp" dateTime={Number.isFinite(message.createdAt) ? new Date(message.createdAt!).toISOString() : undefined} title={Number.isFinite(message.createdAt) ? new Date(message.createdAt!).toLocaleString() : "Timestamp unavailable"}>{Number.isFinite(message.createdAt) ? new Date(message.createdAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "—"}</time></div><div className="chat-text">{message.text}</div>
         {message.tools.map((tool, index) => <div className="chat-tool" key={`${tool.name}-${index}`}>{tool.name==="cairo_interpret_bookmap_observation"?"Observation card update":tool.name==="cairo_interpret_bookmap_setup"?"Setup card update":tool.name} · {tool.state==="error"?"failed":tool.state}{tool.error && <p>{tool.error}</p>}</div>)}
+        {message.tagPositionId && <button type="button" className="quiet-button" disabled={tagPending || !apiBaseUrl || !commandToken} onClick={() => void tagPattern(message.tagPositionId!)}>Tag pattern</button>}
       </article>)}
-      {(chat?.truncated || automaticChat?.truncated) && <p className="chat-notice">Showing the latest messages from both conversations. Earlier history remains in OpenCode.</p>}
+      {(chat?.truncated || automaticReviews.some(review => review.chat?.truncated)) && <p className="chat-notice">Showing the latest messages from each conversation. Earlier history remains in OpenCode.</p>}
     </div>
     <div className="chat-feedback" role="status">
       {patternError && <p className="chart-error">{patternError}</p>}
       {error || chat?.error ? <p className="chart-error">{error || chat?.error}</p> : null}
       <span>{chat?.busy ? "Cairo is responding…" : chat?.outcome === "interrupted" ? "Reply canceled" : chat?.connected ? "Ready" : "Chat disconnected"}</span>
-      {automaticError || automaticChat?.error ? <p className="chart-error">Automatic updates: {automaticError || automaticChat?.error}</p> : null}
-      {automaticChat?.busy && <span className="automatic-status"> · Automatic analysis running <button type="button" className="quiet-button" disabled={automaticPending || !automaticChat.connected} onClick={() => void command("cancel", true)}>Stop auto</button></span>}
-      {automaticChat && !automaticChat.connected && <button type="button" className="quiet-button" disabled={!apiBaseUrl || automaticPending} onClick={() => void command("connect", true)}>Reconnect automatic updates</button>}
+      {automaticError && <p className="chart-error">{automaticError}</p>}
+      {automaticReviews.map(review => <span className="automatic-status" key={review.channel}>
+        {review.chat?.error && <span className="chart-error">{review.label}: {review.chat.error}</span>}
+        {review.chat?.busy && <> · {review.label} review running <button type="button" className="quiet-button" disabled={automaticPending[review.channel] || !review.chat.connected} onClick={() => void command("cancel", review.channel)}>Stop {review.label.toLowerCase()}</button></>}
+        {review.chat && !review.chat.connected && <button type="button" className="quiet-button" disabled={!apiBaseUrl || automaticPending[review.channel]} onClick={() => void command("connect", review.channel)}>Reconnect {review.label.toLowerCase()}</button>}
+      </span>)}
     </div>
     {patternPicker && <BookmapPatternPicker key={patternPicker.id} picker={patternPicker} apiBaseUrl={apiBaseUrl} commandToken={commandToken} onComplete={() => { if (draft === patternPicker.text) updateDraft(""); followLatest.current = true }} />}
     <form className="composer-wrap" onSubmit={event => { event.preventDefault(); if (canSend) void command("send") }}>
