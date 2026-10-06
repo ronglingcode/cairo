@@ -35,6 +35,13 @@ message draft. The chat includes source status, position summaries, and an expan
 **Trading context** drawer with protection, management, and exact exit review controls.
 Enter sends a message; Shift+Enter adds a line break.
 
+Your questions and automatic updates use independent AI sessions and can respond
+at the same time, with all replies shown chronologically in one conversation.
+Automatic replies are labeled **Automatic update**. Background Bookmap/account
+reviews never disable your message composer. **Cancel reply** stops your response;
+**Stop auto** stops automatic analysis and pauses automatic updates. The former
+shared conversation remains visible in this timeline when upgrading.
+
 Type `/` to choose a skill; `/s` shows `set-stop-loss` and `set-targets`.
 `manage-trade` includes both workflows. `/bookmap-pattern` tags the current trade;
 stop, target and management requests share a trade/pattern picker when context is missing. Assign each stock's long/short tradebooks under **Tradebooks by stock and side** in preparation; held positions resolve the matching side automatically. Humans and AI editors share the Markdown

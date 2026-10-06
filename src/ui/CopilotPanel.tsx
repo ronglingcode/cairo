@@ -3,11 +3,14 @@ import type { CopilotChat } from "../shared/contracts.mts"
 import { completeSkill, skillQuery, type SkillSummary } from "../shared/SkillCommands.mts"
 import type { BookmapPatternPicker as Picker } from "../shared/BookmapPatterns.mts"
 import { BookmapPatternPicker } from "./BookmapPatternPicker"
+import { chatTimeline } from "../shared/ChatTimeline.mts"
 
-export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, patternError }: { apiBaseUrl: string | null; commandToken?: string | null; chat: CopilotChat | null; patternPicker?: Picker | null; patternError?: string | null }) {
+export function CopilotPanel({ apiBaseUrl, commandToken, chat, automaticChat = null, patternPicker, patternError }: { apiBaseUrl: string | null; commandToken?: string | null; chat: CopilotChat | null; automaticChat?: CopilotChat | null; patternPicker?: Picker | null; patternError?: string | null }) {
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [automaticPending, setAutomaticPending] = useState(false)
+  const [automaticError, setAutomaticError] = useState<string | null>(null)
   const [skills, setSkills] = useState<SkillSummary[]>([])
   const [skillError, setSkillError] = useState<string | null>(null)
   const [skillsLoading, setSkillsLoading] = useState(false)
@@ -18,6 +21,7 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, pa
   const composer = useRef<HTMLTextAreaElement | null>(null)
   const skillController = useRef<AbortController | null>(null)
   const controller = useRef<AbortController | null>(null)
+  const automaticController = useRef<AbortController | null>(null)
   const history = useRef<HTMLDivElement | null>(null)
   const followLatest = useRef(true)
   const draftEdited = useRef(false)
@@ -26,6 +30,7 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, pa
   const menuOpen = focused && !dismissed && query !== null
   const selectedIndex = Math.min(activeSkill, Math.max(0, matches.length - 1))
   const canSend = Boolean(apiBaseUrl && !chat?.busy && !pending && !patternPicker && draft.trim() && (chat?.connected || /^\/bookmap-pattern(?:\s|$)/.test(draft.trim())))
+  const messages = chatTimeline(chat, automaticChat)
   async function loadSkills() {
     if (!apiBaseUrl || !commandToken) return
     skillController.current?.abort()
@@ -62,24 +67,27 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, pa
     void window.cairo?.chatDraft?.().then(value => { if (active && !draftEdited.current) setDraft(value) }).catch(() => {})
     return () => { active = false; unsubscribe?.() }
   }, [])
-  useEffect(() => () => controller.current?.abort(), [])
-  useEffect(() => { if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight }, [chat?.messages])
-  async function command(action: "send" | "cancel" | "connect") {
-    if (!apiBaseUrl || !commandToken || pending) return
+  useEffect(() => () => { controller.current?.abort(); automaticController.current?.abort() }, [])
+  useEffect(() => { if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight }, [chat?.messages, automaticChat?.messages])
+  async function command(action: "send" | "cancel" | "connect", automatic = false) {
+    if (!apiBaseUrl || !commandToken || (automatic ? automaticPending : pending)) return
     const abort = new AbortController()
-    controller.current = abort
-    setPending(true)
-    setError(null)
+    const setRequestPending = automatic ? setAutomaticPending : setPending
+    const setRequestError = automatic ? setAutomaticError : setError
+    if (automatic) automaticController.current = abort
+    else controller.current = abort
+    setRequestPending(true)
+    setRequestError(null)
     try {
-      const response = await fetch(`${apiBaseUrl}/copilot/${action}`, { method: "POST", signal: abort.signal,
+      const response = await fetch(`${apiBaseUrl}/copilot/${automatic ? "automatic/" : ""}${action}`, { method: "POST", signal: abort.signal,
         headers: { Authorization: `Bearer ${commandToken}`, "Content-Type": "application/json" },
         body: action === "send" ? JSON.stringify({ text: draft, commandId: crypto.randomUUID() }) : undefined,
       })
       const result = await response.json() as { error?: string; patternSelectionRequired?: boolean }
       if (!response.ok) throw new Error(result.error ?? "Chat request failed")
       if (action === "send" && !result.patternSelectionRequired) { updateDraft(""); followLatest.current = true }
-    } catch (error) { if (!abort.signal.aborted) setError(error instanceof Error ? error.message : "Chat connection failed") }
-    finally { if (!abort.signal.aborted) setPending(false) }
+    } catch (error) { if (!abort.signal.aborted) setRequestError(error instanceof Error ? error.message : "Chat connection failed") }
+    finally { if (!abort.signal.aborted) setRequestPending(false) }
   }
   return <>
     <div className="chat-controls">
@@ -87,20 +95,23 @@ export function CopilotPanel({ apiBaseUrl, commandToken, chat, patternPicker, pa
       <button className="quiet-button" disabled={!apiBaseUrl || pending} onClick={() => void command("connect")}>Reconnect chat</button>
     </div>
     <div className="chat-history" ref={history} role="log" aria-label="Cairo conversation" onScroll={event => { const element = event.currentTarget; followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64 }}>
-      {!chat?.messages.length && <div className="chat-intro"><h3>Prepare with Cairo</h3><p>Save your notes and refresh a one-minute chart, then discuss your scenarios here.</p><p>Chart knowledge is a timestamped snapshot. Notes do not activate position guidance.</p></div>}
-      {chat?.messages.map(message => <article className={`chat-message ${message.role}`} key={message.id}>
-        <strong>{message.role === "user" ? "You" : "Cairo"}</strong><div className="chat-text">{message.text}</div>
+      {!messages.length && <div className="chat-intro"><h3>Prepare with Cairo</h3><p>Ask a question here. Automatic Bookmap and account updates appear in this same conversation.</p><p>Chart knowledge is a timestamped snapshot. Notes do not activate position guidance.</p></div>}
+      {messages.map(message => <article className={`chat-message ${message.role}${message.automatic ? " automatic" : ""}`} key={message.key}>
+        <strong>{message.role === "user" ? "You" : "Cairo"}{message.automatic && <span className="automatic-label">Automatic update</span>}</strong><div className="chat-text">{message.text}</div>
         {message.tools.map((tool, index) => <div className="chat-tool" key={`${tool.name}-${index}`}>{tool.name==="cairo_interpret_bookmap_observation"?"Observation card update":tool.name==="cairo_interpret_bookmap_setup"?"Setup card update":tool.name} · {tool.state==="error"?"failed":tool.state}{tool.error && <p>{tool.error}</p>}</div>)}
       </article>)}
-      {chat?.truncated && <p className="chat-notice">Showing the latest 40 messages with bounded text. Earlier conversation remains in OpenCode.</p>}
+      {(chat?.truncated || automaticChat?.truncated) && <p className="chat-notice">Showing the latest messages from both conversations. Earlier history remains in OpenCode.</p>}
     </div>
     <div className="chat-feedback" role="status">
       {patternError && <p className="chart-error">{patternError}</p>}
       {error || chat?.error ? <p className="chart-error">{error || chat?.error}</p> : null}
       <span>{chat?.busy ? "Cairo is responding…" : chat?.outcome === "interrupted" ? "Reply canceled" : chat?.connected ? "Ready" : "Chat disconnected"}</span>
+      {automaticError || automaticChat?.error ? <p className="chart-error">Automatic updates: {automaticError || automaticChat?.error}</p> : null}
+      {automaticChat?.busy && <span className="automatic-status"> · Automatic analysis running <button type="button" className="quiet-button" disabled={automaticPending || !automaticChat.connected} onClick={() => void command("cancel", true)}>Stop auto</button></span>}
+      {automaticChat && !automaticChat.connected && <button type="button" className="quiet-button" disabled={!apiBaseUrl || automaticPending} onClick={() => void command("connect", true)}>Reconnect automatic updates</button>}
     </div>
     {patternPicker && <BookmapPatternPicker key={patternPicker.id} picker={patternPicker} apiBaseUrl={apiBaseUrl} commandToken={commandToken} onComplete={() => { if (draft === patternPicker.text) updateDraft(""); followLatest.current = true }} />}
-    <form className="composer-wrap" onSubmit={event => { event.preventDefault(); void command("send") }}>
+    <form className="composer-wrap" onSubmit={event => { event.preventDefault(); if (canSend) void command("send") }}>
       <label className="notes-label" htmlFor="cairo-message">Message Cairo</label>
       {menuOpen && <div className="skill-menu" id="cairo-skill-menu" role="listbox" aria-label="Cairo skills">
         <div className="skill-menu-hint">Skills · ↑↓ select · Enter or Tab insert</div>

@@ -56,6 +56,7 @@ apiServer.setExitTickets(tickets)
 let brokerCoordinator: BrokerRefreshCoordinator | undefined
 let sidecar: OpenCodeSidecar | undefined
 let chat: CopilotChat | undefined
+let automaticChat: CopilotChat | undefined
 let waker: CopilotWaker | undefined
 let writer: ExitWriter | undefined
 let protection: ProtectionCoordinator | undefined
@@ -69,6 +70,7 @@ installShutdownHook(app, {
     await bookmapReceiver.flushArchive()
     await ticketPermissions?.stop()
     await chat?.stop()
+    await automaticChat?.stop()
     await writer?.stop()
     await uncertainty?.stop()
     await sidecar?.stop()
@@ -265,9 +267,13 @@ app.whenReady().then(async () => {
     configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
   })
   apiServer.setCopilotChat(chat)
-  waker = new CopilotWaker(engine, chat)
+  automaticChat = new CopilotChat({ engine, client: () => sidecar?.client, workspace: sidecar.workspace, model: selectedModel.model, fake,
+    channel: "automatic", skills, configured: () => fake || Boolean(configStore.values.model && configStore.openAiApiKey),
+  })
+  apiServer.setCopilotAutomaticChat(automaticChat)
+  waker = new CopilotWaker(engine, automaticChat)
   apiServer.setCopilotWaker(waker)
-  apiServer.setCopilotRestarter(async () => { await ticketPermissions?.stop(); await chat!.stop(); const ok = await sidecar!.restart(); if (ok) await chat!.connect(); return ok })
+  apiServer.setCopilotRestarter(async () => { await ticketPermissions?.stop(); await Promise.all([chat!.stop(), automaticChat!.stop()]); const ok = await sidecar!.restart(); if (ok) await Promise.all([chat!.connect(), automaticChat!.connect()]); return ok })
   const domainTools = new CairoDomainTools(engine, async id => {
     const client = sidecar?.client
     if (!client || !sidecar) return false
@@ -281,7 +287,7 @@ app.whenReady().then(async () => {
   domainTools.setTicketPermissions(ticketPermissions)
   apiServer.setTicketPermissions(ticketPermissions)
   apiServer.setDomainTools(domainTools)
-  void sidecar.start().then(ok => { if (ok) return chat!.connect() })
+  void sidecar.start().then(ok => { if (ok) return Promise.all([chat!.connect(), automaticChat!.connect()]) })
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBaseUrl, config)
   })

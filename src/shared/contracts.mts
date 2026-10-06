@@ -207,6 +207,7 @@ export interface PreparationNotes {
 
 export interface CopilotChatMessage {
   id: string
+  createdAt?: number
   role: "user" | "assistant"
   text: string
   tools: Array<{ name: string; state: string; error?: string }>
@@ -248,6 +249,7 @@ export interface CairoSnapshot {
   copilot: SourceStatus
   copilotWake: import("../copilot/CopilotWaker.mts").WakeStatus
   copilotChat: CopilotChat | null
+  copilotAutomaticChat: CopilotChat | null
   positions: BrokerPosition[]
   tradebooks: Tradebook[]
   attachments: PositionAttachment[]

@@ -40,6 +40,7 @@ export class EngineApiServer {
   private copilotRestarter: (() => Promise<boolean>) | undefined
   private domainTools: CairoDomainTools | undefined
   private chat: CopilotChat | undefined
+  private automaticChat: CopilotChat | undefined
   private guidance: PositionGuidance | undefined
   private monitor: ManagementMonitor | undefined
   private policyReview: PolicyReview | undefined
@@ -65,6 +66,7 @@ export class EngineApiServer {
   setCopilotRestarter(restart: () => Promise<boolean>): void { this.copilotRestarter = restart }
   setDomainTools(tools: CairoDomainTools): void { this.domainTools = tools }
   setCopilotChat(chat: CopilotChat): void { this.chat = chat }
+  setCopilotAutomaticChat(chat: CopilotChat): void { this.automaticChat = chat }
   setPositionGuidance(guidance: PositionGuidance): void { this.guidance = guidance }
   setManagementMonitor(monitor: ManagementMonitor): void { this.monitor = monitor }
 
@@ -224,10 +226,11 @@ export class EngineApiServer {
       void this.chat.listSkills().then(skills => this.json(response, 200, { skills })).catch(error => this.json(response, 400, { error: error instanceof Error ? error.message : "Skill library unavailable" }))
       return
     }
-    if (["/copilot/send", "/copilot/cancel", "/copilot/connect"].includes(url.pathname) && request.method === "POST") {
+    if (["/copilot/send", "/copilot/cancel", "/copilot/connect", "/copilot/automatic/cancel", "/copilot/automatic/connect"].includes(url.pathname) && request.method === "POST") {
       if (request.headers.authorization !== `Bearer ${this.commandToken}`) { this.json(response, 403, { error: "forbidden" }); return }
-      if (!this.chat) { this.json(response, 503, { error: "Chat is unavailable" }); return }
-      void this.chatCommand(url.pathname, request, response)
+      const selectedChat = url.pathname.startsWith("/copilot/automatic/") ? this.automaticChat : this.chat
+      if (!selectedChat) { this.json(response, 503, { error: "Chat is unavailable" }); return }
+      void this.chatCommand(url.pathname, request, response, selectedChat)
       return
     }
     if (url.pathname === "/copilot/tools" && request.method === "POST") {
@@ -300,10 +303,10 @@ export class EngineApiServer {
     this.json(response, 404, { error: "not-found" })
   }
 
-  private async chatCommand(route: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+  private async chatCommand(route: string, request: IncomingMessage, response: ServerResponse, chat: CopilotChat): Promise<void> {
     try {
-      if (route === "/copilot/connect") await this.chat!.connect()
-      else if (route === "/copilot/cancel") { const session = this.chat!.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await this.chat!.cancel() }
+      if (route.endsWith("/connect")) await chat.connect()
+      else if (route.endsWith("/cancel")) { const session = chat.snapshot.sessionId; if (session) await this.domainTools?.cancelSession(session); await chat.cancel() }
       else {
         const chunks: Buffer[] = []
         let bytes = 0
@@ -322,7 +325,7 @@ export class EngineApiServer {
         if (prepared?.picker) { this.json(response, 200, { patternSelectionRequired: true }); return }
         await this.chat!.send(prepared?.text ?? value.text, value.commandId)
       }
-      this.json(response, 200, { chat: this.chat!.snapshot })
+      this.json(response, 200, { chat: chat.snapshot })
     } catch (error) { this.json(response, 400, { error: error instanceof Error ? error.message : "Chat request failed" }) }
   }
   private async readCommand(request: IncomingMessage, maximum = 128 * 1024): Promise<Record<string, unknown>> {

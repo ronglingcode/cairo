@@ -58,6 +58,7 @@ export class CairoEngine {
       brokerFacts: null,
       copilot: this.waiting("copilot", "Copilot has not started"),
       copilotChat: null,
+      copilotAutomaticChat: null,
       copilotWake: { enabled: false, bookmapEnabled: true, pending: false, lastSentAt: null, error: null },
       positions: [],
       tradebooks: [],

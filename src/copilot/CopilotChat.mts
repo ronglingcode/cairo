@@ -14,6 +14,7 @@ export interface ChatOptions {
   fake: boolean
   configured(): boolean
   skills?: SkillLibrary
+  channel?: "foreground" | "automatic"
 }
 
 export class CopilotChat {
@@ -27,6 +28,8 @@ export class CopilotChat {
   private refreshTask: Promise<void> | undefined
   private operations: Promise<unknown> = Promise.resolve()
   private awaitingCommand: string | undefined
+  private awaitingSynthetic: string | undefined
+  private canceled = false
   private commands = new Map<string, string>()
   private streamedText = new Map<string, string>()
   private seenEvents = new Set<string>()
@@ -57,6 +60,7 @@ export class CopilotChat {
     this.seenEvents.clear()
     this.client = undefined
     this.state.connected = false
+    this.state.busy = false
     this.publish()
   }
   private async connectOwned(): Promise<void> {
@@ -73,8 +77,10 @@ export class CopilotChat {
         if (!this.owned(session.location.directory)) throw new Error("Session scope changed")
       } else {
         const sessions = await client.session.list({ directory: this.options.workspace, limit: 50, order: "desc" }, request)
-        const existing = sessions.data.find(session => this.owned(session.location.directory) && session.metadata?.cairoChat === true && session.model?.providerID === this.options.model.providerID && session.model?.id === this.options.model.id)
-        const session = existing ?? await client.session.create({ title: "Cairo trading preparation", location: { directory: this.options.workspace }, model: this.options.model, metadata: { cairoChat: true } }, request)
+        const channel = this.options.channel ?? "foreground"
+        // The old shared session contains automatic updates; keep it with that history.
+        const existing = sessions.data.find(session => this.owned(session.location.directory) && session.metadata?.cairoChat === true && (session.metadata.cairoChannel ?? "automatic") === channel && session.model?.providerID === this.options.model.providerID && session.model?.id === this.options.model.id)
+        const session = existing ?? await client.session.create({ title: channel === "automatic" ? "Cairo automatic updates" : "Cairo trading preparation", location: { directory: this.options.workspace }, model: this.options.model, metadata: { cairoChat: true, cairoChannel: channel } }, request)
         this.state.sessionId = session.id
       }
       if (generation !== this.generation) return
@@ -102,6 +108,7 @@ export class CopilotChat {
       this.commands.set(commandId, text)
       if (this.commands.size > 500) this.commands.delete(this.commands.keys().next().value!)
       this.awaitingCommand = commandId
+      this.canceled = false
       this.state.busy = true
       this.state.error = null
       this.state.outcome = null
@@ -119,6 +126,8 @@ export class CopilotChat {
   notify(text: string, id: string): Promise<void> {
     return this.serial(async () => {
       if (!this.client || !this.state.sessionId || !this.state.connected || this.state.busy) throw new Error("Copilot is unavailable or busy")
+      this.canceled = false
+      this.awaitingSynthetic = `msg_${id}`
       this.state.busy = true; this.state.outcome = null; this.publish()
       try {
         await this.client.session.synthetic({ sessionID: this.state.sessionId, id: `msg_${id}`, text: text.slice(0, 8000), description: "Cairo observed changes", metadata: { cairoMachine: true, grantsApproval: false }, delivery: "queue", resume: true }, { signal: AbortSignal.timeout(10_000) })
@@ -132,7 +141,14 @@ export class CopilotChat {
       try {
         await this.client.session.interrupt({ sessionID: this.state.sessionId, resume: false }, { signal: AbortSignal.timeout(10_000) })
         this.awaitingCommand = undefined
-        await this.refresh(this.generation)
+        this.awaitingSynthetic = undefined
+        // An acknowledged interrupt is authoritative even if context still ends in a tool event.
+        this.canceled = true
+        this.streamedText.clear()
+        this.state.busy = false
+        this.state.outcome = "interrupted"
+        this.publish()
+        await this.refresh(this.generation).catch(() => {})
       } catch { this.fail("Cancellation is unconfirmed. Reconnect to inspect the session."); throw new Error("Cancellation is unconfirmed") }
     })
   }
@@ -143,7 +159,7 @@ export class CopilotChat {
         if (generation !== this.generation) return
         const data = event.data as { sessionID?: string }
         if (data?.sessionID === this.state.sessionId) {
-          if (event.type === "session.text.delta" && !this.seenEvents.has(event.id)) {
+          if (!this.canceled && event.type === "session.text.delta" && !this.seenEvents.has(event.id)) {
             this.seenEvents.add(event.id)
             if (this.seenEvents.size > 2000) this.seenEvents.delete(this.seenEvents.values().next().value!)
             const id = event.data.assistantMessageID
@@ -152,7 +168,7 @@ export class CopilotChat {
             this.streamedText.set(id, text)
             const message = this.state.messages.find(message => message.id === id)
             if (message) message.text = text
-            else this.state.messages = [...this.state.messages, { id, role: "assistant" as const, text, tools: [] }].slice(-40)
+            else this.state.messages = [...this.state.messages, { id, createdAt: event.created, role: "assistant" as const, text, tools: [] }].slice(-40)
             this.publish()
           }
           this.scheduleRefresh(generation)
@@ -178,17 +194,18 @@ export class CopilotChat {
     const context = await client.session.context({ sessionID }, { signal: AbortSignal.timeout(5000) })
     if (generation !== this.generation || client !== this.client) return
     if (this.awaitingCommand && context.some(message => message.type === "user" && message.metadata?.cairoCommand === this.awaitingCommand)) this.awaitingCommand = undefined
+    if (this.awaitingSynthetic && context.some(message => message.type === "synthetic" && message.id === this.awaitingSynthetic)) this.awaitingSynthetic = undefined
     const last = context.at(-1)
-    this.state.busy = Boolean(this.awaitingCommand) || (context.length > 0 && last?.type !== "idle")
-    this.state.outcome = last?.type === "idle" ? last.outcome : null
+    this.state.busy = !this.canceled && (Boolean(this.awaitingCommand || this.awaitingSynthetic) || (context.length > 0 && last?.type !== "idle"))
+    this.state.outcome = this.canceled ? "interrupted" : last?.type === "idle" ? last.outcome : null
     if (this.state.outcome === "failed") this.state.error = "Model request failed. Check provider/model settings; no action was submitted."
     const messages: CopilotChatMessage[] = []
     for (const message of context) {
-      if (message.type === "user") messages.push({ id: message.id, role: "user", text: message.text.slice(0, 8000), tools: [] })
-      if (message.type === "assistant") messages.push({ id: message.id, role: "assistant", text: message.content.filter(part => part.type === "text").map(part => part.text).join("").slice(0, 16_000), tools: message.content.filter(part => part.type === "tool").map(part => {
+      if (message.type === "user") messages.push({ id: message.id, createdAt: message.time?.created, role: "user", text: message.text.slice(0, 8000), tools: [] })
+      if (message.type === "assistant") messages.push({ id: message.id, createdAt: message.time?.created, role: "assistant", text: message.content.filter(part => part.type === "text").map(part => part.text).join("").slice(0, 16_000), tools: message.content.filter(part => part.type === "tool").map(part => {
         const reason=part.state.status==="error" ? part.state.error.message : undefined
         const cardError=reason && ["cairo_interpret_bookmap_setup","cairo_interpret_bookmap_observation"].includes(part.name) && Object.values(BOOKMAP_CARD_ERRORS).some(message=>message===reason) ? reason : undefined
-        return {name:part.name,state:part.state.status,...(cardError ? {error:cardError} : {})}
+        return {name:part.name,state:this.canceled && part.state.status === "streaming" ? "canceled" : part.state.status,...(cardError ? {error:cardError} : {})}
       }).slice(0, 20) })
     }
     for (const message of messages) {
@@ -200,8 +217,8 @@ export class CopilotChat {
     this.state.truncated = messages.length > 40 || context.some(message => message.type === "assistant" && message.content.filter(part => part.type === "text").map(part => part.text).join("").length > 16_000)
     this.publish()
   }
-  private fail(error: string): void { this.streamAbort?.abort(); this.state.connected = false; this.state.error = error; this.publish() }
-  private publish(): void { this.options.engine.updateSnapshot({ copilotChat: this.snapshot }) }
+  private fail(error: string): void { this.streamAbort?.abort(); this.state.connected = false; this.state.busy = false; this.state.error = error; this.publish() }
+  private publish(): void { this.options.engine.updateSnapshot(this.options.channel === "automatic" ? { copilotAutomaticChat: this.snapshot } : { copilotChat: this.snapshot }) }
 }
 
 

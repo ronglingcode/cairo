@@ -52,6 +52,9 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; }
 .ticket-row { display: flex; flex-direction: column; gap: 4px; padding: 11px 0; border-top: 1px solid #dce8f7; font-size: 10px; }.ticket-row strong { color: #17345f; font-weight: 600; }.ticket-row span,.ticket-row small { color: #58749a; }.ticket-row small { color: #7d93b2; }
 .source-detail { border-left: 2px solid #4388ed; padding: 7px 9px; margin: 0 0 17px; color: #617da5; font-size: 10px; line-height: 1.4; }
 .copilot-column { border-left: 1px solid #d8e6f8; display: flex; flex-direction: column; min-height: 0; }
+.automatic-label { margin-left: 8px; font-size: 10px; font-weight: normal; color: #526b8b; }
+.chat-message.automatic { border-left: 2px solid #9ab6d9; }
+.automatic-status { font-size: 11px; }
 .copilot-heading { padding: 23px 20px 18px; border-bottom: 1px solid #d8e6f8; }.copilot-heading h2 { font-size: 14px; }
 .online-tag { color: #087e72; background: #e8f1ff; padding: 5px 7px; border-radius: 4px; font-size: 9px; }
 .online-tag.warning { color: #b94c39; background: #fff0ee; }.online-tag.offline { color: #60799d; background: #edf3fa; }.online-tag.online { color: #087e72; background: #e8f1ff; }

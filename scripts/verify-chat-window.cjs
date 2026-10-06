@@ -1,6 +1,7 @@
 // Run after npm run build: node_modules/.bin/electron scripts/verify-chat-window.cjs
 // Uses a disposable fake profile; no broker credentials or account are configured.
 const { app, BrowserWindow } = require("electron")
+process.on("uncaughtException", error => { console.error(error); app.exit(1) })
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const os = require("node:os")
@@ -43,7 +44,12 @@ app.once("will-quit", () => { if (exitCode) app.exit(exitCode) })
 app.once("quit", () => {
   clearTimeout(watchdog)
   assert.equal(path.dirname(profile), os.tmpdir())
-  fs.rmSync(profile, { recursive: true, force: true })
+  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }) }
+  catch (error) {
+    // Windows can retain Chromium's profile lock until this process has exited.
+    if (!["EPERM", "EBUSY"].includes(error.code)) throw error
+    console.warn(`Verification complete; temporary profile still locked: ${profile}`)
+  }
 })
 ;(async () => {
   await app.whenReady()
@@ -53,6 +59,10 @@ app.once("quit", () => {
   assert.equal(main.isVisible(), false, "Verification must not open a visible app window")
   await typeDraft(main, "preserved trading question")
   await until(async () => await evaluate(main, 'window.cairo.chatDraft()') === "preserved trading question")
+  assert.equal(await evaluate(main, 'document.querySelectorAll(".chat-history").length'), 1)
+  assert.equal(await evaluate(main, 'document.querySelectorAll(".composer-wrap").length'), 1)
+  assert.equal(await evaluate(main, 'Boolean(document.querySelector(".chat-tabs"))'), false)
+  assert.equal(await evaluate(main, 'document.querySelector("#cairo-message").value'), "preserved trading question")
   const runtime = await evaluate(main, 'fetch(`${window.cairo.apiBaseUrl}/snapshot`).then(r => r.json()).then(s => s.runtimeInstanceId)')
   await evaluate(main, 'window.cairo.chatWindow("detach")')
   const chat = BrowserWindow.getAllWindows().find(window => window !== main)
@@ -100,6 +110,10 @@ app.once("quit", () => {
     const composer = document.querySelector('.composer-wrap').getBoundingClientRect()
     return { width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth, historyHeight: history.height, bottom: composer.bottom, height: innerHeight }
   })()`)
+  if (bounds.historyHeight <= 60 && process.env.CAIRO_QA_SCREENSHOT) {
+    console.log("Narrow chat bounds:", bounds)
+    fs.writeFileSync(process.env.CAIRO_QA_SCREENSHOT, (await chat.webContents.capturePage()).toPNG())
+  }
   assert.equal(bounds.overflow, false, "Narrow pop-out has no horizontal overflow")
   assert.ok(bounds.historyHeight > 60, "Conversation retains usable height")
   assert.ok(bounds.bottom <= bounds.height, "Composer remains visible")
