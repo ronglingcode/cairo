@@ -8,6 +8,7 @@ declare global {
       apiBaseUrl: string | null
       commandToken: string | null
       config: PublicConfiguration | null
+      simulation?: { caseId: string; positionDescription: string }
       documentSettings?: {
         (action: "read" | "save", value?: string | { workspace_root_path: string; tradebooks_root_path: string; secretsFile: string }): Promise<{ config: PublicConfiguration; activeRoot: string; activeSecretsFile: string }>
         (action: "browse", field?: string): Promise<string | null>

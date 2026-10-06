@@ -1,0 +1,10 @@
+{
+  "id": "2026-10-05-PCVX",
+  "date": "2026-10-05",
+  "symbol": "PCVX",
+  "tradebookId": "gap_and_crap",
+  "position": { "side": "short", "quantity": 400, "averagePrice": 88.5, "markPrice": 88.5 },
+  "entry": { "at": "2026-10-05T09:37:30-04:00", "secondsAfterOpen": 450, "priceApproximate": true },
+  "notes": "This is a simulated holding based on the trader's supplied entry details, not a replay of executions or subsequent market prices. Entry: 7 minutes 30 seconds after market open (09:37:30 America/New_York; 06:37:30 America/Los_Angeles), short 400 shares, filled around $88.50. The initial simulated mark is seeded from the approximate entry price; it is not a current market quote. The chosen setup is Gap and Crap. Starting condition: the trader has NOT tagged a Bookmap entry pattern. Do not assume bid breakdown or select any pattern automatically; wait for the trader to choose it in the picker. No stop, key level, tier allocation, core target or runner trigger has been confirmed. Ask for missing decisive inputs instead of inventing them. There are no live Bookmap observations. Pattern selection in this test is a human scenario choice, not evidence that a live pattern occurred.",
+  "references": ["shared/3-tier-live-trade-management.md"]
+}

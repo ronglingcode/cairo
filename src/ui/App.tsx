@@ -1,4 +1,5 @@
 import { ExitReview } from "./ExitReview"
+import { SimulationPanel } from "./SimulationPanel"
 import { BookmapPanel } from "./BookmapPanel"
 import { ProposalReview } from "./ProposalReview"
 import { ManagementPanel } from "./ManagementPanel"
@@ -127,6 +128,7 @@ export function App() {
 
   return (
     <main className={`shell ${liveMode && !settingsOpen ? "live-mode" : ""} ${detachedView ? "detached-view" : ""} ${settingsOpen || (chatDetached && !detachedView) ? "chat-detached" : ""}`}>
+      {window.cairo?.simulation && <SimulationPanel snapshot={snapshot} />}
       <header className="topbar">
         <div className="brand"><span className="brand-mark">C</span><span>Cairo</span></div>
         <div className="environment"><span className={`status-dot ${connectionTone(connectionState)}`} />LOCAL · {apiBaseUrl ? (window.cairo?.config?.provider ?? "fake").toUpperCase() : "PREVIEW"}</div>

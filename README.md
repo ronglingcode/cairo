@@ -18,6 +18,15 @@ model by default. Preparation notes, one-minute chart snapshots and streaming ch
 are implemented. See [model/chart setup and verification](docs/chatgpt/T32-VERIFICATION.md).
 For a synthetic browser demo, run `npm run build` then `npm run preview:fake`.
 
+For after-hours testing with real AI and a simulated broker, double-click
+[`Launch-Test-Case.cmd`](Launch-Test-Case.cmd) or run `npm run build` then
+`npm run test:case -- 2026-10-05-PCVX`. Open the printed localhost URL.
+Cases live under `test-cases/{date}-{symbol}/`; start with the
+[PCVX scenario and acceptance steps](test-cases/2026-10-05-PCVX/README.md).
+The simulation uses a disposable profile, read-only tradebook sources and an
+in-memory order transport. `--fake` is UI-only; `--smoke` verifies startup without
+paid model calls. Restart the launcher to reset a case.
+
 Use **Planning** for notes, charts, and tradebooks alongside a wider chat panel.
 **Live chat** gives the conversation the full workspace. **Pop out chat ↗** opens
 a separate resizable desktop window; **Dock chat** or closing that window restores

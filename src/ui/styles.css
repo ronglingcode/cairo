@@ -1,4 +1,6 @@
 :root { color: #102a56; background: #f3f8ff; font-family: 'Segoe UI', sans-serif; font-synthesis: none; text-rendering: optimizeLegibility; }
+.simulation-panel { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 10px 14px; background: #fff3cd; color: #5c4300; border-bottom: 1px solid #dbc16b; font-size: 12px; }
+.simulation-panel button { cursor: pointer; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 button { color: inherit; font: inherit; }

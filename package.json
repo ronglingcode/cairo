@@ -6,6 +6,7 @@
   "scripts": {
     "package:windows": "node scripts/package-windows.mjs",
     "preview:fake": "node --experimental-strip-types scripts/preview-copilot.mjs",
+    "test:case": "node --experimental-strip-types scripts/test-case.mjs",
     "dev": "node scripts/build-copilot.mjs && vite",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",

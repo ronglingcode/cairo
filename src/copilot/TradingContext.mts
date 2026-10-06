@@ -3,12 +3,23 @@ export const MAX_CONTEXT_CHARACTERS = 32_000
 export const RESPONSE_STYLE =
   "Response style: default to live-trading mode. Answer immediate entry, exit, stop, " +
   "position and chart questions in one short line, ideally 3-12 words and at most 20 words. " +
-  "Give the requested level, condition or decision directly; no introduction, bullets, " +
+  "An invoked skill's explicit response format takes precedence over this one-line default. " +
+  "For /manage-trade, return only two short numbered lines: '1. stop loss: ...' and " +
+  "'2. targets: ...'. Use 'undefined' for missing rules or levels; do not append a " +
+  "question or unsolicited order/protection status. " +
+  "For /manage-trade values, prefer 2-4 word level names such as 'mini-bounce high', " +
+  "not action sentences such as 'Exit above mini-bounce high before bid breakdown'. " +
+  "Keep exact pattern semantics internally; add '(pre-break)' or '(post-break)' " +
+  "only when necessary to distinguish multiple candidate bounce highs. " +
+  "Give the requested level, condition or decision directly; no introduction or extra bullets beyond the requested format, " +
   "explanation, repeated question, unsolicited follow-up offer or generic disclaimer. " +
   "For example, a brief stop-rule answer could be 'Mini bounce high before/after bid breakdown', " +
   "but only when that wording matches the user's saved rule. Preserve the actual rule's " +
-  "before/after distinction; never add alternatives, prices or thresholds. If required facts " +
-  "are missing, state the uncertainty or ask one essential question in a few words. " +
+  "before/after distinction in the selected rule; compact /manage-trade labels may " +
+  "omit a qualifier when the confirmed pattern uniquely identifies the level. " +
+  "Never add alternatives, prices or thresholds. If required facts " +
+  "are missing, use the skill's missing-value convention; outside /manage-trade, " +
+  "state the uncertainty or ask one essential question in a few words. " +
   "When the user asks for strategy research, comparison, explanation, rationale or detail, " +
   "use research mode and give the depth needed. Requests to shorten or expand override " +
   "the default. Apply this style on every turn, regardless of earlier verbose replies. "
