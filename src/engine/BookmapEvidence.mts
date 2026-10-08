@@ -1,224 +1,160 @@
 import { BookmapCardError } from "../shared/BookmapCardErrors.mts"
 import type { BrokerFacts } from "../shared/contracts.mts"
-import { OfferObservations, type OfferObservation, type OfferParameters } from "./OfferObservations.mts"
 
-export interface EvidenceEvent { id: string; sequence: number; kind: "trade" | "bbo" | "wall-start" | "wall-update" | "wall-end" | "status"; eventTime: string; timestampFallback: boolean; price?: number; size?: number; bestBid?: number; bestAsk?: number; wallId?: string; bid?: boolean; peakSize?: number; firstTime?: string; threshold?: number; attribution?: string; buyAggressor?: boolean | null }
-export interface Bounce { id: string; startTime: string; highTime: string; availableAt: string; high: number; low: number; confirmed: boolean; evidenceIds: string[] }
+export const PATTERN_MEANINGS = {
+  BID_BOUNCE: "BID_HOLD", BID_REAPPEAR: "BID_HOLD", BID_STEP_UP: "BID_HOLD",
+  BIDS_CANCELLED: "BID_FAIL", BID_BREAKDOWN: "BID_FAIL",
+  OFFER_REAPPEAR: "OFFER_BEARISH_CONFIRMATION", OFFER_STEP_DOWN: "OFFER_BEARISH_CONFIRMATION",
+  OFFER_BOUNCE: "OFFER_BEARISH_CONFIRMATION", OFFER_SIZE_INCREASING_HOLD: "OFFER_BEARISH_CONFIRMATION",
+  OFFER_BREAKOUT: "OFFER_BULLISH_CONFIRMATION", OFFER_SIZE_INCREASE: "UNKNOWN",
+  UNKNOWN_BID_LOSS: "UNKNOWN", UNKNOWN_OFFER_LOSS: "UNKNOWN",
+} as const
+export type PatternType = keyof typeof PATTERN_MEANINGS
+export interface PatternObservation {
+  id: string; revision: number; type: PatternType; side: "BID" | "OFFER"; meaning: string;
+  interactionId: string; episodeKey: string; price: number; size: number; sizeBasis: string;
+  eventTime: string; observedAt: string; timestampProvenance: "MARKET" | "FALLBACK";
+  evidence: { wallPhaseId: string; previousSize: number; currentSize: number; removedSize: number;
+    attributedTradeSize: number; growthBaselineSize: number; approachTimeNs: string; rejectionTimeNs: string;
+    attribution: string; coverage: string; metadata: Record<string,string>; buyAggressor?: boolean | null };
+  symbol: string; kind: PatternType; state: "recorded"; evidenceIds: string[];
+}
+export type EvidenceEvent = PatternObservation
+export interface PluginSignal {
+  id: string; revision: number; direction: "LONG" | "SHORT"; triggerId: string; interactionId: string;
+  pattern: PatternType; price: number; size: number; state: "CANDIDATE" | "VALID" | "INVALID" | "EXPIRED";
+  eventTime: string; observedAt: string; stateAt: string; explanation: string; confirmationStrength: string;
+  normalTriggerThreshold: number; appliedTriggerThreshold: number; evidenceIds: string[];
+}
+export interface PluginContext { direction: "LONG" | "SHORT"; confirmationId: string; strength: string; waitingFor: string; requiredTriggerSize: number; expiresAt: string }
 export interface SetupCandidate {
-  id: string; revision: number; symbol: string; patternId: string | null; alternatives: string[]; wallId: string; wallPrice: number;
-  breakTime: string; asOf: string; availableAt: string; beforeBounce: Bounce | null; afterBounce: Bounce | null; beforeBounces: Bounce[]; afterBounces: Bounce[];
-  offerRejection: { wallId: string; price: number; touchTime: string; rejectionTime: string; evidenceIds: string[]; observationId?: string; high?: number; overshootPct?: number } | null;
-  askBelow: boolean | null; askBelowSince: string | null; newObservedLow: boolean; lowCoverage: "observed-window-only";
+  id: string; revision: number; symbol: string; patternId: string; direction: "long" | "short";
+  wallId: string; wallPrice: number; breakTime: string; asOf: string; availableAt: string;
   evidenceIds: string[]; missing: string[]; mode: string; state: "candidate" | "invalidated"; summary: string;
 }
-export interface EvidenceSymbol { sourceInstanceId: string; epoch: number; mode: string; readiness: string; receivedAt: string; asOf: string; tickSize: number; dropped: number; coverage: "continuous" | "warming" | "gap"; captureError: string | null; captureEnabled: boolean; events: EvidenceEvent[]; setups: SetupCandidate[]; observations: OfferObservation[] }
+interface Liquidity { threshold: number; asOf: string; bestBid: number; bestAsk: number; bids: {price:number;displayedSize:number}[]; offers: {price:number;displayedSize:number}[] }
+export interface EvidenceSymbol {
+  sourceInstanceId: string; epoch: number; sequence: number; mode: string; readiness: string; receivedAt: string;
+  asOf: string; tickSize: number; coverage: "continuous" | "warming" | "gap"; configRevision: string; detectorRevision: string; rules: Record<string, unknown>;
+  captureError: string | null; captureEnabled: boolean; events: PatternObservation[]; observations: PatternObservation[];
+  signals: PluginSignal[]; contexts: PluginContext[]; candidateStates: Record<string,string>; setups: SetupCandidate[]; liquidity: Liquidity;
+}
 export interface EntrySetup { id: string; accountId: string; fillId: string; symbol: string; filledAt: string; assessment: SetupCandidate | null; detail: string }
-export interface BookmapEvidenceProjection { symbols: Record<string, EvidenceSymbol>; entries: EntrySetup[]; archiveError?: string | null; parameters: { bounceTicks: number; bounceDurationMs: number; noBounceCoverageMs: number } & OfferParameters; analyses: SetupAnalysis[]; observationAnalyses: ObservationAnalysis[] }
 export interface ObservationAnalysis { observationId: string; revision: number; explanation: string; evidenceIds: string[]; receivedAt: string }
-export interface SetupAnalysis { setupId: string; revision: number; patternId: string | null; selectedBounceId?: string | null; explanation: string; evidenceIds: string[]; receivedAt: string }
-interface Swing { low: number; high: number; start: string; highTime: string; ids: string[]; bounce: Bounce | null }
-interface Wall { event: EvidenceEvent; touch: string | null; touchId: string | null; swing: Swing | null; bounces: Bounce[]; breakId: string | null; ended: boolean; rejected: SetupCandidate["offerRejection"] }
-interface State { value: EvidenceSymbol; offers: OfferObservations; events: EvidenceEvent[]; walls: Map<string, Wall>; sequence: number; firstReady: number | null; lastTime: number; low: number; bestBid: number | null; bestAsk: number | null }
+export interface SetupAnalysis { setupId: string; revision: number; patternId: string | null; explanation: string; evidenceIds: string[]; receivedAt: string }
+export interface BookmapEvidenceProjection { symbols: Record<string,EvidenceSymbol>; entries: EntrySetup[]; archiveError?: string | null; parameters: { source: "bookmap-plugin" }; analyses: SetupAnalysis[]; observationAnalyses: ObservationAnalysis[] }
+const nano = (v: unknown): v is string => typeof v === "string" && /^\d{1,19}$/.test(v)
+const text = (v: unknown, max=300): v is string => typeof v === "string" && v.length > 0 && v.length <= max
+const positive = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
+const quantity = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0
 const ms = (ns: string) => Number(BigInt(ns) / 1_000_000n)
-const patterns = ["bid-breakdown-no-bounce", "mini-bounce-then-bid-breakdown", "bid-breakdown-then-mini-bounce"]
+const type = (v: unknown): v is PatternType => typeof v === "string" && Object.hasOwn(PATTERN_MEANINGS,v)
+const state = (v: unknown) => ["CANDIDATE","VALID","INVALID","EXPIRED"].includes(v as string)
 
-/** Causal recognition from measurements; labels emitted by the plugin are not inputs. */
+/** Consumer of plugin-owned aggregates. No raw order flow or pattern detection lives in Cairo. */
 export class BookmapEvidence {
-  private states = new Map<string, State>()
+  private states = new Map<string,EvidenceSymbol>()
   private entries: EntrySetup[] = []
+  private retiredSources = new Set<string>()
+  private seenSignals = new Set<string>()
   private assessments: SetupCandidate[] = []
   private analyses: SetupAnalysis[] = []
   private observationAnalyses: ObservationAnalysis[] = []
   archiveError: string | null = null
-  readonly parameters: BookmapEvidenceProjection["parameters"]
+  readonly parameters = { source: "bookmap-plugin" as const }
   restoreEntries(entries: EntrySetup[]): void {
-    if(!Array.isArray(entries) || entries.length>200 || entries.some(e=>!e || [e.id,e.accountId,e.fillId,e.symbol,e.filledAt,e.detail].some(v=>typeof v!=="string"||v.length>1000) || !Number.isFinite(Date.parse(e.filledAt)) || e.assessment!==null && (!e.assessment || e.assessment.patternId!==null && !patterns.includes(e.assessment.patternId) || typeof e.assessment.breakTime!=="string"))) throw new Error("Invalid entry evidence archive")
+    // Historical archives stay readable; their former classifications are never live inputs.
+    if (!Array.isArray(entries) || entries.length>200 || entries.some(e=>!e || [e.id,e.accountId,e.fillId,e.symbol,e.filledAt,e.detail].some(v=>typeof v!=="string"||v.length>1000) || !Number.isFinite(Date.parse(e.filledAt)) || e.assessment!==null && (!e.assessment || !nano(e.assessment.breakTime)))) throw new Error("Invalid entry evidence archive")
     this.entries=structuredClone(entries)
   }
-  constructor(parameters: Partial<BookmapEvidenceProjection["parameters"]> = {}) {
-    this.parameters = { bounceTicks: 2, bounceDurationMs: 200, noBounceCoverageMs: 5000, offerMaxOvershootPct: 1, offerReturnMs: 5000, offerHoldBelowMs: 1000, ...parameters }
-    if (Object.values(this.parameters).some(v => !Number.isFinite(v) || v <= 0)) throw new Error("Invalid Bookmap recognition parameters")
-  }
   receive(raw: unknown, now: number): boolean {
-    const v = raw as Record<string, any>
-    if (!v || v.type !== "cairo_evidence" || v.version !== 1 || !/^[A-Z0-9.\-]{1,16}$/.test(v.symbol) || typeof v.sourceInstanceId !== "string" || v.sourceInstanceId.length > 100 || !Number.isSafeInteger(v.epoch) || v.epoch < 1 || !Number.isSafeInteger(v.watermark) || v.watermark < 0 || !Number.isSafeInteger(v.dropped) || v.dropped < 0 || v.priceUnit !== "USD" || !Number.isFinite(v.tickSize) || v.tickSize <= 0 || !["live", "replay", "unknown"].includes(v.mode) || !["ready", "not-ready"].includes(v.readiness) || !["snapshot", "stream"].includes(v.delivery) || !Array.isArray(v.events) || v.events.length > 128 || !/^\d{1,19}$/.test(v.eventTime)) return false
-    // Validate the entire batch before applying any part of it.
-    for (const e of v.events) {
-      if (!e || typeof e.id !== "string" || e.id.length > 200 || !Number.isSafeInteger(e.sequence) || e.sequence <= 0 || e.sequence > v.watermark || !/^\d{1,19}$/.test(e.eventTime) || typeof e.timestampFallback !== "boolean" || !["trade", "bbo", "wall-start", "wall-update", "wall-end", "status"].includes(e.kind)) return false
-      if (e.kind === "trade" && (!Number.isFinite(e.price) || e.price <= 0 || !Number.isFinite(e.size) || e.size <= 0)) return false
-      if (e.kind === "bbo" && (![e.bestBid,e.bestAsk].every(p => Number.isFinite(p) && p > 0) || e.bestBid > e.bestAsk)) return false
-      if (e.kind.startsWith("wall-") && (typeof e.wallId !== "string" || e.wallId.length > 200 || typeof e.bid !== "boolean" || !Number.isFinite(e.price) || e.price <= 0 || !Number.isFinite(e.size) || e.size < 0 || !Number.isFinite(e.peakSize) || e.peakSize < 0 || !/^\d{1,19}$/.test(e.firstTime))) return false
+    const v=raw as Record<string,any>
+    if (!v || v.type!=="cairo_patterns" || v.version!==1 || !text(v.symbol,16) || !/^[A-Z0-9.\-]{1,16}$/.test(v.symbol) || !text(v.sourceInstanceId,100) || !Number.isSafeInteger(v.epoch) || v.epoch<1 || !Number.isSafeInteger(v.sequence) || v.sequence<1 || !nano(v.eventTime) || !positive(v.tickSize) || v.priceUnit!=="USD" || !["live","replay","unknown"].includes(v.mode) || !["ready","not-ready"].includes(v.readiness) || !["continuous","warming","gap"].includes(v.coverage) || !["stream","snapshot"].includes(v.delivery) || !text(v.configRevision) || !text(v.detectorRevision) || !Array.isArray(v.patterns) || v.patterns.length>64 || !Array.isArray(v.signals) || v.signals.length>32 || !Array.isArray(v.contexts) || v.contexts.length>2) return false
+    if (v.readiness!=="ready" && v.coverage==="continuous") return false
+    const ids=new Set<string>()
+    for (const e of v.patterns) {
+      if (!e || !text(e.id) || ids.has(e.id) || !Number.isSafeInteger(e.revision) || e.revision<1 || !type(e.type) || e.meaning!==PATTERN_MEANINGS[e.type as PatternType] || e.side!==(e.type.startsWith("BID")||e.type==="UNKNOWN_BID_LOSS"?"BID":"OFFER") || !text(e.interactionId) || !text(e.episodeKey) || !positive(e.price) || !quantity(e.size) || e.size===0 || !["DISPLAYED_WALL","DISPLAYED_REMOVED"].includes(e.sizeBasis) || !nano(e.eventTime) || !nano(e.observedAt) || BigInt(e.eventTime)>BigInt(e.observedAt) || BigInt(e.observedAt)>BigInt(v.eventTime) || !["MARKET","FALLBACK"].includes(e.timestampProvenance)) return false
+      const ev=e.evidence
+      if (!ev || typeof ev.wallPhaseId!=="string" || ev.wallPhaseId.length>300 || ![ev.previousSize,ev.currentSize,ev.removedSize,ev.attributedTradeSize,ev.growthBaselineSize].every(quantity) || !nano(ev.approachTimeNs) || !nano(ev.rejectionTimeNs) || !["UNKNOWN","INFERRED_WITHDRAWAL","PROBABLE_CONSUMPTION","PROBABLE_MOVE"].includes(ev.attribution) || !["USABLE","WARMUP","GAP"].includes(ev.coverage) || !ev.metadata || typeof ev.metadata!=="object" || Array.isArray(ev.metadata) || Object.keys(ev.metadata).length>32 || Object.entries(ev.metadata).some(([k,x])=>k.length>100 || typeof x!=="string" || x.length>500) || ev.buyAggressor!==undefined && ev.buyAggressor!==null && typeof ev.buyAggressor!=="boolean") return false
+      ids.add(e.id)
     }
-    let state = this.states.get(v.symbol)
-    if (state && state.value.sourceInstanceId === v.sourceInstanceId && v.epoch < state.value.epoch) return false
-    if (!state || state.value.sourceInstanceId !== v.sourceInstanceId || state.value.epoch !== v.epoch) {
-      state = { value: { sourceInstanceId:v.sourceInstanceId, epoch:v.epoch, mode:v.mode, readiness:v.readiness, receivedAt:new Date(now).toISOString(), asOf:v.eventTime, tickSize:v.tickSize, dropped:v.dropped, coverage:"warming", captureError:null, captureEnabled:Boolean(v.captureEnabled), events:[], setups:[], observations:[] }, offers:new OfferObservations(this.parameters), events:[], walls:new Map(), sequence:0, firstReady:null, lastTime:0, low:Infinity, bestBid:null, bestAsk:null }
-      this.assessments=this.assessments.filter(c=>c.symbol!==v.symbol)
-      this.states.set(v.symbol,state)
-      while (this.states.size > 32) this.states.delete(this.states.keys().next().value!)
+    const signalIds=new Set<string>()
+    for (const s of v.signals) {
+      if (!s || !text(s.id) || signalIds.has(s.id) || !Number.isSafeInteger(s.revision) || s.revision<1 || !["LONG","SHORT"].includes(s.direction) || !ids.has(s.triggerId) || !text(s.interactionId) || !type(s.pattern) || !positive(s.price) || !quantity(s.size) || s.size===0 || !state(s.state) || !nano(s.stateAt) || BigInt(s.stateAt)>BigInt(v.eventTime) || !nano(s.eventTime) || !nano(s.observedAt) || BigInt(s.eventTime)>BigInt(s.observedAt) || BigInt(s.observedAt)>BigInt(v.eventTime) || !text(s.explanation,8000) || !text(s.confirmationStrength,30) || !positive(s.normalTriggerThreshold) || !positive(s.appliedTriggerThreshold) || s.appliedTriggerThreshold>s.normalTriggerThreshold || !Array.isArray(s.evidenceIds) || !s.evidenceIds.length || s.evidenceIds.length>64 || s.evidenceIds.some((id:unknown)=>!ids.has(id as string))) return false
+      const trigger=v.patterns.find((e:PatternObservation)=>e.id===s.triggerId)
+      if (trigger.type!==s.pattern || trigger.interactionId!==s.interactionId || trigger.price!==s.price || trigger.meaning!==(s.direction==="LONG"?"BID_HOLD":"BID_FAIL")) return false
+      signalIds.add(s.id)
     }
-    const s=state
-    s.value.receivedAt=new Date(now).toISOString(); s.value.mode=v.mode; s.value.readiness=v.readiness; s.value.asOf=v.eventTime
-    s.value.captureError=typeof v.captureError === "string" ? v.captureError.slice(0,300) : null
-    if (v.dropped !== s.value.dropped) { this.gap(s); s.value.dropped=v.dropped }
-    if (v.readiness !== "ready") { this.gap(s); s.value.coverage="warming" }
-    for (const e of v.events as EvidenceEvent[]) {
-      if (e.sequence <= s.sequence) continue
-      if (s.sequence && e.sequence !== s.sequence+1 || !s.sequence && e.sequence !== 1) this.gap(s)
-      const t=ms(e.eventTime)
-      if (t < s.lastTime || e.timestampFallback) this.gap(s)
-      s.sequence=e.sequence; s.lastTime=t
-      if (v.readiness === "ready" && s.firstReady === null) s.firstReady=t
-      if (s.firstReady !== null && t-s.firstReady >= this.parameters.noBounceCoverageMs) s.value.coverage="continuous"
-      s.events.push(e)
-      s.offers.process(v.symbol,e,s.value.tickSize,v.readiness==="ready")
-      s.value.observations=s.offers.snapshot()
-      this.process(s,v.symbol,e)
-    }
-    s.events=s.events.filter(e => ms(e.eventTime) >= s.lastTime-600_000).slice(-20_000)
-    if (s.events.length === 20_000) s.value.coverage="gap"
-    s.value.events=s.events.slice(-120)
-    s.value.setups=s.value.setups.filter(c => ms(c.asOf) >= s.lastTime-600_000).slice(-8)
+    for (const c of v.contexts) if (!c || !["LONG","SHORT"].includes(c.direction) || !ids.has(c.confirmationId) || !text(c.strength,30) || c.waitingFor!==(c.direction==="LONG"?"BID_HOLD":"BID_FAIL") || !positive(c.requiredTriggerSize) || !nano(c.expiresAt)) return false
+    if (!v.candidateStates || typeof v.candidateStates!=="object" || Array.isArray(v.candidateStates) || Object.keys(v.candidateStates).length>128 || Object.entries(v.candidateStates).some(([id,s])=>!text(id)||!state(s))) return false
+    const l=v.liquidity
+    if (!l || !positive(l.threshold) || !nano(l.asOf) || !quantity(l.bestBid) && !positive(l.bestBid) || !quantity(l.bestAsk) && !positive(l.bestAsk) || l.bestBid>0 && l.bestAsk>0 && l.bestBid>l.bestAsk || !Array.isArray(l.bids) || !Array.isArray(l.offers) || l.bids.length>8 || l.offers.length>8 || [...l.bids,...l.offers].some(e=>!e||!positive(e.price)||!quantity(e.displayedSize)||e.displayedSize<l.threshold)) return false
+    if (Object.keys(v).some(k=>["events","trades","depth","wallUpdates"].includes(k))) return false
+    const prior=this.states.get(v.symbol)
+    if (this.retiredSources.has(`${v.symbol}:${v.sourceInstanceId}`)) return false
+    if (prior?.sourceInstanceId===v.sourceInstanceId && (v.epoch<prior.epoch || v.epoch===prior.epoch && (v.sequence<=prior.sequence || BigInt(v.eventTime)<BigInt(prior.asOf)))) return false
+    if (prior?.sourceInstanceId===v.sourceInstanceId && prior.epoch===v.epoch && (v.patterns.some((e:PatternObservation)=>prior.observations.some(p=>p.id===e.id&&p.revision>e.revision)) || v.signals.some((e:PluginSignal)=>prior.signals.some(p=>p.id===e.id&&p.revision>e.revision)))) return false
+    if (prior && prior.sourceInstanceId!==v.sourceInstanceId) { this.retiredSources.add(`${v.symbol}:${prior.sourceInstanceId}`); while(this.retiredSources.size>128)this.retiredSources.delete(this.retiredSources.values().next().value!) }
+    if (prior && (prior.sourceInstanceId!==v.sourceInstanceId || prior.epoch!==v.epoch)) { this.assessments=this.assessments.filter(c=>c.symbol!==v.symbol); this.analyses=this.analyses.filter(a=>!prior.setups.some(c=>c.id===a.setupId)); this.observationAnalyses=this.observationAnalyses.filter(a=>!prior.observations.some(o=>o.id===a.observationId)) }
+    const observations:PatternObservation[]=v.patterns.map((e:PatternObservation)=>({...e,symbol:v.symbol,kind:e.type,state:"recorded",evidenceIds:[e.id]}))
+    const setups:SetupCandidate[]=v.signals.map((s:PluginSignal)=>({id:s.id,revision:s.revision,symbol:v.symbol,patternId:s.pattern,direction:s.direction==="LONG"?"long":"short",wallId:s.triggerId,wallPrice:s.price,breakTime:s.eventTime,asOf:BigInt(s.stateAt)>BigInt(s.observedAt)?s.stateAt:s.observedAt,availableAt:BigInt(s.stateAt)>BigInt(s.observedAt)?s.stateAt:s.observedAt,evidenceIds:s.evidenceIds,missing:[],mode:v.mode,state:s.state==="VALID"?"candidate":"invalidated",summary:s.explanation}))
+    const value:EvidenceSymbol={sourceInstanceId:v.sourceInstanceId,epoch:v.epoch,sequence:v.sequence,mode:v.mode,readiness:v.readiness,receivedAt:new Date(now).toISOString(),asOf:v.eventTime,tickSize:v.tickSize,coverage:v.coverage,configRevision:v.configRevision,detectorRevision:v.detectorRevision,rules:structuredClone(v.rules??{}),captureError:typeof v.captureError==="string"?v.captureError.slice(0,300):null,captureEnabled:v.captureEnabled===true,events:observations,observations,signals:structuredClone(v.signals),contexts:structuredClone(v.contexts),candidateStates:structuredClone(v.candidateStates),setups,liquidity:structuredClone(l)}
+    this.states.set(v.symbol,value)
+    // Full snapshots can recover skipped deliveries without treating receipt time as market time.
+    if (v.delivery==="stream" && v.mode==="live" && v.readiness==="ready" && v.coverage==="continuous") {
+      for (const c of setups) if (!this.seenSignals.has(`${v.sourceInstanceId}:${v.epoch}:${c.id}:${c.revision}:${c.state}:${c.asOf}`)) this.assessments.push(structuredClone(c))
+      this.assessments=this.assessments.slice(-4000)
+    } else this.assessments=this.assessments.filter(c=>c.symbol!==v.symbol)
+    for (const c of setups) this.seenSignals.add(`${v.sourceInstanceId}:${v.epoch}:${c.id}:${c.revision}:${c.state}:${c.asOf}`)
+    while(this.seenSignals.size>4096)this.seenSignals.delete(this.seenSignals.values().next().value!)
+    while (this.states.size>32) { const symbol=this.states.keys().next().value!; this.states.delete(symbol); this.assessments=this.assessments.filter(c=>c.symbol!==symbol) }
     return true
   }
-  private gap(s: State): void { this.assessments=this.assessments.filter(c=>c.symbol!==s.value.setups[0]?.symbol); s.value.coverage="gap"; s.firstReady=null; s.walls.clear(); s.offers.reset(); s.value.observations=[]; s.value.setups=[]; s.bestAsk=s.bestBid=null; s.low=Infinity }
-  private swing(w: Wall, e: EvidenceEvent, tick: number): Bounce | null {
-    const price=e.price!
-    if (!w.swing) w.swing={ low:price, high:price, start:e.eventTime, highTime:e.eventTime, ids:[e.id], bounce:null }
-    const p=w.swing
-    if (p.bounce?.confirmed && price < p.low) w.swing={low:price, high:price, start:e.eventTime, highTime:e.eventTime, ids:[e.id],bounce:null}
-    else if (!p.bounce && price < p.low) { p.low=p.high=price; p.start=p.highTime=e.eventTime; p.ids=[e.id] }
-    else {
-      if (price > p.high) { p.high=price; p.highTime=e.eventTime }
-      p.ids=[...p.ids,e.id].slice(-20)
-      if (p.high-p.low+tick/100 >= this.parameters.bounceTicks*tick && ms(e.eventTime)-ms(p.start) >= this.parameters.bounceDurationMs) {
-        p.bounce={ id:`bounce:${w.event.wallId}:${p.start}`, startTime:p.start, highTime:p.highTime, availableAt:e.eventTime, high:p.high, low:p.low, confirmed:p.high-price+tick/100>=this.parameters.bounceTicks*tick, evidenceIds:[...p.ids] }
-      }
-    }
-    const bounce=w.swing.bounce
-    if (bounce) {
-      w.bounces=[...w.bounces.filter(b=>b.id!==bounce.id),structuredClone(bounce)].slice(-12)
-      if (bounce.confirmed) w.swing={low:price,high:price,start:e.eventTime,highTime:e.eventTime,ids:[e.id],bounce:null}
-    }
-    return bounce ?? w.bounces.at(-1) ?? null
+  targetLiquidity(symbol:string, side:"long"|"short", now:number) {
+    const s=this.states.get(symbol)
+    if (!s) return {available:false,reason:"No Bookmap aggregate liquidity",levels:[]}
+    const age=now-Date.parse(s.receivedAt), marketAge=now-ms(s.asOf), liquidityAge=now-ms(s.liquidity.asOf)
+    const available=s.mode==="live"&&s.readiness==="ready"&&s.coverage==="continuous"&&age>=0&&age<=10_000&&marketAge>=0&&marketAge<=10_000&&liquidityAge>=0&&liquidityAge<=10_000&&s.liquidity.bestBid>0&&s.liquidity.bestAsk>0
+    const referencePrice=side==="long"?s.liquidity.bestAsk:s.liquidity.bestBid
+    const levels=available?(side==="long"?s.liquidity.offers:s.liquidity.bids).filter(l=>side==="long"?l.price>=referencePrice:l.price<=referencePrice).map(l=>({wallId:`${s.sourceInstanceId}:${s.epoch}:${side}:${l.price}`,evidenceId:null,price:l.price,displayedSize:l.displayedSize,largeOrderThreshold:s.liquidity.threshold,thresholdMultiple:l.displayedSize/s.liquidity.threshold,updatedAt:s.liquidity.asOf})):[]
+    return {available,reason:available?null:"Bookmap aggregate must be fresh, live, ready and continuous",mode:s.mode,coverage:s.coverage,receivedAt:s.receivedAt,asOf:s.asOf,referencePrice,tickSize:s.tickSize,levels,coverageScope:"Plugin aggregate of up to eight large displayed levels per side"}
   }
-  private process(s:State,symbol:string,e:EvidenceEvent): void {
-    if (e.kind.startsWith("wall-")) {
-      let wall=s.walls.get(e.wallId!)
-      if (!wall) { wall={event:e,touch:null,touchId:null,swing:null,bounces:[],breakId:null,ended:false,rejected:null}; s.walls.set(e.wallId!,wall) }
-      wall.event={...wall.event,...e}; wall.ended=e.kind==="wall-end"
-      if (s.walls.size>2048) s.walls.delete(s.walls.keys().next().value!)
-      return
-    }
-    if (e.kind==="bbo") { s.bestBid=e.bestBid!; s.bestAsk=e.bestAsk! }
-    if (e.kind!=="trade" && e.kind!=="bbo") return
-    const price=e.price
-    const newLow=price !== undefined && price < s.low
-    for (const w of s.walls.values()) {
-      const wp=w.event.price!, tick=s.value.tickSize
-      if (ms(e.eventTime)-ms(w.event.firstTime!)<500 || ms(e.eventTime)-ms(w.event.eventTime)>120_000) continue
-      if (price !== undefined && Math.abs(price-wp)<=tick*1.01 && !w.touch && !w.ended && w.event.size! >= (w.event.threshold ?? 0)) { w.touch=e.eventTime; w.touchId=e.id }
-      if (price !== undefined && !w.event.bid) {
-        if(w.touch && price<=wp-this.parameters.bounceTicks*tick && ms(e.eventTime)-ms(w.touch)>=this.parameters.bounceDurationMs && !w.rejected) w.rejected={wallId:w.event.wallId!,price:wp,touchTime:w.touch,rejectionTime:e.eventTime,evidenceIds:[w.touchId!,e.id]}
-        continue
-      }
-      if (!w.event.bid) continue
-      let setup=s.value.setups.find(c=>c.id===w.breakId)
-      if (!setup && price !== undefined && w.touch) {
-        const bounce=this.swing(w,e,tick)
-        if (price<wp-tick*0.5) {
-          const before=bounce && ms(bounce.highTime)<=ms(e.eventTime) ? structuredClone(bounce) : null
-          // Touch-only rejection stays distinct from the stricter clear/return/hold observation.
-          const offers=[...s.walls.values()].filter(o=>o.rejected && !s.value.observations.some(observation=>observation.wallId===o.event.wallId) && ms(o.rejected.rejectionTime)<ms(e.eventTime) && ms(e.eventTime)-ms(o.rejected.rejectionTime)<120_000 && Math.abs(o.event.price!-wp)<=tick*100)
-          const rejection=s.value.observations.filter(o=>o.kind==="offer-rejection" && o.state==="confirmed" && o.rejectionTime && ms(o.rejectionTime)<ms(e.eventTime) && ms(e.eventTime)-ms(o.rejectionTime)<120_000 && o.offerPrice>=wp).sort((a,b)=>ms(a.rejectionTime!)-ms(b.rejectionTime!)).at(-1)
-          const offer=rejection ? {wallId:rejection.wallId,price:rejection.offerPrice,touchTime:rejection.breakoutTime,rejectionTime:rejection.rejectionTime!,evidenceIds:rejection.evidenceIds,observationId:rejection.id,high:rejection.high,overshootPct:rejection.overshootPct} : offers.sort((a,b)=>ms(b.rejected!.rejectionTime)-ms(a.rejected!.rejectionTime))[0]?.rejected ?? null
-          const patternId=before ? patterns[1] : s.value.coverage==="continuous" ? patterns[0] : null
-          setup={id:`setup:${w.event.wallId}:${e.sequence}`,revision:1,symbol,patternId,alternatives:[],wallId:w.event.wallId!,wallPrice:wp,breakTime:e.eventTime,asOf:e.eventTime,availableAt:e.eventTime,beforeBounce:before,afterBounce:null,beforeBounces:structuredClone(w.bounces),afterBounces:[],offerRejection:offer,askBelow:s.bestAsk===null?null:s.bestAsk<wp,askBelowSince:s.bestAsk!==null&&s.bestAsk<wp?e.eventTime:null,newObservedLow:newLow,lowCoverage:"observed-window-only",evidenceIds:[w.event.id,w.touchId!,e.id],missing:[],mode:s.value.mode,state:"candidate",summary:""}
-          w.breakId=setup.id; w.bounces=[]; w.swing={low:price,high:price,start:e.eventTime,highTime:e.eventTime,ids:[e.id],bounce:null}; s.value.setups.push(setup)
-        }
-      } else if (setup) {
-        const prior=JSON.stringify([setup.patternId,setup.afterBounce?.high,setup.afterBounce?.confirmed,setup.askBelow,setup.state])
-        if (price !== undefined) {
-          const bounce=this.swing(w,e,tick)
-          if (bounce) { setup.afterBounce=structuredClone(bounce); setup.afterBounces=structuredClone(w.bounces); setup.patternId=patterns[2]; if(setup.beforeBounce) setup.alternatives=[patterns[1]] }
-          setup.newObservedLow=newLow
-        }
-        if(s.bestAsk!==null) { setup.askBelow=s.bestAsk<wp; if(!setup.askBelow) setup.askBelowSince=null; else if(!setup.askBelowSince) setup.askBelowSince=e.eventTime }
-        if(s.bestBid!==null && s.bestBid>=wp) setup.state="invalidated"
-        setup.asOf=e.eventTime
-        if(JSON.stringify([setup.patternId,setup.afterBounce?.high,setup.afterBounce?.confirmed,setup.askBelow,setup.state])!==prior) setup.revision++
-      }
-      if(setup) {
-        setup.missing=[]
-        if(s.value.coverage!=="continuous") setup.missing.push("Incomplete pre-break coverage; no-bounce cannot be established")
-        if(setup.askBelow===null) setup.missing.push("Best ask unavailable")
-        if(setup.afterBounce && !setup.afterBounce.confirmed) setup.missing.push("Post-break bounce high is provisional")
-        if(setup.beforeBounce && setup.afterBounce) setup.missing.push("Bounces on both sides; entry timing determines the setup")
-        setup.summary=`${setup.patternId?.replaceAll("-"," ") ?? "bid breakdown; bounce history unknown"} · wall $${wp.toFixed(Math.max(2,Math.ceil(-Math.log10(tick))))}${setup.offerRejection ? ` · prior offer rejection $${setup.offerRejection.price.toFixed(Math.max(2,Math.ceil(-Math.log10(tick))))}` : ""}`
-        this.assessments.push(structuredClone(setup)); this.assessments=this.assessments.slice(-4000)
-      }
-    }
-    if(price!==undefined) s.low=Math.min(s.low,price)
+  timeline(symbol:string,start?:string,end?:string):{status:EvidenceSymbol;events:PatternObservation[]} {
+    const s=this.states.get(symbol); if(!s) throw new Error("No plugin pattern aggregate for this symbol")
+    if(start&&!nano(start)||end&&!nano(end)) throw new Error("Timeline times must be nanosecond strings")
+    return structuredClone({status:s,events:s.events.filter(e=>(!start||BigInt(e.eventTime)>=BigInt(start))&&(!end||BigInt(e.eventTime)<=BigInt(end)))})
   }
-  targetLiquidity(symbol: string, side: "long" | "short", now: number) {
-    const s = this.states.get(symbol)
-    if (!s) return { available: false, reason: "No Bookmap order-book evidence", levels: [] }
-    const ageMs = now - Date.parse(s.value.receivedAt)
-    const marketAgeMs = now - ms(s.value.asOf)
-    const available = s.value.mode === "live" && s.value.readiness === "ready" && s.value.coverage === "continuous" &&
-      ageMs >= 0 && ageMs <= 10_000 && marketAgeMs >= 0 && marketAgeMs <= 10_000 && s.bestBid !== null && s.bestAsk !== null
-    const referencePrice = side === "long" ? s.bestAsk : s.bestBid
-    // Use maintained wall state, not the bounded timeline or historical peak size.
-    const levels = available ? [...s.walls.values()].filter(w => !w.ended && w.event.bid === (side === "short") &&
-      Number.isFinite(w.event.threshold) && w.event.threshold! > 0 && w.event.size! >= w.event.threshold! &&
-      (side === "long" ? w.event.price! >= referencePrice! : w.event.price! <= referencePrice!))
-      .sort((a,b) => side === "long" ? a.event.price! - b.event.price! : b.event.price! - a.event.price!)
-      .slice(0, 8).map(w => ({ wallId: w.event.wallId, evidenceId: w.event.id, price: w.event.price,
-        displayedSize: w.event.size, largeOrderThreshold: w.event.threshold, thresholdMultiple: w.event.size! / w.event.threshold!,
-        updatedAt: w.event.eventTime })) : []
-    return { available, reason: available ? null : "Bookmap must be fresh, live, ready and continuous with current BBO",
-      mode: s.value.mode, coverage: s.value.coverage, receivedAt: s.value.receivedAt, asOf: s.value.asOf,
-      referencePrice, tickSize: s.value.tickSize, levels, coverageScope: "Observed large displayed levels; not the complete order book" }
-  }
-  timeline(symbol:string,start?:string,end?:string): { status:EvidenceSymbol; events:EvidenceEvent[] } {
-    const s=this.states.get(symbol); if(!s) throw new Error("No recorded evidence for this symbol")
-    if(start && !/^\d{1,19}$/.test(start) || end && !/^\d{1,19}$/.test(end)) throw new Error("Timeline times must be nanosecond strings")
-    return structuredClone({status:s.value,events:s.events.filter(e=>(!start || BigInt(e.eventTime)>=BigInt(start))&&(!end || BigInt(e.eventTime)<=BigInt(end))).slice(-2000)})
-  }
-  associate(facts:BrokerFacts): void {
+  associate(facts:BrokerFacts):void {
     for(const fill of facts.recentFills) {
-      if(fill.side!=="sell" || !facts.positions.some(p=>p.symbol===fill.symbol&&p.side==="short"&&p.quantity>0) || this.entries.some(e=>e.accountId===facts.accountId&&e.fillId===fill.fillId)) continue
-      const state=this.states.get(fill.symbol)
-      // Replay market time is not broker live time. Never attach replay context to a real fill.
-      if(!state || state.value.mode!=="live") continue
+      const direction=fill.side==="buy"?"long":"short"
+      if(!facts.positions.some(p=>p.symbol===fill.symbol&&p.side===direction&&p.quantity>0)||this.entries.some(e=>e.accountId===facts.accountId&&e.fillId===fill.fillId)) continue
+      const s=this.states.get(fill.symbol); if(!s||s.mode!=="live"||s.readiness!=="ready"||s.coverage!=="continuous") continue
       const at=Date.parse(fill.filledAt)
-      const candidate=this.assessments.filter(c=>c.symbol===fill.symbol&&c.mode==="live"&&ms(c.availableAt)<=at&&ms(c.asOf)<=at&&at-ms(c.asOf)<10_000).at(-1)
-      this.entries.push({id:`${facts.accountId}:${fill.fillId}`,accountId:facts.accountId,fillId:fill.fillId,symbol:fill.symbol,filledAt:fill.filledAt,assessment:candidate?structuredClone(candidate):null,detail:candidate?"Frozen evidence at first observed fill; sell execution associated with current short position; separate adds retain separate fills":"Entry-time evidence unavailable"})
+      const assessment=this.assessments.filter(c=>c.symbol===fill.symbol&&c.direction===direction&&ms(c.availableAt)<=at&&at-ms(c.asOf)<10_000).sort((a,b)=>ms(a.availableAt)-ms(b.availableAt)).at(-1)
+      const candidate=assessment?.state==="candidate"?assessment:null
+      this.entries.push({id:`${facts.accountId}:${fill.fillId}`,accountId:facts.accountId,fillId:fill.fillId,symbol:fill.symbol,filledAt:fill.filledAt,assessment:candidate?structuredClone(candidate):null,detail:candidate?"Frozen plugin composition available at the fill":"Entry-time plugin composition unavailable"})
     }
     this.entries=this.entries.slice(-200)
   }
-  analyse(value: Omit<SetupAnalysis,"receivedAt">, now:number): void {
-    const setup=[...this.states.values()].flatMap(s=>s.value.setups).find(c=>c.id===value.setupId)
-    if(!setup || setup.revision!==value.revision) throw new BookmapCardError("setup-changed")
-    if(value.patternId!==null && !patterns.includes(value.patternId) || typeof value.explanation!=="string" || value.explanation.length>2000 || !Array.isArray(value.evidenceIds) || !value.evidenceIds.length || value.evidenceIds.length>30) throw new BookmapCardError("invalid-setup")
-    const state=this.states.get(setup.symbol)!
-    if(value.evidenceIds.some(id=>!state.events.some(e=>e.id===id))) throw new BookmapCardError("missing-evidence")
-    if (value.selectedBounceId && ![...setup.beforeBounces,...setup.afterBounces].some(b=>b.id===value.selectedBounceId)) throw new BookmapCardError("unknown-bounce")
-    if (value.patternId===patterns[1] && !setup.beforeBounces.length || value.patternId===patterns[2] && !setup.afterBounces.length || value.patternId===patterns[0] && (setup.beforeBounces.length || state.value.coverage!=="continuous")) throw new BookmapCardError("unsupported-pattern")
-    const supported=new Set(state.events.flatMap(e=>[e.price,e.bestBid,e.bestAsk]).filter((p):p is number=>p!==undefined))
-    for (const match of value.explanation.matchAll(/\$\s*(\d+(?:\.\d+)?)/g)) if (![...supported].some(p=>Math.abs(p-Number(match[1]))<state.value.tickSize/100)) throw new BookmapCardError("unmeasured-price")
+  private annotation(explanation:string,ids:string[],allowed:string[],s:EvidenceSymbol):void {
+    if(typeof explanation!=="string"||!explanation.trim()||explanation.length>2000||!Array.isArray(ids)||!ids.length||ids.length>30) throw new BookmapCardError("invalid-observation")
+    if(ids.some(id=>!allowed.includes(id)||!s.events.some(e=>e.id===id))) throw new BookmapCardError("missing-evidence")
+    const prices=s.events.filter(e=>ids.includes(e.id)).map(e=>e.price)
+    for(const match of explanation.matchAll(/\$\s*(\d+(?:\.\d+)?)/g)) if(!prices.some(p=>Math.abs(p-Number(match[1]))<s.tickSize/100)) throw new BookmapCardError("unmeasured-price")
+  }
+  analyse(value:Omit<SetupAnalysis,"receivedAt">,now:number):void {
+    const s=[...this.states.values()].find(s=>s.setups.some(c=>c.id===value.setupId)), setup=s?.setups.find(c=>c.id===value.setupId)
+    if(!s||!setup||setup.revision!==value.revision) throw new BookmapCardError("setup-changed")
+    if(value.patternId!==setup.patternId) throw new BookmapCardError("unsupported-pattern")
+    this.annotation(value.explanation,value.evidenceIds,setup.evidenceIds,s)
     this.analyses=[...this.analyses.filter(a=>a.setupId!==value.setupId),{...value,receivedAt:new Date(now).toISOString()}].slice(-100)
   }
-  analyseObservation(value: Omit<ObservationAnalysis,"receivedAt">, now:number): void {
-    const state=[...this.states.values()].find(s=>s.value.observations.some(o=>o.id===value.observationId))
-    const observation=state?.value.observations.find(o=>o.id===value.observationId)
-    if (!state || !observation || observation.revision!==value.revision) throw new BookmapCardError("observation-changed")
-    if (typeof value.explanation!=="string" || !value.explanation.trim() || value.explanation.length>2000 || !Array.isArray(value.evidenceIds) || !value.evidenceIds.length || value.evidenceIds.length>30) throw new BookmapCardError("invalid-observation")
-    if (value.evidenceIds.some(id=>!observation.evidenceIds.includes(id) || !state.events.some(e=>e.id===id))) throw new BookmapCardError("missing-observation-evidence")
-    const prices=[observation.offerPrice, observation.high, observation.overshoot, ...state.events.flatMap(e=>[e.price,e.bestBid,e.bestAsk]).filter((p):p is number=>p!==undefined)]
-    for (const match of value.explanation.matchAll(/\$\s*(\d+(?:\.\d+)?)/g)) if (!prices.some(p=>Math.abs(p-Number(match[1]))<state.value.tickSize/100)) throw new BookmapCardError("unmeasured-price")
+  analyseObservation(value:Omit<ObservationAnalysis,"receivedAt">,now:number):void {
+    const s=[...this.states.values()].find(s=>s.observations.some(o=>o.id===value.observationId)), observation=s?.observations.find(o=>o.id===value.observationId)
+    if(!s||!observation||observation.revision!==value.revision) throw new BookmapCardError("observation-changed")
+    this.annotation(value.explanation,value.evidenceIds,observation.evidenceIds,s)
     this.observationAnalyses=[...this.observationAnalyses.filter(a=>a.observationId!==value.observationId),{...value,receivedAt:new Date(now).toISOString()}].slice(-100)
   }
-  snapshot(): BookmapEvidenceProjection { return structuredClone({symbols:Object.fromEntries([...this.states].map(([k,s])=>[k,s.value])),entries:this.entries,archiveError:this.archiveError,parameters:this.parameters,analyses:this.analyses,observationAnalyses:this.observationAnalyses}) }
-  reset():void { this.states.clear(); this.analyses=[]; this.observationAnalyses=[]; this.assessments=[] }
+  snapshot():BookmapEvidenceProjection {return structuredClone({symbols:Object.fromEntries(this.states),entries:this.entries,archiveError:this.archiveError,parameters:this.parameters,analyses:this.analyses,observationAnalyses:this.observationAnalyses})}
+  reset():void {this.states.clear();this.retiredSources.clear();this.seenSignals.clear();this.analyses=[];this.observationAnalyses=[];this.assessments=[]}
 }

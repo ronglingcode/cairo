@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { writerFixture } from './exit-writer.test.mjs'
-import { wire } from './bookmap-receiver.test.mjs'
+import { wire } from './bookmap-aggregate-fixture.mjs'
 import { BookmapReceiver } from '../src/engine/BookmapReceiver.mts'
 import { EntryObserver } from '../src/engine/EntryObserver.mts'
 import { PositionGuidance } from '../src/engine/PositionGuidance.mts'

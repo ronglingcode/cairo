@@ -1,3 +1,4 @@
+import { aggregate } from '../tests/bookmap-aggregate-fixture.mjs'
 import { spawn } from 'node:child_process'
 import { mkdtemp, writeFile, readFile, rm, rename } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -10,7 +11,16 @@ const manifest = JSON.parse(await readFile(path.join(packagePath, 'BUILD-MANIFES
 const profile = await mkdtemp(path.join(os.tmpdir(), 'Cairo packaged smoke ')); const tokenFile = path.join(profile, 'synthetic secrets.json')
 await writeFile(tokenFile, JSON.stringify({ schwab: { access_token: 'synthetic-one', expires_at: Date.now() + 600000 } }))
 const sockets = new Set(); const observationServer = createServer(); let sourceId = 'fake-bookmap-1', sequence = 0
-function broadcast(kind, delivery = 'live') { const now = Date.now(); const bytes = Buffer.from(JSON.stringify({type:'cairo_observation',sourceInstanceId:sourceId,sequence:++sequence,symbol:{source:'AAPL',canonical:'AAPL'},priceUnit:'USD',episodeId:'smoke-episode',revision:1,pattern:'BID_REAPPEAR',price:101,eventTime:String(BigInt(now)*1000000n),receivedAt:String(BigInt(now)*1000000n),detectorRevision:'fake',configRevision:'fake',mode:'unknown',readiness:'ready',delivery,kind})); const header=Buffer.alloc(4);header[0]=0x81;header[1]=126;header.writeUInt16BE(bytes.length,2);for(const socket of sockets)socket.write(Buffer.concat([header,bytes])) }
+let smokePatterns=[],epoch=1
+function broadcast(kind, delivery = 'stream') {
+  const now=Date.now()
+  const value=aggregate(now,{sourceInstanceId:sourceId,sequence:++sequence,epoch,mode:'unknown',episodeId:'smoke-episode',price:101,delivery:delivery==='live'?'stream':delivery})
+  if(kind==='episode') smokePatterns=value.patterns
+  if(kind==='reset'){smokePatterns=[];value.epoch=++epoch;value.readiness='not-ready';value.coverage='warming'}
+  value.patterns=smokePatterns
+  const bytes=Buffer.from(JSON.stringify(value)),header=Buffer.alloc(4);header[0]=0x81;header[1]=126;header.writeUInt16BE(bytes.length,2)
+  for(const socket of sockets)socket.write(Buffer.concat([header,bytes]))
+}
 observationServer.on('upgrade',(request,socket)=>{const accept=createHash('sha1').update(request.headers['sec-websocket-key']+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);sockets.add(socket);socket.on('error',()=>{sockets.delete(socket);socket.destroy()});socket.on('close',()=>sockets.delete(socket));broadcast('heartbeat');broadcast('episode','snapshot')})
 await new Promise(resolve=>observationServer.listen(0,'127.0.0.1',resolve));const heartbeat=setInterval(()=>broadcast('heartbeat'),2000)
 await writeFile(path.join(profile, 'config.json'), JSON.stringify({ provider: 'fake', selectedAccountId: 'fixture', schwabTokenFile: tokenFile, bookmapEndpoint: `ws://127.0.0.1:${observationServer.address().port}`, brokerPollIntervalMs: 5000 }))

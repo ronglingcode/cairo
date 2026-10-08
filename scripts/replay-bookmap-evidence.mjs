@@ -32,14 +32,14 @@ server.on('upgrade',(request,socket)=>{
   for(const batch of history) send(socket,{...batch,delivery:'snapshot'})
   if(!playing) {playing=true;void playback().catch(error=>{console.error(error.message);process.exitCode=1;shutdown()})}
 })
-const heartbeat=setInterval(()=>{if(latest) for(const client of clients) send(client,{...latest,events:[],delivery:'stream'})},2000)
+const heartbeat=setInterval(()=>{if(latest&&paused) for(const client of clients) send(client,{...latest,sequence:++latest.sequence,delivery:'stream'})},2000)
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))
 async function playback() {
   let prior=null,count=0
   for await(const line of createInterface({input:createReadStream(resolve(file)),crlfDelay:Infinity})) {
     if(!line.trim()) continue
-    if(line.length>131072) throw new Error('Evidence line exceeds protocol bound')
-    const raw=JSON.parse(line);if(raw.type!=='cairo_evidence'||raw.version!==1) throw new Error('Unsupported evidence capture')
+    if(line.length>524288) throw new Error('Evidence line exceeds protocol bound')
+    const raw=JSON.parse(line);if(raw.type!=='cairo_patterns'||raw.version!==1) throw new Error('Unsupported evidence capture')
     const value={...raw,mode:'replay',delivery:'stream'}
     const time=Number(BigInt(value.eventTime)/1_000_000n)
     let delay=prior===null?0:Math.max(0,(time-prior)/speed)
@@ -49,7 +49,7 @@ async function playback() {
     latest=value;history.push(value)
     while(history.length>160 || history.length>1&&Number(BigInt(history[0].eventTime)/1_000_000n)<time-600000) history.shift()
     for(const client of clients) send(client,value)
-    count+=value.events.length
+    count+=value.patterns.length
   }
   paused=true;console.log(`Playback complete: ${count} evidence events. Context remains available; Ctrl+C to stop.`)
 }

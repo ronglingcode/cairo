@@ -121,12 +121,12 @@ export class BookmapPatterns {
     const snapshot = this.engine.getSnapshot()
     const status = Object.values(snapshot.bookmapEvidence.symbols).find(s => s.setups.some(c => c.id === input.setupId))
     const setup = status?.setups.find(c => c.id === input.setupId)
-    const analysis = snapshot.bookmapEvidence.analyses.find(a=>a.setupId===input.setupId && a.revision===input.revision)
-    const patternId = analysis?.patternId ?? setup?.patternId
+    const patternId = setup?.patternId
     if (!status || !setup || setup.revision !== input.revision || !patternId || setup.state !== "candidate" || status.mode !== "live" || status.readiness !== "ready" || this.now()-Date.parse(status.receivedAt)>6000 || this.now()-Number(BigInt(setup.asOf)/1_000_000n)<0 || this.now()-Number(BigInt(setup.asOf)/1_000_000n)>10_000) throw new Error("Setup is stale, replaying, ambiguous or changed; review current evidence")
     const { facts } = this.facts()
-    const position = facts.positions.find(p => p.positionId === input.positionId && p.symbol === setup.symbol && p.side === "short" && p.quantity > 0)
-    if (!position) throw new Error("Select a current matching short trade")
+    const position = facts.positions.find(p => p.positionId === input.positionId && p.symbol === setup.symbol && p.side === setup.direction && p.quantity > 0)
+    if (!position) throw new Error("Select a current matching trade")
+    if (!(await this.catalog()).some(p=>p.id===patternId && p.side===position.side)) throw new Error("Select a pattern from the manual tradebook picker; plugin signals do not classify bounce variants")
     const result = await this.preflight(`/bookmap-pattern ${position.symbol}`, randomUUID())
     if (!result.picker) throw new Error("Pattern picker unavailable")
     const latest = this.engine.getSnapshot().bookmapEvidence.symbols[setup.symbol]

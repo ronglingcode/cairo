@@ -116,12 +116,12 @@ does not add it to the tradebook library.
 
 ## Coding agent handoff
 
-Bookmap setup assistance now includes an independent evidence timeline, recognition
-of the three bid-breakdown/bounce setups, separate large-offer breakout/rejection
-observations, prior offer-rejection context and AI explanations on cards. The plugin's `evidenceEnabled` flag defaults to true.
-See [implementation and limitations](docs/chatgpt/AI-BOOKMAP-IMPLEMENTATION.md) and
-the [plugin replay guide](../bookmap-plugin/docs/cairo-evidence.md). Recognition is
-advisory; accepting a live suggestion uses the existing confirmed-tag workflow.
+Bookmap pattern detection and SignalComposer run in the plugin. Cairo consumes their
+aggregate events, composed signals, developing contexts and large-level liquidity;
+it contains no raw-flow pattern detector. AI explains recorded classifications and
+manual `/bookmap-pattern` tagging remains available. See the
+[aggregate bridge guide](../bookmap-plugin/docs/cairo-evidence.md). Both applications
+must be rebuilt/restarted together for the `cairo_patterns` protocol.
 
 Start with [CODING-PLAN.md](docs/chatgpt/CODING-PLAN.md), the complete MVP handoff with 50 small tasks, dependencies, verification steps, checkboxes, and separate local commits for each completed task.
 

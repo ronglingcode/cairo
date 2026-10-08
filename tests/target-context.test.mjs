@@ -1,3 +1,4 @@
+import { aggregate } from './bookmap-aggregate-fixture.mjs'
 import test from "node:test"
 import assert from "node:assert/strict"
 import { targetPositionContext } from "../src/engine/TargetContext.mts"
@@ -73,25 +74,11 @@ test("old same-symbol executions never become verified partials or inferred pric
 })
 function liquidity(mode = "live") {
   const evidence = new BookmapEvidence()
-  let sequence = 0
-  const events = []
-  const add = (kind, time, fields = {}) => events.push({ id: `e${++sequence}`, sequence, kind, eventTime: ns(time), timestampFallback: false, ...fields })
-  const wall = (id, bid, price, size = 10000) => ({wallId:id,bid,price,size,peakSize:100000,threshold:5000,firstTime:ns(now-6000)})
-  add("wall-start", now-6000, wall("ask2",false,22))
-  add("wall-start", now-6000, wall("ask1",false,21.5))
-  add("wall-start", now-6000, wall("pulled",false,21.1))
-  add("wall-start", now-6000, wall("bid2",true,19))
-  add("wall-start", now-6000, wall("bid1",true,20))
-  add("wall-start", now-6000, wall("small",false,21.2))
-  add("wall-update", now, wall("small",false,21.2,1000))
-  add("wall-end", now, wall("pulled",false,21.1,0))
-  add("bbo", now, {bestBid:21,bestAsk:21.01})
-  const batch = {type:"cairo_evidence",version:1,sourceInstanceId:"s",epoch:1,symbol:"AAA",priceUnit:"USD",tickSize:.01,
-    mode,readiness:"ready",delivery:"stream",watermark:sequence,dropped:0,eventTime:ns(now),events}
+  const batch=aggregate(now,{symbol:"AAA",mode,patterns:[],liquidity:{threshold:5000,asOf:ns(now),bestBid:21,bestAsk:21.01,bids:[{price:20,displayedSize:10000},{price:19,displayedSize:10000}],offers:[{price:21.5,displayedSize:10000},{price:22,displayedSize:10000}]}})
   assert.equal(evidence.receive(batch,now), true)
   return {evidence,batch}
 }
-test("current displayed walls are sorted in exit direction; peaks, pulled and small walls are excluded", () => {
+test("plugin aggregate large levels are consumed in exit direction", () => {
   const {evidence} = liquidity()
   const long = evidence.targetLiquidity("AAA","long",now)
   assert.equal(long.available,true)
@@ -104,9 +91,9 @@ test("replay, stale market/receive time, gaps and resets do not establish live l
   assert.equal(liquidity("replay").evidence.targetLiquidity("AAA","long",now).available,false)
   const {evidence,batch} = liquidity()
   assert.equal(evidence.targetLiquidity("AAA","long",now+11000).available,false)
-  evidence.receive({...batch,events:[]},now+11000)
+  evidence.receive({...batch,sequence:2},now+11000)
   assert.equal(evidence.targetLiquidity("AAA","long",now+11000).available,false)
-  evidence.receive({...batch,dropped:1,events:[]},now)
+  evidence.receive({...batch,sequence:3,coverage:"gap"},now)
   assert.equal(evidence.targetLiquidity("AAA","long",now).available,false)
   evidence.reset()
   assert.deepEqual(evidence.targetLiquidity("AAA","long",now).levels,[])

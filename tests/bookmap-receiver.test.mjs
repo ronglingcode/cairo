@@ -4,7 +4,8 @@ import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { CairoEngine } from '../src/engine/CairoEngine.mts'
 import { BookmapReceiver } from '../src/engine/BookmapReceiver.mts'
-export function wire(now, changes = {}) { return JSON.stringify({ type: 'cairo_observation', sourceInstanceId: 'source-1', sequence: 1, symbol: { source: 'AAPL:NASDAQ@BMD', canonical: 'AAPL' }, priceUnit: 'USD', episodeId: 'e1', revision: 1, pattern: 'BID_REAPPEAR', price: 100, eventTime: String(BigInt(now) * 1000000n), receivedAt: String(BigInt(now) * 1000000n), detectorRevision: 'd1', configRevision: 'c1', mode: 'live', readiness: 'ready', delivery: 'live', kind: 'episode', ...changes }) }
+import { wire } from './bookmap-aggregate-fixture.mjs'
+export { wire } from './bookmap-aggregate-fixture.mjs'
 
 test('account activity accepts bounded fresh hints without changing Bookmap market readiness', () => {
   const now = Date.now(), engine = new CairoEngine(), receiver = new BookmapReceiver(engine, () => now)
@@ -21,12 +22,12 @@ test('account activity accepts bounded fresh hints without changing Bookmap mark
 test('bounded projection deduplicates revisions, suppresses bootstrap, validates units and resets', () => {
   let now = Date.now(); const engine = new CairoEngine(); const receiver = new BookmapReceiver(engine, () => now)
   receiver.receive(wire(now, { kind: 'heartbeat' })); assert.equal(engine.getSnapshot().bookmap.state, 'connected')
-  receiver.receive(wire(now, { delivery: 'snapshot' })); assert.equal(engine.getSnapshot().bookmapProjection.episodes[0].freshEvent, false)
+  receiver.receive(wire(now, { delivery: 'snapshot', sequence: 2 })); assert.equal(engine.getSnapshot().bookmapProjection.episodes[0].freshEvent, false)
   assert.equal(receiver.receive(wire(now)), false)
   receiver.receive(wire(now, { sequence: 3, revision: 2, id: 'changed-uuid' })); assert.equal(engine.getSnapshot().bookmapProjection.episodes.length, 1); assert.equal(engine.getSnapshot().bookmapProjection.episodes[0].freshEvent, false)
-  assert.equal(receiver.receive(wire(now, { priceUnit: 'ticks' })), false); assert.equal(receiver.receive(wire(now, { pattern: 'OFFER_REAPPEAR' })), false)
-  receiver.receive(wire(now, { kind: 'reset', sequence: 4 })); assert.equal(engine.getSnapshot().bookmapProjection.episodes.length, 0)
-  receiver.receive(wire(now, { kind: 'heartbeat', mode: 'replay' })); assert.equal(engine.getSnapshot().bookmapProjection.symbols.AAPL.mode, 'replay')
+  assert.equal(receiver.receive(wire(now, { priceUnit: 'ticks' })), false); assert.equal(receiver.receive(wire(now, { pattern: 'OFFER_REAPPEAR', sequence: 4, episodeId: 'offer' })), true)
+  receiver.receive(wire(now, { kind: 'reset', sequence: 1 })); assert.equal(engine.getSnapshot().bookmapProjection.episodes.length, 0)
+  receiver.receive(wire(now, { kind: 'heartbeat', mode: 'replay', epoch: 3 })); assert.equal(engine.getSnapshot().bookmapProjection.symbols.AAPL.mode, 'replay')
   now += 6001; receiver.tick(); assert.equal(engine.getSnapshot().bookmap.state, 'stale')
   receiver.receive(wire(now, { sourceInstanceId: 'source-2', mode: 'unknown' })); assert.equal(engine.getSnapshot().bookmapProjection.sourceInstanceId, 'source-2')
 })

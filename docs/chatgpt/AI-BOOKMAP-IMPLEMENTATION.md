@@ -1,3 +1,5 @@
+> Superseded October 7, 2026: the plugin now owns pattern detection and SignalComposer. Cairo consumes `cairo_patterns` aggregates and annotates recorded decisions; raw-flow and bounce/rejection detectors are removed. See the [current bridge guide](../../../bookmap-plugin/docs/cairo-evidence.md). The text below records the earlier implementation.
+
 # AI Bookmap assistant: implemented first vertical slice
 
 Implemented October 5, 2026. See the sibling [plugin settings and replay guide](../../../bookmap-plugin/docs/cairo-evidence.md).

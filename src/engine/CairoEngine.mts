@@ -52,7 +52,7 @@ export class CairoEngine {
       preparation: null,
       preparationError: null,
       bookmap: this.waiting("bookmap", "Observation integration scheduled for the final feature phase"),
-      bookmapEvidence: { symbols: {}, entries: [], analyses: [], observationAnalyses: [], parameters: { bounceTicks: 2, bounceDurationMs: 200, noBounceCoverageMs: 5000, offerMaxOvershootPct: 1, offerReturnMs: 5000, offerHoldBelowMs: 1000 } },
+      bookmapEvidence: { symbols: {}, entries: [], analyses: [], observationAnalyses: [], parameters: { source: "bookmap-plugin" } },
       bookmapProjection: { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] },
       broker: this.waiting("broker", "Broker source has not started"),
       brokerFacts: null,

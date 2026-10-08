@@ -61,16 +61,16 @@ export class CairoDomainTools {
       return {entry, archived:true, currentLiveTrigger:false}
     }
     if (operation === "read_bookmap_timeline" || operation === "read_setup_candidates") {
-      if (!this.bookmapEvidence) throw new Error("Bookmap evidence recorder unavailable")
+      if (!this.bookmapEvidence) throw new Error("Bookmap pattern aggregate unavailable")
       if (typeof value.symbol !== "string" || Object.keys(value).some(key => !["symbol", "start", "end"].includes(key))) throw new Error("Symbol and optional nanosecond range required")
       const result = this.bookmapEvidence.timeline(value.symbol, value.start as string | undefined, value.end as string | undefined)
       const catalog = await this.bookmapPatterns?.catalog()
-      const rules = catalog ? await Promise.all(catalog.filter(p => p.side === "short").map(async p => ({...p, markdown: p.sourceFile ? await readFile(path.join(this.bookmapPatterns!.directory, p.sourceFile), "utf8") : null }))) : []
+      const rules = catalog ? await Promise.all(catalog.filter(p => true).map(async p => ({...p, markdown: p.sourceFile ? await readFile(path.join(this.bookmapPatterns!.directory, p.sourceFile), "utf8") : null }))) : []
       return operation === "read_setup_candidates" ? { status: {...result.status, events: undefined}, rules, parameters: snapshot.bookmapEvidence.parameters } : { ...result, rules }
     }
     if (operation === "interpret_bookmap_setup") {
       if (!this.bookmapEvidence) throw new Error("Bookmap evidence unavailable")
-      if (Object.keys(value).some(key => !["setupId", "revision", "patternId", "selectedBounceId", "explanation", "evidenceIds"].includes(key))) throw new Error("Unexpected interpretation field")
+      if (Object.keys(value).some(key => !["setupId", "revision", "patternId", "explanation", "evidenceIds"].includes(key))) throw new Error("Unexpected interpretation field")
       this.bookmapEvidence.analyse(value as unknown as Omit<import("../engine/BookmapEvidence.mts").SetupAnalysis, "receivedAt">, this.now())
       this.engine.updateSnapshot({bookmapEvidence:this.bookmapEvidence.snapshot()})
       return {ok:true, advisory:true}
@@ -95,7 +95,7 @@ export class CairoDomainTools {
         sizing: targetPositionContext(current, pattern.position, this.now()),
         atrTargets: this.atrTargets?.(pattern.position.symbol, pattern.position.side) ?? { available: false, reason: "Bookmap ATR/day-low source unavailable", levels: [] },
         liquidity: this.bookmapEvidence?.targetLiquidity(pattern.position.symbol, pattern.position.side, this.now()) ??
-          { available: false, reason: "Bookmap evidence recorder unavailable", levels: [] },
+          { available: false, reason: "Bookmap pattern aggregate unavailable", levels: [] },
         preparation: current.preparationError ? { available: false, error: current.preparationError } : current.preparation ?? { available: false },
         advisory: true,
       }

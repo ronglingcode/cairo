@@ -1,17 +1,16 @@
 import { BookmapEntryArchive } from "./BookmapEntryArchive.mts"
 import { BookmapEvidence } from "./BookmapEvidence.mts"
-import { parseBookmapObservation, type BookmapObservation } from "../shared/contracts.mts"
+import { type BookmapObservation } from "../shared/contracts.mts"
 import type { CairoEngine } from "./CairoEngine.mts"
 import { atrTargetContext, type AtrMarket } from "./AtrTargets.mts"
-export const ALLOWED_PATTERNS = ["BID_STEP_UP", "BID_REAPPEAR"] as const
+export const ALLOWED_PATTERNS = ["BID_STEP_UP", "BID_REAPPEAR"] as const // Automatic entry observer eligibility; all plugin patterns remain visible.
 export interface ObservedEpisode { observation: BookmapObservation; receivedAt: string; freshEvent: boolean }
-export interface BookmapProjection { sourceInstanceId: string | null; heartbeatAt: string | null; symbols: Record<string, { mode: string; readiness: string; heartbeatAt: string }>; episodes: ObservedEpisode[] }
+export interface BookmapProjection { sourceInstanceId: string | null; heartbeatAt: string | null; symbols: Record<string, { sourceInstanceId: string; epoch: number; mode: string; readiness: string; heartbeatAt: string }>; episodes: ObservedEpisode[] }
 export class BookmapReceiver {
-  readonly evidence = new BookmapEvidence({ bounceTicks: Number(process.env.CAIRO_BOOKMAP_BOUNCE_TICKS || 2), bounceDurationMs: Number(process.env.CAIRO_BOOKMAP_BOUNCE_MS || 200), noBounceCoverageMs: Number(process.env.CAIRO_BOOKMAP_COVERAGE_MS || 5000), offerMaxOvershootPct: Number(process.env.CAIRO_BOOKMAP_OFFER_MAX_OVERSHOOT_PCT || 1), offerReturnMs: Number(process.env.CAIRO_BOOKMAP_OFFER_RETURN_MS || 5000), offerHoldBelowMs: Number(process.env.CAIRO_BOOKMAP_OFFER_HOLD_MS || 1000) })
+  readonly evidence = new BookmapEvidence()
   private archive?: BookmapEntryArchive
   async enableEntryArchive(directory: string): Promise<void> { this.archive=new BookmapEntryArchive(directory,this.evidence); await this.archive.load(); this.tick() }
   async flushArchive(): Promise<void> { await this.archive?.flush() }
-  private publishTimer?: ReturnType<typeof setTimeout>
   private engine: CairoEngine; private now: () => number; private socket?: WebSocket; private retry?: ReturnType<typeof setTimeout>; private stopped = true
   private projection: BookmapProjection = { sourceInstanceId: null, heartbeatAt: null, symbols: {}, episodes: [] }
   constructor(engine: CairoEngine, now = Date.now) { this.engine = engine; this.now = now }
@@ -31,14 +30,14 @@ export class BookmapReceiver {
       socket.addEventListener("open", () => { if (socket === this.socket && !this.stopped) this.accountActivity?.() })
       socket.addEventListener("message", event => { if (socket === this.socket && typeof event.data === "string") this.receive(event.data) })
       socket.addEventListener("error", () => socket.close())
-      socket.addEventListener("close", () => { if (this.stopped || socket !== this.socket) return; this.targetMarkets.clear(); this.publish("disconnected", "Bookmap disconnected; reconnecting"); this.retry = setTimeout(connect, 2000) })
+      socket.addEventListener("close", () => { if (this.stopped || socket !== this.socket) return; this.evidence.reset(); this.projection = {sourceInstanceId:null,heartbeatAt:null,symbols:{},episodes:[]}; this.targetMarkets.clear(); this.publish("disconnected", "Bookmap disconnected; reconnecting"); this.retry = setTimeout(connect, 2000) })
     }
     connect()
   }
-  stop(): void { this.archive?.capture(); this.stopped = true; this.targetMarkets.clear(); clearTimeout(this.retry); clearTimeout(this.publishTimer); this.socket?.close(); this.socket = undefined; this.publish("disconnected", "Observation receiver stopped") }
+  stop(): void { this.archive?.capture(); this.stopped = true; this.targetMarkets.clear(); clearTimeout(this.retry); this.socket?.close(); this.socket = undefined; this.evidence.reset(); this.projection = {sourceInstanceId:null,heartbeatAt:null,symbols:{},episodes:[]}; this.publish("disconnected", "Observation receiver stopped") }
   receive(raw: string): boolean {
     try {
-      if (raw.length > 131_072) return false
+      if (raw.length > 524_288) return false
       const value = JSON.parse(raw)
       if (value.type === "cairo_target_market") {
         if (typeof value.symbol !== 'string' || !/^[A-Z0-9.\-]{1,16}$/.test(value.symbol) || typeof value.sessionDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.sessionDate) || !Number.isSafeInteger(value.timestamp) || value.timestamp > this.now() + 5000 || value.timestamp < this.now() - 60_000 || ![value.atr, value.lowOfDay, value.highOfDay].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0) || value.highOfDay < value.lowOfDay) return false
@@ -52,34 +51,33 @@ export class BookmapReceiver {
         this.accountActivity?.()
         return true
       }
-      if (value.type === "cairo_evidence") {
+      if (value.type === "cairo_patterns") {
         if (!this.evidence.receive(value, this.now())) return false
+        this.projectAggregate(value)
         const facts = this.engine.getSnapshot().brokerFacts
         if (facts) this.evidence.associate(facts)
-        if (!this.publishTimer) this.publishTimer=setTimeout(()=>{this.publishTimer=undefined;this.tick()},100)
-        // First batch establishes status immediately; later batches coalesce to protect rendering.
-        if (!Object.keys(this.engine.getSnapshot().bookmapEvidence.symbols).length) this.tick()
+        this.tick()
         return true
       }
-      if (value.type !== "cairo_observation") return false
-      const observation = parseBookmapObservation(value)
-      if (!/^[A-Z0-9.\-]{1,16}$/.test(observation.symbol.canonical) || observation.symbol.source.split(/[:@]/)[0].toUpperCase() !== observation.symbol.canonical || !Number.isSafeInteger(observation.sequence) || !Number.isSafeInteger(observation.revision)) return false
-      if (observation.kind === "episode" && (!ALLOWED_PATTERNS.includes(observation.pattern as typeof ALLOWED_PATTERNS[number]) || observation.price === null || observation.price <= 0 || !observation.eventTime)) return false
-      if (this.projection.sourceInstanceId !== observation.sourceInstanceId) this.projection = { sourceInstanceId: observation.sourceInstanceId, heartbeatAt: null, symbols: {}, episodes: [] }
-      const receivedAt = new Date(this.now()).toISOString(); const symbol = observation.symbol.canonical
-      if (observation.kind === "reset") { this.projection.episodes = this.projection.episodes.filter(item => item.observation.symbol.canonical !== symbol); delete this.projection.symbols[symbol] }
-      else if (observation.kind === "heartbeat") {
-        this.projection.heartbeatAt = receivedAt; this.projection.symbols[symbol] = { mode: observation.mode, readiness: observation.readiness, heartbeatAt: receivedAt }
-        const keys = Object.keys(this.projection.symbols); if (keys.length > 100) delete this.projection.symbols[keys[0]!]
-      } else {
-        const prior = this.projection.episodes.find(item => item.observation.symbol.canonical === symbol && item.observation.episodeId === observation.episodeId)
-        if (prior && (prior.observation.revision >= observation.revision || prior.observation.sequence >= observation.sequence)) return false
-        const eventMs = Number(BigInt(observation.eventTime!) / 1_000_000n)
-        const freshEvent = observation.delivery === "live" && eventMs <= this.now() && this.now() - eventMs <= 10_000 && (prior ? prior.freshEvent : true)
-        this.projection.episodes = [...this.projection.episodes.filter(item => item !== prior), { observation, receivedAt, freshEvent }].slice(-400)
-      }
-      this.tick(); return true
+      return false
     } catch { return false }
+  }
+  private projectAggregate(value: {symbol:string;sourceInstanceId:string;epoch:number;sequence:number;mode:BookmapObservation["mode"];readiness:BookmapObservation["readiness"];delivery:string;eventTime:string;detectorRevision:string;configRevision:string}):void {
+    const status=this.evidence.snapshot().symbols[value.symbol]!
+    const receivedAt=status.receivedAt
+    const previous=this.projection.episodes.filter(item=>item.observation.symbol.canonical===value.symbol)
+    this.projection.sourceInstanceId=value.sourceInstanceId
+    this.projection.heartbeatAt=receivedAt
+    this.projection.symbols[value.symbol]={sourceInstanceId:value.sourceInstanceId,epoch:value.epoch,mode:value.mode,readiness:value.readiness,heartbeatAt:receivedAt}
+    const episodes=status.observations.map(event=>{
+      const prior=previous.find(item=>item.observation.sourceInstanceId===value.sourceInstanceId&&item.observation.episodeId===event.id)
+      const eventMs=Number(BigInt(event.observedAt)/1_000_000n)
+      // A reconnect snapshot cannot create live eligibility; repeated heartbeats cannot promote it.
+      const freshEvent=prior?prior.freshEvent:value.delivery==="stream"&&eventMs<=this.now()&&this.now()-eventMs<=10_000
+      const observation:BookmapObservation={sourceInstanceId:value.sourceInstanceId,sequence:value.sequence,symbol:{source:value.symbol,canonical:value.symbol},priceUnit:"USD",episodeId:event.id,revision:event.revision,pattern:event.type,price:event.price,eventTime:event.eventTime,receivedAt:(BigInt(this.now())*1_000_000n).toString(),detectorRevision:value.detectorRevision,configRevision:value.configRevision,mode:value.mode,readiness:value.readiness,delivery:value.delivery==="snapshot"?"snapshot":"live",kind:"episode"}
+      return {observation,receivedAt,freshEvent}
+    })
+    this.projection.episodes=[...this.projection.episodes.filter(item=>item.observation.symbol.canonical!==value.symbol),...episodes].slice(-400)
   }
   tick(): void {
     const facts = this.engine.getSnapshot().brokerFacts
@@ -88,7 +86,7 @@ export class BookmapReceiver {
     const evidence = this.evidence.snapshot()
     const evidenceFresh = Object.values(evidence.symbols).some(s => this.now() - Date.parse(s.receivedAt) <= 6000)
     const fresh = evidenceFresh || this.projection.heartbeatAt !== null && this.now() - Date.parse(this.projection.heartbeatAt) <= 6000
-    this.publish(fresh ? "connected" : "stale", fresh ? "Observations connected; live eligibility requires proven live mode and ready depth" : "Heartbeat unavailable or stale; observations cannot trigger actions")
+    this.publish(fresh ? "connected" : "stale", fresh ? "Plugin aggregates connected; patterns and signals come from SignalComposer" : "Heartbeat unavailable or stale; observations cannot trigger actions")
   }
   private publish(state: "connected" | "disconnected" | "stale", detail: string): void { this.engine.updateSnapshot({ bookmap: { source: "bookmap", state, updatedAt: this.projection.heartbeatAt, detail }, bookmapProjection: this.projection, bookmapEvidence: this.evidence.snapshot() }) }
 }
