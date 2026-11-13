@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Position, Snapshot } from './engine.ts';
-import type { Selection } from './plan.ts';
 import './panel.css';
 
-type PanelState = Snapshot & { voiceStatus: string; localError: string; backtest: string; bookmapMode: string; bookmapDate: string; chat: Array<{ role: 'user' | 'assistant'; text: string }>; chatBusy: boolean };
+type PanelState = Snapshot & { voiceStatus: string; localError: string; backtest: string; bookmapMode: string; bookmapDate: string; replayPlans: string[]; chat: Array<{ role: 'user' | 'assistant'; text: string }>; chatBusy: boolean };
 declare global {
   interface Window {
     cairo: {
@@ -12,7 +11,7 @@ declare global {
       ask(text: string): Promise<string>;
       cancelQuestion(): Promise<void>;
       onMuteOutput(handler: (muted: boolean) => void): () => void;
-      selection(value: Selection): Promise<void>; backtest(): Promise<void>; shadow(value: boolean): Promise<void>;
+      replayPlan(id: string): Promise<void>; backtest(): Promise<void>; shadow(value: boolean): Promise<void>;
       identify(id: string, note: { pattern: string; intendedStop: number }): Promise<string>;
       review(id: string): Promise<string>; approve(id: string): Promise<void>;
       feedback(key: string, value: string): Promise<void>; voiceStart(sdp: string): Promise<string>; voiceStop(): Promise<void>;
@@ -51,6 +50,10 @@ function PositionCard({ position, run }: { position: Position; run: (work: () =>
     <div className="line"><h3>{position.symbol} {position.quantity > 0 ? 'long' : 'short'}</h3><span>{Math.abs(position.quantity)} shares · ${position.average.toFixed(2)}</span></div>
     <p className="secondary">{position.fresh ? `Working stop ${position.brokerStops.length ? position.brokerStops.join(', ') : 'unavailable'}` : 'Position data stale'}</p>
     {position.note && <p>{position.note.pattern} · Intended stop ${position.note.intendedStop}</p>}
+    {position.fresh && position.exitPlan && <div className="proposal"><h3>Exit plan</h3>
+      {position.exitPlan.targets.length > 0 && <ol>{position.exitPlan.targets.map(target => <li key={target.price}>{'$' + target.price} {target.hint} ({target.percent}%, {target.shares} shares)</li>)}</ol>}
+      {position.exitPlan.notes.map((note, index) => <p key={index}>{note}</p>)}
+    </div>}
     {position.fresh && <form className="entry" onSubmit={identify}>
       <label>Pattern<input required maxLength={200} placeholder="Bookmap pattern" value={pattern} onChange={event => setPattern(event.target.value)} /></label>
       <label>Intended stop<input required type="number" step="any" min="0.0001" value={stop} onChange={event => setStop(event.target.value)} /></label>
@@ -58,7 +61,7 @@ function PositionCard({ position, run }: { position: Position; run: (work: () =>
     </form>}
     {position.note?.management && <p className="rule">{position.note.management.condition ? `Watching ${position.note.management.condition.label} at ${position.note.management.condition.level}` : position.note.management.summary}</p>}
     {position.pending && <div className="proposal"><p>{position.pending.summary}</p>{position.pending.condition && <p>Proposed alert at {position.pending.condition.level}</p>}<button disabled={!position.fresh} onClick={() => run(() => window.cairo.approve(position.id))}>Watch that</button></div>}
-    {position.fresh && position.note && !position.pending && <button onClick={() => run(() => window.cairo.review(position.id))}>Review management</button>}
+    {position.fresh && <button onClick={() => run(() => window.cairo.review(position.id))}>Review management</button>}
   </article>;
 }
 
@@ -66,8 +69,6 @@ function Panel() {
   const [state, setState] = useState<PanelState>();
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'off' | 'connecting' | 'listening'>('off');
-  const [date, setDate] = useState('');
-  const [runId, setRunId] = useState('');
   const [caption, setCaption] = useState('');
   const [heard, setHeard] = useState('');
   const [audioBlocked, setAudioBlocked] = useState(false);
@@ -145,7 +146,6 @@ function Panel() {
     }
   }
 
-  function select(selection: Selection) { closeVoice(); run(() => window.cairo.selection(selection)); }
   function ask(event: FormEvent) {
     event.preventDefault();
     const words = question.trim();
@@ -156,13 +156,13 @@ function Panel() {
   const alert = state?.recent[0];
   const focus = state?.positions.find(item => item.fresh && !item.note);
   const conflict = state?.bookmapMode && state.bookmapMode !== state.selection.mode;
-  const replayDateMismatch = state?.selection.mode === 'replay' && state.bookmapDate && state.bookmapDate !== state.selection.sessionDate;
+  const replayDateMismatch = state?.bookmapMode === 'replay' && state.selection.mode === 'replay' && state.bookmapDate !== state.selection.sessionDate;
 
   return <main>
-    <header><div><h1>Cairo Live</h1><p>{state?.selection.mode === 'replay' ? `Replay · ${state.selection.sessionDate}` : 'Live session'}</p></div>
+    <header><div><h1>Cairo Live</h1><p>{state?.connected && state.bookmapMode === 'replay' && (!state.bookmapDate || conflict || replayDateMismatch) ? 'Waiting for replay session' : state?.selection.mode === 'replay' ? `Replay · ${state.selection.sessionDate}` : 'Live session'}</p></div>
       <button className="primary" onClick={() => mode === 'off' ? run(startVoice) : run(async () => { closeVoice(); await window.cairo.voiceStop(); })}>{mode === 'off' ? 'Start voice' : mode === 'connecting' ? 'Cancel voice' : 'End voice'}</button></header>
     <div className="status" role="status"><span>{state?.connected ? 'Bookmap connected' : 'Waiting for Bookmap'}</span><span>{mode === 'listening' ? 'Mic listening' : mode === 'connecting' ? 'Connecting voice…' : 'Mic off'}</span><span>{state?.shadow ? 'Shadow mode' : 'Spoken alerts'}</span></div>
-    {(error || state?.localError || conflict || replayDateMismatch) && <p className="error" role="alert">{error || state?.localError || (conflict ? `Bookmap is in ${state?.bookmapMode} mode. Select the matching session.` : `Bookmap is replaying ${state?.bookmapDate}. Choose that date.`)}</p>}
+    {(error || state?.localError) && <p className="error" role="alert">{error || state?.localError}</p>}
     <section className="focus"><h2>{focus ? 'Needs your input' : 'Latest alert'}</h2><p>{focus ? `${focus.symbol}. Which pattern did you use, and where is your intended stop?` : alert?.text ?? 'Waiting for an event'}</p>
       {alert && <div className="feedback">{['Useful', 'Noisy', 'Late'].map(value => <button key={value} onClick={() => run(() => window.cairo.feedback(alert.key, value))}>{value}</button>)}</div>}
     </section>
@@ -177,6 +177,11 @@ function Panel() {
     </section>
     <section><h2>Positions</h2>{state?.positions.length ? state.positions.map(position => <PositionCard key={position.id} position={position} run={run} />) : <p className="secondary">No open positions reported</p>}</section>
     <section><h2>Daily plan {state?.plan && <span>· Revision {state.plan.revision}</span>}</h2>
+      {state?.selection.mode === 'replay' && state.replayPlans.length > 1 && <label>Replay plan <select aria-label="Replay plan" value={state.selection.replayRunId}
+        onChange={event => { const id = event.target.value; if (id) run(() => window.cairo.replayPlan(id)); }}>
+        {!state.replayPlans.includes(state.selection.replayRunId) && <option value="practice" disabled>Practice · choose a saved plan</option>}
+        {state.replayPlans.map(id => <option key={id}>{id}</option>)}
+      </select></label>}
       {state?.planError && <p className="secondary">{state.planError}{state.plan ? ' · Using last valid revision' : ''}</p>}
       {state?.plan?.watchlist.map(item => <div className="watch-plan" key={item.symbol}><div className="watch"><strong>{item.symbol}</strong><span>{state.last[item.symbol] !== undefined ? `$${state.last[item.symbol].toFixed(2)}` : 'Waiting for price'}</span><span>{state.missing.includes(item.symbol) ? 'Chart needed' : item.setups.map(setup => `${setup.direction} · ${setup.tradebook}`).join(' / ')}</span></div>
         {item.setups.flatMap(setup => setup.conditions).map(rule => <p className="secondary" key={rule.id}>{rule.label}{'level' in rule ? ` · $${rule.level}` : ''}</p>)}
@@ -186,12 +191,6 @@ function Panel() {
     <details><summary>Session and settings</summary>
       <p className="secondary">{state?.backtest}</p><button onClick={() => run(() => window.cairo.backtest())}>Choose Backtest folder</button>
       <label className="toggle"><input type="checkbox" checked={state?.shadow ?? true} onChange={event => run(() => window.cairo.shadow(event.target.checked))} /> Shadow mode</label>
-      <button onClick={() => select({ mode: 'live' })}>Use live session</button>
-      <form className="replay" onSubmit={event => { event.preventDefault(); select({ mode: 'replay', sessionDate: date || state?.bookmapDate || '', replayRunId: runId }); }}>
-        <label>Replay date<input type="date" required value={date || (state?.bookmapMode === 'replay' ? state.bookmapDate : '')} onChange={event => setDate(event.target.value)} /></label>
-        <label>Replay run ID<input required pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,79}" value={runId} onChange={event => setRunId(event.target.value)} /></label>
-        <button>Use replay session</button>
-      </form>
     </details>
     {(caption || heard) && <details><summary>Voice captions</summary>{heard && <p>You · {heard}</p>}{caption && <p>Cairo · {caption}</p>}</details>}
     <audio ref={speaker} autoPlay controls={audioBlocked} hidden={!audioBlocked} />

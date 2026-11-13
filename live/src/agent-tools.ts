@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
 import { z } from 'zod';
 import { patternSnapshot, type Advice, type Engine } from './engine.ts';
 import { marketDate, readRules, safeSourcePath, symbolName, type PriceCondition } from './plan.ts';
+import { exitInput, validateExitPlan, type ExitPlan } from './exit-plan.ts';
 
 const ticker = symbolName.describe('Uppercase Bookmap ticker');
 const symbol = z.object({ symbol: ticker }).strict();
@@ -21,6 +22,8 @@ export const toolDefinitions = {
   get_positions: { input: optionalSymbol, description: 'Read Bookmap position facts, working stops, intended stop, current advisory plan and pending proposal.' },
   get_recent_fills: { input: optionalSymbol, description: 'Read recently received Bookmap executions or simulated replay fills.' },
   get_market_context: { input: symbol, description: 'Read chart coverage, last trade price and time, and detector health for a ticker.' },
+  get_exit_context: { input: symbol, description: 'Required for exit planning. Reads original opening shares, adds, executed partials, remaining shares, daily plan, current market/depth, and exact Backtest trade-management guidelines.' },
+  prepare_exit_plan: { input: exitInput.extend({ symbol: ticker }), description: 'Validate and display an advisory exit plan. Each target has a price, short hint, and percent of ORIGINAL shares. Notes cover stop and contingencies. Cairo calculates whole shares and rejects oversizing. Use after get_exit_context.' },
   get_bookmap_depth: { input: depthQuery, description: 'Get the current displayed large bids/offers from Bookmap. Optionally query a specific level to compare with a past event. Sizes are aggregated displayed shares, never executions.' },
   get_bookmap_events: { input: eventQuery, description: 'Read Bookmap detector events including BID_REAPPEAR and OFFER_REAPPEAR. Filter by side, price and type. Use the default ten minutes for recent events; use a longer window only for earlier history.' },
   propose_alert: { input: symbol.extend({ conditionId: z.string().min(1).max(100).nullable(), summary: z.string().trim().min(1).max(340) }), description: 'Stage an advisory management proposal for the trader to review. Choose a condition ID from get_positions, or null for a written plan. This does not activate an alert or place an order.' },
@@ -28,6 +31,7 @@ export const toolDefinitions = {
 export type ToolName = keyof typeof toolDefinitions;
 export type DepthLookup = (symbol: string, price?: number) => Promise<{ asOf: number; threshold: number; bids: Array<{ price: number; displayedSize: number }>; offers: Array<{ price: number; displayedSize: number }> } | undefined>;
 export type Proposal = { id: string; symbol: string; serial: number; planHash?: string; advice: Advice };
+export type ExitProposal = { id: string; serial: number; planHash?: string; plan: ExitPlan };
 const nanosMs = (value: string) => Number(BigInt(value) / 1_000_000n);
 const iso = (value: number) => new Date(value).toISOString();
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7;
@@ -135,7 +139,9 @@ export async function bookmapEvents(engine: Engine, query: z.infer<typeof eventQ
 
 export async function runTool(name: ToolName, input: unknown, options: {
   engine: Engine; backtest: string; captures: string; depth: DepthLookup; signal: AbortSignal; stage?: (proposal: Proposal) => void;
-}) {
+  exitContexts?: Map<string, { id: string; serial: number; planHash?: string }>;
+  stageExit?: (proposal: ExitProposal) => void;
+}): Promise<unknown> {
   const { engine } = options;
   switch (name) {
     case 'search_tradebooks': return tradebooks(options.backtest, toolDefinitions[name].input.parse(input));
@@ -158,11 +164,41 @@ export async function runTool(name: ToolName, input: unknown, options: {
     }
     case 'get_market_context': {
       const { symbol } = toolDefinitions[name].input.parse(input);
-      const { connected, attached, trade, snapshot, cursor } = engine.bookmap(symbol);
+      const { connected, attached, trade, snapshot, cursor, levels } = engine.bookmap(symbol);
       const tradeMs = trade ? nanosMs(trade.eventTime) : 0;
       return { symbol, connected, attached, cursor: cursor ? iso(cursor) : null,
         lastTrade: tradeMs ? { price: trade?.price, at: iso(tradeMs), fresh: connected && (engine.selection.mode === 'replay' || Date.now() - tradeMs <= 10_000) } : null,
+        sessionLevels: levels ? { ...levels, source: 'Bookmap native market runtime', at: iso(levels.marketAsOf), fresh: connected && Date.now() - levels.marketAsOf <= 20_000 } : null,
         detector: snapshot ? { readiness: snapshot.readiness, coverage: snapshot.coverage, at: iso(nanosMs(snapshot.eventTime)) } : null };
+    }
+    case 'get_exit_context': {
+      const { symbol } = toolDefinitions[name].input.parse(input);
+      const context = engine.context(symbol);
+      const position = context.position;
+      if (!position?.fresh || !engine.current(position.id, context.serial, context.planHash)) return { status: 'No fresh open position', symbol };
+      const guidelinesPath = 'tradebooks/trade-management.md';
+      const guidelines = await readFile(safeSourcePath(options.backtest, guidelinesPath), 'utf8');
+      const setup = context.watch?.setups.find(item => item.direction === (position.quantity > 0 ? 'long' : 'short'));
+      const setupRules = setup ? await readFile(safeSourcePath(options.backtest, setup.tradebookPath), 'utf8') : undefined;
+      const [market, depth, plan] = await Promise.all([
+        runTool('get_market_context', { symbol }, options),
+        runTool('get_bookmap_depth', { symbol }, options),
+        runTool('get_trading_plan', { symbol }, options),
+      ]);
+      if (!engine.current(position.id, context.serial, context.planHash)) throw new Error('Position or plan changed. Refresh the exit context.');
+      options.exitContexts?.set(symbol, { id: position.id, serial: context.serial, planHash: context.planHash });
+      return { position, sizing: engine.sizing(position), market, depth, plan, recentPatterns: context.evidence,
+        recentFills: engine.recentFills(symbol).flatMap(item => item.records.slice(-30)),
+        guidelinesPath, guidelines, setupRules: setupRules?.slice(0, 12000) };
+    }
+    case 'prepare_exit_plan': {
+      const { symbol, targets, notes } = toolDefinitions[name].input.parse(input);
+      const context = options.exitContexts?.get(symbol);
+      if (!options.stageExit || !context || !engine.current(context.id, context.serial, context.planHash)) throw new Error('Read the current exit context first.');
+      const position = engine.find(context.id);
+      const plan = validateExitPlan({ targets, notes }, engine.sizing(position), position.quantity);
+      options.stageExit({ ...context, plan });
+      return plan;
     }
     case 'get_bookmap_events': return bookmapEvents(engine, eventQuery.parse(input), options.captures, options.signal);
     case 'get_bookmap_depth': {

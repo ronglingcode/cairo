@@ -16,12 +16,16 @@ Bookmap owns the live Schwab and Massive connections. Load the rebuilt `bookmap-
 
 The current depth tool uses the rebuilt Bookmap add-on's read-only snapshot on that same socket. Earlier detector events are available through Bookmap's retained capture files under `~/bmtrader/patterns` when capture is enabled. Enable pattern evidence for the chart to query detected reappearances and bounded replay depth. Tools report snapshot times, gaps, and missing evidence. The agent can prepare an advisory alert for review. **Watch that** activates the alert inside Cairo.
 
+On Windows, the desktop shortcut runs `launch-windows.vbs`. Each successful `npm run package` publishes the new executable path to `release/latest-windows.txt`. The shortcut reads that path when opened. Packaging leaves earlier build folders available, including any instance currently running.
+
 ## Replay
 
-1. Prepare a historical Backtest plan with `--no-after-open` and finalize it for a named replay run. Open the matching recording in Bookmap Replay and attach bmtrader to the chart. Enable pattern evidence and the desired detectors in Bookmap if testing pattern alerts.
-2. In Cairo Live select the recording date and replay run ID under **Session and settings**. Start voice. The replay date shown by Bookmap must match.
+Say **“manage this trade”** or **“manage NVDA long”**, or click **Review management** on a position. Cairo uses Backtest's `tradebooks/trade-management.md`, the confirmed daily plan, and Bookmap position and market evidence. It shows target price, reason, and percentage of original opening shares, with the calculated whole-share count. Adds and partial exits change remaining shares. Reconciled fills refresh the advisory plan automatically. Shadow mode keeps automatic updates silent.
+
+1. Open a recording in Bookmap Replay and attach bmtrader to the chart. Enable pattern evidence and the desired detectors in Bookmap if testing pattern alerts.
+2. Open Cairo Live and play the recording. Cairo follows Bookmap's mode and detects the session date from the feed. It loads a single matching saved replay plan automatically. With no plan it uses a practice session, and with several plans it offers a picker. Click **Start voice** to talk.
 3. Click **Buy (simulated)** in the replay Trade window once a recorded trade is available. After Cairo asks, give the exact pattern and intended stop. The position card also has text fields for that step. Review the management recommendation and say **“watch that”** or click **Watch that** to activate its suggested condition.
-4. Continue replay and inspect the alert and feedback log. Rewinding invalidates the simulated position and its pending advice. Use a new replay run ID to compare results with a different confirmed plan or configuration.
+4. Enter the number of shares to exit and click **Sell (simulated)**. A partial exit triggers a fresh Cairo review. Selling all held shares closes the replay position. Continue replay and inspect the alert and feedback log. Rewinding invalidates the simulated position and its pending advice. Use a new replay run ID to compare results with a different confirmed plan or configuration.
 
 ## Plan format
 

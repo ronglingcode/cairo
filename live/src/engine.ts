@@ -1,10 +1,14 @@
 import { z } from 'zod';
 import { type LoadedPlan, type PriceCondition, type Selection, marketDate, symbolName } from './plan.ts';
+import { positionSizing, type ExitPlan, type Fill } from './exit-plan.ts';
 
 const positive = z.number().finite().positive();
 const ns = z.string().regex(/^\d{1,20}$/);
 const envelope = z.object({ mode: z.enum(['live', 'replay', 'unknown']), symbol: symbolName, sourceInstanceId: z.string().min(1).max(100), epoch: positive.int(), sequence: positive.int(), delivery: z.enum(['stream', 'snapshot']).default('stream') });
-const execution = z.object({ executionId: z.string(), timestamp: positive, price: positive, quantity: positive, isBuy: z.boolean(), positionEffectIsOpen: z.boolean().optional() });
+const execution = z.object({ executionId: z.string(), orderId: z.string().optional(), timestamp: positive, price: positive, quantity: positive, isBuy: z.boolean(), positionEffectIsOpen: z.boolean().optional() });
+const marketLevels = z.object({ type: z.literal('cairo_target_market'), symbol: symbolName, sessionDate: z.string(),
+  marketAsOf: positive, vwap: positive.optional(), premarketHigh: positive.optional(), premarketLow: positive.optional(),
+  highOfDay: positive.optional().catch(undefined), lowOfDay: positive.optional().catch(undefined) });
 const depthLevel = z.object({ price: positive, displayedSize: positive });
 const liquidity = z.object({ asOf: ns, threshold: z.number().nonnegative(), bestBid: z.number().nullable().optional(), bestAsk: z.number().nullable().optional(), bids: z.array(depthLevel).max(8), offers: z.array(depthLevel).max(8) });
 export const patternSnapshot = envelope.extend({ type: z.literal('cairo_patterns'), version: z.literal(2), eventTime: ns, readiness: z.enum(['ready', 'not-ready']), coverage: z.enum(['continuous', 'warming', 'gap']), liquidity: liquidity.nullish().catch(undefined), patterns: z.array(z.object({ id: z.union([z.string(), z.number()]), type: z.string(), revision: z.number(), eventTime: ns, observedAt: ns.optional() }).passthrough()).max(64) });
@@ -12,7 +16,7 @@ const messages = z.discriminatedUnion('type', [
   envelope.extend({ type: z.literal('cairo_chart'), version: z.literal(1), attached: z.boolean() }),
   envelope.extend({ type: z.literal('cairo_trade'), version: z.literal(1), eventTime: ns, price: positive, tradeSequence: positive.int() }),
   envelope.extend({ type: z.literal('cairo_replay_reset'), version: z.literal(1), eventTime: ns }),
-  envelope.extend({ type: z.literal('cairo_replay_fill'), version: z.literal(1), eventTime: ns, executionId: z.string(), positionId: z.string().optional(), side: z.literal('BUY'), price: positive, quantity: positive, positionQuantity: positive, positionAveragePrice: positive, opening: z.boolean() }),
+  envelope.extend({ type: z.literal('cairo_replay_fill'), version: z.literal(1), eventTime: ns, executionId: z.string(), positionId: z.string().optional(), side: z.enum(['BUY', 'SELL']), price: positive, quantity: positive, positionQuantity: z.number().finite().nonnegative(), positionAveragePrice: positive, opening: z.boolean() }),
   envelope.extend({ type: z.literal('cairo_account'), version: z.literal(1), asOf: positive, positionQuantity: z.number().finite(), positionAveragePrice: positive.optional(), workingStops: z.array(z.object({ price: positive, quantity: positive })).max(128), executions: z.array(execution).max(8000) }),
   patternSnapshot,
 ]);
@@ -21,7 +25,7 @@ type Trade = Extract<Message, { type: 'cairo_trade' }>;
 type Evidence = Extract<Message, { type: 'cairo_patterns' }>['patterns'][number];
 export type Note = { pattern: string; intendedStop: number; management?: Advice };
 export type Advice = { summary: string; condition: PriceCondition | null };
-export type Position = { id: string; symbol: string; quantity: number; average: number; brokerStops: number[]; sourceTime: number; fresh: boolean; note?: Note; pending?: Advice };
+export type Position = { id: string; symbol: string; quantity: number; average: number; brokerStops: number[]; sourceTime: number; fresh: boolean; note?: Note; pending?: Advice; exitPlan?: ExitPlan };
 export type Notice = { key: string; kind: 'fill' | 'condition' | 'pattern' | 'feed' | 'advice'; text: string; symbol: string; marketMs?: number; positionId?: string; spoken: boolean };
 export type SavedState = { notes: Record<string, Note>; delivered: string[]; plan?: { revision: number; hash: string } };
 const ms = (value: string) => Number(BigInt(value) / 1_000_000n);
@@ -34,9 +38,10 @@ export class Engine {
   private lanes = new Map<string, { source: string; epoch: number; sequence: number }>();
   private positions = new Map<string, Position>();
   private trades = new Map<string, Trade>();
+  private levels = new Map<string, z.infer<typeof marketLevels>>();
   private patterns = new Map<string, { time: number; seen: Set<string>; evidence: Evidence[]; ready: boolean; snapshot: z.infer<typeof patternSnapshot> }>();
   private retiredPatternEpochs = new Map<string, { source: string; epoch: number }>();
-  private fills = new Map<string, { asOf: number; records: Array<{ executionId: string; timestamp: number; price: number; quantity: number; isBuy: boolean }> }>();
+  private fills = new Map<string, { asOf: number; records: Fill[] }>();
   private scope = 0;
   private sent: Set<string>;
   private recent: Notice[] = [];
@@ -49,22 +54,24 @@ export class Engine {
   readonly selection: Selection;
   private readonly notify: (notice: Notice) => void;
   private readonly reviewPattern?: (position: Position, marketMs: number) => void;
+  private readonly reviewFill?: (position: Position) => void;
 
   constructor(selection: Selection, saved: SavedState, notify: (notice: Notice) => void, clock = Date.now,
-    reviewPattern?: (position: Position, marketMs: number) => void) {
+    reviewPattern?: (position: Position, marketMs: number) => void, reviewFill?: (position: Position) => void) {
     this.selection = selection;
     this.notify = notify;
     this.notes = saved.notes;
     this.sent = new Set(saved.delivered);
     this.clock = clock;
     this.reviewPattern = reviewPattern;
+    this.reviewFill = reviewFill;
   }
 
   setShadow(shadow: boolean) { this.shadow = shadow; }
   setPlan(plan?: LoadedPlan, error = '') {
     if (this.active?.hash !== plan?.hash) {
       this.serial++;
-      for (const position of this.positions.values()) position.pending = undefined;
+      for (const position of this.positions.values()) { position.pending = undefined; position.exitPlan = undefined; }
     }
     this.active = plan;
     this.error = error;
@@ -76,7 +83,7 @@ export class Engine {
   connect() {
     this.feed = true;
     this.connectedAt = this.clock();
-    this.lanes.clear(); this.charts.clear(); this.trades.clear(); this.patterns.clear(); this.retiredPatternEpochs.clear(); this.accounts.clear(); this.fills.clear();
+    this.lanes.clear(); this.charts.clear(); this.trades.clear(); this.levels.clear(); this.patterns.clear(); this.retiredPatternEpochs.clear(); this.accounts.clear(); this.fills.clear();
   }
 
   disconnect() {
@@ -108,6 +115,14 @@ export class Engine {
 
   accept(raw: unknown) {
     if (!this.feed) return;
+    const levels = marketLevels.safeParse(raw);
+    if (levels.success) {
+      const value = levels.data;
+      const now = this.clock();
+      if (this.selection.mode === 'live' && value.sessionDate === marketDate(now) && marketDate(value.marketAsOf) === value.sessionDate &&
+        value.marketAsOf <= now + 2000 && value.marketAsOf >= (this.levels.get(value.symbol)?.marketAsOf ?? 0)) this.levels.set(value.symbol, value);
+      return;
+    }
     const parsed = messages.safeParse(raw);
     if (!parsed.success) return;
     const message = parsed.data;
@@ -123,7 +138,7 @@ export class Engine {
       case 'cairo_chart':
         if (message.attached) this.charts.set(symbol, message.mode);
         else {
-          this.charts.delete(symbol); this.trades.delete(symbol); this.patterns.delete(symbol); this.serial++;
+          this.charts.delete(symbol); this.trades.delete(symbol); this.levels.delete(symbol); this.patterns.delete(symbol); this.serial++;
           if (message.mode === 'replay') { this.scope++; this.fills.delete(symbol); }
           const position = this.positions.get(symbol);
           if (position) {
@@ -143,15 +158,21 @@ export class Engine {
         const prior = this.positions.get(symbol);
         const prefix = `${symbol}:replay:${message.sourceInstanceId}:${message.epoch}:`;
         const id = message.positionId ? prefix + message.positionId : !message.opening && prior?.id.startsWith(prefix) ? prior.id : prefix + message.executionId;
-        this.putPosition({ id, symbol, quantity: message.positionQuantity, average: message.positionAveragePrice, brokerStops: [], sourceTime: ms(message.eventTime), fresh: true });
         const records = this.fills.get(symbol)?.records ?? [];
-        if (!records.some(fill => fill.executionId === message.executionId)) this.fills.set(symbol, { asOf: ms(message.eventTime), records: [...records, { executionId: message.executionId, timestamp: ms(message.eventTime), price: message.price, quantity: message.quantity, isBuy: true }].slice(-100) });
-        if (message.opening && message.delivery === 'stream') this.opening(symbol, id, message.price, ms(message.eventTime));
+        if (records.some(fill => fill.executionId === message.executionId)) return;
+        this.fills.set(symbol, { asOf: ms(message.eventTime), records: [...records, { executionId: message.executionId, orderId: message.executionId, timestamp: ms(message.eventTime), price: message.price, quantity: message.quantity, isBuy: message.side === 'BUY' }].slice(-1000) });
+        if (message.positionQuantity === 0) {
+          if (this.positions.delete(symbol)) this.serial++;
+          return;
+        }
+        this.putPosition({ id, symbol, quantity: message.positionQuantity, average: message.positionAveragePrice, brokerStops: [], sourceTime: ms(message.eventTime), fresh: true });
+        if (message.delivery === 'stream' && message.opening) this.opening(symbol, id, message.price, ms(message.eventTime));
+        if (message.delivery === 'stream' && (!prior || prior.quantity !== message.positionQuantity)) this.reviewFill?.(this.positions.get(symbol)!);
         return;
       }
       case 'cairo_account': {
         if (marketDate(message.asOf) !== date || this.clock() - message.asOf > 20_000 || message.asOf - this.clock() > 2000) return;
-        this.fills.set(symbol, { asOf: message.asOf, records: message.executions.slice().sort((a, b) => a.timestamp - b.timestamp).slice(-100) });
+        this.fills.set(symbol, { asOf: message.asOf, records: message.executions });
         const previous = this.accounts.get(symbol);
         const ids = new Set(message.executions.map(fill => fill.executionId));
         this.accounts.set(symbol, { quantity: message.positionQuantity, fills: ids });
@@ -171,7 +192,18 @@ export class Engine {
         const savedId = !isNew && !prior && openings.slice().reverse().map(fill => `${symbol}:live:${fill.executionId}`).find(id => this.notes[id]);
         const id = prior && !reversal && Math.sign(prior.quantity) === Math.sign(message.positionQuantity) ? prior.id : savedId || `${symbol}:live:${key}`;
         this.putPosition({ id, symbol, quantity: message.positionQuantity, average: message.positionAveragePrice, brokerStops: [...new Set(message.workingStops.map(stop => stop.price))], sourceTime: message.asOf, fresh: true });
-        if (isNew) this.opening(symbol, id, newFill!.price, newFill!.timestamp);
+        if (isNew) {
+          this.opening(symbol, id, newFill!.price, newFill!.timestamp);
+          this.reviewFill?.(this.positions.get(symbol)!);
+        }
+        else if (message.delivery === 'stream' && prior?.id === id &&
+          (prior.quantity !== message.positionQuantity || (previous && [...ids].some(fill => !previous.fills.has(fill))))) {
+          this.serial++;
+          const position = this.positions.get(symbol)!;
+          position.exitPlan = undefined;
+          position.pending = undefined;
+          this.reviewFill?.(position);
+        }
         return;
       }
       case 'cairo_trade': this.trade(message); return;
@@ -205,7 +237,7 @@ export class Engine {
     const prior = this.positions.get(value.symbol);
     const unchanged = prior?.id === value.id && prior.quantity === value.quantity && prior.average === value.average && prior.brokerStops.join() === value.brokerStops.join();
     if (!unchanged) this.serial++;
-    this.positions.set(value.symbol, { ...value, note: this.notes[value.id], pending: unchanged ? prior.pending : undefined });
+    this.positions.set(value.symbol, { ...value, note: this.notes[value.id], pending: unchanged ? prior.pending : undefined, exitPlan: unchanged ? prior.exitPlan : undefined });
   }
 
   private opening(symbol: string, id: string, price: number, time: number) {
@@ -256,11 +288,19 @@ export class Engine {
     const snapshot = this.patterns.get(symbol)?.snapshot;
     const trade = this.trades.get(symbol);
     const cursor = Math.max(snapshot ? ms(snapshot.eventTime) : 0, trade ? ms(trade.eventTime) : 0, this.fills.get(symbol)?.asOf ?? 0);
-    return { connected: this.feed, attached: this.charts.has(symbol), cursor, snapshot, trade };
+    return { connected: this.feed, attached: this.charts.has(symbol), cursor, snapshot, trade, levels: this.levels.get(symbol) };
   }
 
   recentFills(symbol?: string) {
     return [...this.fills].filter(([ticker]) => !symbol || symbol === ticker).map(([ticker, fills]) => ({ symbol: ticker, asOf: fills.asOf, fresh: this.feed && (this.selection.mode === 'replay' || this.clock() - fills.asOf <= 20_000), records: fills.records }));
+  }
+
+  sizing(position: Position) { return positionSizing(position.quantity, this.fills.get(position.symbol)?.records ?? []); }
+
+  setExitPlan(id: string, serial: number, planHash: string | undefined, plan: ExitPlan) {
+    if (!this.current(id, serial, planHash)) return false;
+    this.find(id).exitPlan = plan;
+    return true;
   }
 
   planForAgent() {
@@ -278,6 +318,7 @@ export class Engine {
     if (!pattern.trim() || !Number.isFinite(intendedStop) || intendedStop <= 0) throw new Error('Enter a pattern and positive stop price');
     this.serial++;
     position.pending = undefined;
+    position.exitPlan = undefined;
     this.notes[id] = { pattern, intendedStop, management: position.note?.management };
     position.note = this.notes[id];
     return position;

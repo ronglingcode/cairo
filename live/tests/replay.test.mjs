@@ -91,6 +91,19 @@ test('reviews a fresh pattern for a held position outside the watchlist', () => 
   assert.equal(alerts.filter(item => item.kind === 'pattern').length, 0);
 });
 
+test('replay sells refresh management, preserve the original size, and clear the closed position', () => {
+  const reviews = [];
+  const engine = new Engine(replay, { notes: {}, delivered: [] }, () => {}, Date.now, undefined, position => reviews.push(position.quantity));
+  engine.connect();
+  engine.accept(fill(1, { quantity: 100, positionQuantity: 100, delivery: 'snapshot' }));
+  engine.accept(fill(2, { side: 'SELL', executionId: 'partial', quantity: 20, positionQuantity: 80, opening: false }));
+  assert.deepEqual(reviews, [80]);
+  assert.equal(engine.sizing(engine.snapshot().positions[0]).originalShares, 100);
+  engine.accept(fill(3, { side: 'SELL', executionId: 'close', quantity: 80, positionQuantity: 0, opening: false }));
+  assert.deepEqual(engine.snapshot().positions, []);
+  assert.equal(engine.recentFills('META')[0].records.at(-1).isBuy, false);
+});
+
 test('restores replay notes from a reconnect snapshot and does not ask again', () => {
   const alerts = [];
   const engine = new Engine(replay, { notes: {}, delivered: [] }, item => alerts.push(item));

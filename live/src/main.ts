@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,8 @@ import { loadPlan, marketDate, readRules, selectionSchema, type Selection } from
 import { openAIKey, speakLocal, Voice } from './voice.ts';
 import { spokenPrice } from './spoken-price.ts';
 import { Agent } from './agent.ts';
-import { runTool, type DepthLookup, type Proposal } from './agent-tools.ts';
+import { runTool, type DepthLookup, type ExitProposal, type Proposal } from './agent-tools.ts';
+import { formatExitPlan } from './exit-plan.ts';
 
 const base = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 app.setName('Cairo Live');
@@ -40,9 +41,15 @@ let voiceStatus = 'Voice disconnected';
 let localError = '';
 let bookmapMode = '';
 let bookmapDate = '';
+let replayPlans: string[] = [];
+let replayChoice: { date: string; id: string } | undefined;
+let following = false;
+const pendingBookmap: unknown[] = [];
 let dirty = true;
 const speech: Array<{ notice: Notice; owner: Engine }> = [];
 const lastReview = new Map<string, number>();
+const fillReviews = new Map<string, ReturnType<typeof setTimeout>>();
+const runningFillReviews = new Set<string>();
 const partialAnswers = new Map<string, { pattern?: string; stop?: number }>();
 let speaking = false;
 const key = () => openAIKey(resolve(settings.backtest, '../secrets/storeSecrets.js'));
@@ -122,36 +129,111 @@ function reviewPattern(position: Position, marketMs: number) {
   });
 }
 
-async function select(selection: Selection) {
+function reviewFill(position: Position) {
+  const owner = engine;
+  const scope = owner.conversationScope;
+  clearTimeout(fillReviews.get(position.id));
+  const start = () => {
+    fillReviews.delete(position.id);
+    if (engine !== owner || scope !== owner.conversationScope || shuttingDown || transition) return;
+    const latest = owner.snapshot().positions.find(item => item.id === position.id && item.fresh);
+    if (!latest) return;
+    if (runningFillReviews.has(position.id)) { fillReviews.set(position.id, setTimeout(start, 900)); return; }
+    runningFillReviews.add(position.id);
+    void management(latest, true, true, 'Bookmap reconciled a position fill').catch(error => {
+      if (engine === owner) void append({ type: 'review_error', symbol: position.symbol, message: (error as Error).message });
+    }).finally(() => runningFillReviews.delete(position.id));
+  };
+  fillReviews.set(position.id, setTimeout(start, 650));
+}
+
+async function select(selection: Selection, keepConnection = false) {
   transition = true;
   try {
-    voice.stop();
+    if (!keepConnection) voice.stop();
     agent.reset();
     chat = []; chatBusy = false;
     speech.length = 0;
     lastReview.clear();
     partialAnswers.clear();
     const previous = socket;
-    socket = undefined;
-    previous?.close();
-    clearTimeout(reconnect);
+    if (!keepConnection) {
+      socket = undefined;
+      previous?.close();
+      clearTimeout(reconnect);
+    }
     await persist();
     settings = { ...settings, selection };
     date = selection.mode === 'replay' ? selection.sessionDate : marketDate();
     directory = join(dataDir, 'sessions', date, selection.mode === 'replay' ? `replay-${selection.replayRunId}` : 'live');
     await mkdir(directory, { recursive: true });
     const state: SavedState = await readFile(join(directory, 'state.json'), 'utf8').then(text => JSON.parse(text)).catch(() => ({ notes: {}, delivered: [] }));
-    engine = new Engine(selection, state && typeof state.notes === 'object' && state.notes && Array.isArray(state.delivered) ? state : { notes: {}, delivered: [] }, notice, Date.now, reviewPattern);
+    engine = new Engine(selection, state && typeof state.notes === 'object' && state.notes && Array.isArray(state.delivered) ? state : { notes: {}, delivered: [] }, notice, Date.now, reviewPattern, reviewFill);
     engine.setShadow(selection.mode === 'live');
     revision = '';
     lastSaved = '';
     localError = '';
-    bookmapMode = '';
-    bookmapDate = '';
+    if (!keepConnection) { bookmapMode = ''; bookmapDate = ''; replayPlans = []; }
     await refreshPlan();
     await atomic(configPath, JSON.stringify(settings, null, 2) + '\n');
-    connect();
+    if (keepConnection && socket?.readyState === WebSocket.OPEN) engine.connect();
+    if (!keepConnection) connect();
   } finally { transition = false; dirty = true; }
+}
+
+async function listReplayPlans(backtest: string, sessionDate: string) {
+  const folder = join(backtest, 'data', 'processed', ...sessionDate.split('-'), 'bookmap_replay');
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  const plans = await Promise.all(entries.filter(entry => entry.isDirectory()).map(async entry => {
+    const selection = selectionSchema.safeParse({ mode: 'replay', sessionDate, replayRunId: entry.name });
+    if (!selection.success) return undefined;
+    return await loadPlan(backtest, selection.data).then(() => entry.name).catch(() => undefined);
+  }));
+  return plans.filter((id): id is string => id !== undefined).sort();
+}
+
+async function followBookmap(client: WebSocket) {
+  if (following || transition || socket !== client || client.readyState !== WebSocket.OPEN) return;
+  if (bookmapMode === 'replay' && !bookmapDate) return;
+  if (bookmapMode !== 'live' && bookmapMode !== 'replay') return;
+  following = true;
+  try {
+    const mode = bookmapMode;
+    const sessionDate = bookmapDate;
+    let next: Selection = { mode: 'live' };
+    if (mode === 'replay') {
+      replayPlans = await listReplayPlans(settings.backtest, sessionDate);
+      const remembered = replayChoice?.date === sessionDate && replayPlans.includes(replayChoice.id) ? replayChoice.id : undefined;
+      const id = remembered ?? (replayPlans.length === 1 ? replayPlans[0] : 'practice');
+      next = { mode: 'replay', sessionDate, replayRunId: id };
+    } else replayPlans = [];
+    if (socket !== client || client.readyState !== WebSocket.OPEN || mode !== bookmapMode || (mode === 'replay' && sessionDate !== bookmapDate)) return;
+    if (JSON.stringify(next) !== JSON.stringify(engine.selection)) {
+      const prior = engine.selection;
+      await select(next, true);
+      if (next.mode === 'replay' && prior.mode === 'replay' && next.sessionDate === prior.sessionDate && socket === client) {
+        // Request a fresh Bookmap baseline when changing the plan within the same recording.
+        socket = undefined;
+        pendingBookmap.length = 0;
+        client.close();
+        connect();
+        return;
+      }
+    }
+    if (socket === client && client.readyState === WebSocket.OPEN && mode === bookmapMode && (mode !== 'replay' || sessionDate === bookmapDate)) {
+      for (const event of pendingBookmap.splice(0)) acceptBookmap(event);
+    }
+  } catch { localError = 'Could not follow the Bookmap session'; }
+  finally { following = false; dirty = true; }
+}
+
+function acceptBookmap(event: unknown) {
+  const scope = engine.conversationScope;
+  engine.accept(event);
+  if (engine.conversationScope !== scope) {
+    agent.reset(); chat = []; chatBusy = false; speech.length = 0; partialAnswers.clear(); lastReview.clear();
+  }
+  dirty = true;
 }
 
 async function refreshPlan() {
@@ -184,7 +266,11 @@ async function persist() {
 function connect() {
   const client = new WebSocket(localEndpoint, { maxPayload: 3_000_000, handshakeTimeout: 3500 });
   socket = client;
-  client.on('open', () => { if (socket === client) { engine.connect(); dirty = true; } });
+  client.on('open', () => {
+    if (socket !== client) return;
+    bookmapMode = ''; bookmapDate = ''; pendingBookmap.length = 0;
+    engine.connect(); dirty = true;
+  });
   client.on('message', data => {
     if (socket !== client) return;
     try {
@@ -193,16 +279,26 @@ function connect() {
         depthWaiters.get(event.requestId)?.(event);
         return;
       }
-      if (['cairo_chart', 'cairo_trade', 'cairo_patterns'].includes(event.type)) {
-        if (event.mode === 'live' || event.mode === 'replay') bookmapMode = event.mode;
-        if (typeof event.eventTime === 'string' && /^\d{1,20}$/.test(event.eventTime)) bookmapDate = marketDate(Number(BigInt(event.eventTime) / 1_000_000n));
+      if (['cairo_chart', 'cairo_trade', 'cairo_patterns', 'cairo_replay_fill', 'cairo_replay_reset', 'cairo_account'].includes(event.type)) {
+        if (event.mode === 'live' || event.mode === 'replay') {
+          if (bookmapMode && bookmapMode !== event.mode) { bookmapDate = ''; pendingBookmap.length = 0; }
+          bookmapMode = event.mode;
+        }
+        if (event.mode === 'replay' && typeof event.eventTime === 'string' && /^\d{1,20}$/.test(event.eventTime)) {
+          const time = Number(BigInt(event.eventTime) / 1_000_000n);
+          if (time > 0) bookmapDate = marketDate(time);
+        }
       }
-      const scope = engine.conversationScope;
-      engine.accept(event);
-      if (engine.conversationScope !== scope) {
-        agent.reset(); chat = []; chatBusy = false; speech.length = 0; partialAnswers.clear(); lastReview.clear();
+      const mismatch = bookmapMode && (engine.selection.mode !== bookmapMode ||
+        (engine.selection.mode === 'replay' && engine.selection.sessionDate !== bookmapDate));
+      if (following || mismatch) {
+        if (pendingBookmap.length < 8192) pendingBookmap.push(event);
+        if (mismatch) void followBookmap(client);
+      } else {
+        for (const pending of pendingBookmap.splice(0)) acceptBookmap(pending);
+        acceptBookmap(event);
+        if (bookmapMode === 'replay' && event.type === 'cairo_chart') void followBookmap(client);
       }
-      dirty = true;
     } catch { /* Ignore malformed loopback messages. */ }
   });
   client.on('error', () => { if (socket === client) dirty = true; });
@@ -241,6 +337,8 @@ async function askAgent(words: string, options: { background?: boolean; display?
   const backtest = settings.backtest;
   const captures = join(homedir(), 'bmtrader', 'patterns');
   let staged: Proposal | undefined;
+  let exit: ExitProposal | undefined;
+  const exitContexts = new Map<string, Omit<ExitProposal, 'plan'>>();
   const draft: ChatMessage = { role: 'assistant', text: '' };
   if (!options.background) {
     if (chatBusy) throw new Error('Cairo is answering another question');
@@ -251,7 +349,11 @@ async function askAgent(words: string, options: { background?: boolean; display?
   try {
     const answer = await agent.ask(words, String(scope), async (name, input, signal) => {
       if (!current()) throw new Error('The session or replay cursor changed');
-      const result = await runTool(name, input, { engine: owner, backtest, captures, depth: lookupDepth, signal,
+      const result = await runTool(name, input, { engine: owner, backtest, captures, depth: lookupDepth, signal, exitContexts,
+        stageExit: proposal => {
+          if (!current() || signal.aborted || (options.position && options.position.id !== proposal.id)) throw new Error('This position changed');
+          exit = proposal;
+        },
         stage: proposal => {
           if (!current() || signal.aborted || (options.position && options.position.id !== proposal.id)) throw new Error('This position changed');
           if (staged) throw new Error('Only one proposal may be staged per response');
@@ -264,6 +366,19 @@ async function askAgent(words: string, options: { background?: boolean; display?
     } });
     if (!current()) throw new Error('The session or replay cursor changed');
     let result = answer;
+    if (exit) {
+      const position = owner.find(exit.id);
+      const unchanged = JSON.stringify(position.exitPlan) === JSON.stringify(exit.plan);
+      if (!owner.setExitPlan(exit.id, exit.serial, exit.planHash, exit.plan)) throw new Error('The position or plan changed. Check the latest exit plan.');
+      result = formatExitPlan(exit.plan);
+      dirty = true;
+      if (options.background && !unchanged) {
+        notice({ key: randomUUID(), kind: 'advice', symbol: position.symbol, positionId: position.id, spoken: !owner.shadowMode,
+          text: position.symbol + ' exit plan updated. ' + result });
+      }
+    } else if (options.position) {
+      result = 'No validated exit plan was produced. ' + answer;
+    }
     if (staged) {
       const position = owner.find(staged.id);
       const active = position.note?.management;
@@ -284,11 +399,10 @@ async function askAgent(words: string, options: { background?: boolean; display?
   }
 }
 
-async function management(position: Position, speakViaNotice: boolean, automatic = false) {
-  if (!position.note) throw new Error('Confirm the pattern and intended stop first');
-  const description = automatic ? 'Bookmap has new detector evidence' : 'Review my management';
+async function management(position: Position, speakViaNotice: boolean, automatic = false, reason?: string) {
+  const description = reason ?? (automatic ? 'Bookmap has new detector evidence' : 'Review my management');
   const result = await askAgent(
-    description + ' for ' + position.symbol + '. Read current position and latest evidence. Keep the active plan if appropriate. Only propose a material advisory change.',
+    description + ' for ' + position.symbol + '. Re-evaluate the exit plan with get_exit_context and prepare_exit_plan. If information is missing, include what is missing in notes. Keep supported targets if still appropriate.',
     { background: automatic, display: description + ' for ' + position.symbol, position },
   );
   if (speakViaNotice && !automatic) voice.speak(result);
@@ -336,7 +450,7 @@ const voice = new Voice(async (words, passive) => {
   return askAgent(words);
 }, state => { voiceStatus = state; dirty = true; });
 
-function snapshot() { return { ...engine.snapshot(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, chat, chatBusy }; }
+function snapshot() { return { ...engine.snapshot(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, replayPlans, chat, chatBusy }; }
 
 function ipc(name: string, handle: (...args: unknown[]) => unknown) {
   ipcMain.handle(`cairo:${name}`, (event, ...args) => {
@@ -349,6 +463,9 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else app.whenReady().then(async () => {
   await mkdir(dataDir, { recursive: true });
   settings = await readFile(configPath, 'utf8').then(text => settingsSchema.parse(JSON.parse(text))).catch(() => defaults);
+  if (settings.selection.mode === 'replay' && settings.selection.replayRunId !== 'practice') {
+    replayChoice = { date: settings.selection.sessionDate, id: settings.selection.replayRunId };
+  }
   await select(settings.selection);
   win = new BrowserWindow({ title: 'Cairo Live', width: 540, height: 780, minWidth: 380, minHeight: 450, autoHideMenuBar: true,
     webPreferences: { preload: join(base, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false },
@@ -364,7 +481,12 @@ else app.whenReady().then(async () => {
   ipc('snapshot', snapshot);
   ipc('ask', value => askAgent(z.string().trim().min(1).max(2000).parse(value)));
   ipc('cancel-question', () => agent.cancel());
-  ipc('selection', value => { if (transition) throw new Error('Session is changing'); return select(selectionSchema.parse(value)); });
+  ipc('replay-plan', async value => {
+    const id = z.string().parse(value);
+    if (!replayPlans.includes(id) || bookmapMode !== 'replay' || !bookmapDate || !socket || following || transition) throw new Error('Replay plans are unavailable');
+    replayChoice = { date: bookmapDate, id };
+    await followBookmap(socket);
+  });
   ipc('backtest', async () => {
     const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Choose Backtest repository' });
     if (result.canceled) return;
@@ -408,7 +530,10 @@ else app.whenReady().then(async () => {
     refreshing = true;
     try {
       if (settings.selection.mode === 'live' && date !== marketDate()) await select(settings.selection);
-      else await refreshPlan();
+      else {
+        await refreshPlan();
+        if (socket && bookmapMode === 'replay') await followBookmap(socket);
+      }
     } catch { localError = 'Unable to load the selected session'; dirty = true; }
     finally { refreshing = false; }
   }, 2500);
