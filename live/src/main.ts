@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
-import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { access, appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +11,7 @@ import { loadPlan, marketDate, readRules, selectionSchema, type Selection } from
 import { openAIKey, speakLocal, Voice } from './voice.ts';
 import { spokenPrice } from './spoken-price.ts';
 import { Agent } from './agent.ts';
+import { openRouterKey } from './openrouter.ts';
 import { runTool, type DepthLookup, type ExitProposal, type Proposal } from './agent-tools.ts';
 import { formatExitPlan } from './exit-plan.ts';
 
@@ -53,9 +54,19 @@ const runningFillReviews = new Set<string>();
 const partialAnswers = new Map<string, { pattern?: string; stop?: number }>();
 let speaking = false;
 const key = () => openAIKey(resolve(settings.backtest, '../secrets/storeSecrets.js'));
+
+async function findBacktest(configured: string) {
+  const isBacktest = (path: string) => access(join(path, 'tradebooks', 'master_tradebooks.md')).then(() => true, () => false);
+  if (await isBacktest(configured)) return configured;
+  for (let folder = app.isPackaged ? dirname(process.execPath) : base; ; folder = dirname(folder)) {
+    const candidate = join(folder, 'Backtest');
+    if (await isBacktest(candidate)) return candidate;
+    if (dirname(folder) === folder) return configured;
+  }
+}
 const binaryName = process.platform === 'win32' ? 'opencode.exe' : 'opencode';
 const agent = new Agent(join(dataDir, 'agent'), app.isPackaged ? join(process.resourcesPath, binaryName) :
-  join(base, 'node_modules', '@opencode', 'cli', 'bin', binaryName), join(base, 'dist-electron', 'agent-plugin.mjs'), key, process.env.CAIRO_LIVE_REASONING_MODEL);
+  join(base, 'node_modules', '@opencode', 'cli', 'bin', binaryName), join(base, 'dist-electron', 'agent-plugin.mjs'), openRouterKey, process.env.CAIRO_LIVE_REASONING_MODEL);
 const depthPacket = z.object({
   requestId: z.string(), symbol: z.string(), version: z.literal(1),
   asOf: z.string().regex(/^\d{1,20}$/).optional(), orderbook: z.object({
@@ -463,6 +474,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else app.whenReady().then(async () => {
   await mkdir(dataDir, { recursive: true });
   settings = await readFile(configPath, 'utf8').then(text => settingsSchema.parse(JSON.parse(text))).catch(() => defaults);
+  settings = { ...settings, backtest: await findBacktest(settings.backtest) };
   if (settings.selection.mode === 'replay' && settings.selection.replayRunId !== 'practice') {
     replayChoice = { date: settings.selection.sessionDate, id: settings.selection.replayRunId };
   }

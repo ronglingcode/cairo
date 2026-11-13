@@ -45,7 +45,7 @@ export class Agent {
   private readonly key: () => Promise<string>;
   private readonly model: string;
 
-  constructor(root: string, binary: string, plugin: string, key: () => Promise<string>, model = 'gpt-6-luna') {
+  constructor(root: string, binary: string, plugin: string, key: () => Promise<string>, model = 'deepseek/deepseek-v4-flash') {
     this.root = root;
     this.binary = binary;
     this.plugin = plugin;
@@ -85,8 +85,8 @@ export class Agent {
         { action: 'cairo_tool', resource: '*', effect: 'allow' },
       ],
       providers: { [providerID]: {
-        package: '@opencode/ai/providers/openai/responses',
-        settings: { baseURL: 'https://api.openai.com/v1', apiKey: '{env:CAIRO_LIVE_MODEL_KEY}' },
+        package: '@opencode/ai/providers/openai-compatible',
+        settings: { baseURL: 'https://openrouter.ai/api/v1', apiKey: '{env:CAIRO_LIVE_MODEL_KEY}' },
         models: { [this.model]: { name: this.model, capabilities: { tools: true } } },
       } },
     };
