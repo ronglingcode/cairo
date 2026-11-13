@@ -52,6 +52,7 @@ const lastReview = new Map<string, number>();
 const fillReviews = new Map<string, ReturnType<typeof setTimeout>>();
 const runningFillReviews = new Set<string>();
 const partialAnswers = new Map<string, { pattern?: string; stop?: number }>();
+const recentExitSpeech = new Map<string, number>();
 let speaking = false;
 const key = () => openAIKey(resolve(settings.backtest, '../secrets/storeSecrets.js'));
 
@@ -69,6 +70,7 @@ const agent = new Agent(join(dataDir, 'agent'), app.isPackaged ? join(process.re
   join(base, 'node_modules', '@opencode', 'cli', 'bin', binaryName), join(base, 'dist-electron', 'agent-plugin.mjs'), openRouterKey, process.env.CAIRO_LIVE_REASONING_MODEL);
 const depthPacket = z.object({
   requestId: z.string(), symbol: z.string(), version: z.literal(1),
+  mode: z.enum(['live', 'replay']).optional(),
   asOf: z.string().regex(/^\d{1,20}$/).optional(), orderbook: z.object({
     effectiveWallThreshold: z.number(), largeBids: z.array(z.tuple([z.number().positive(), z.number().positive()])),
     largeAsks: z.array(z.tuple([z.number().positive(), z.number().positive()])),
@@ -94,6 +96,34 @@ function append(entry: object, target = directory) {
   return disk(async () => { await appendFile(join(target, 'alerts.jsonl'), JSON.stringify({ recordedAt: new Date().toISOString(), ...entry }) + '\n', 'utf8'); });
 }
 
+function logConversation(entry: object) {
+  const target = directory;
+  if (target) void disk(async () => {
+    await appendFile(join(target, 'conversation.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n', 'utf8');
+  });
+}
+
+function briefVoice(text: string) {
+  const clean = text.replace(/[*#`]/g, '').trim();
+  if (clean.includes('\n1. ') || /^1\. \$/.test(clean)) {
+    const first = clean.split('\n').find(line => /^1\. \$/.test(line))?.slice(3);
+    if (first) return 'Next exit: ' + first.slice(0, 105) + '. Full plan on screen.';
+  }
+  const line = clean.split('\n').find(value => value.trim()) ?? '';
+  const sentence = line.match(/^.*?[.!?](?:\s|$)/)?.[0] ?? line;
+  return sentence.length <= 160 ? sentence.trim() : sentence.slice(0, 155).replace(/\s+\S*$/, '') + '…';
+}
+
+function claimExitSpeech(text: string) {
+  const nextExit = /Next exit: .+?\. Full plan on screen\./i.exec(text)?.[0].toLowerCase();
+  if (!nextExit) return true;
+  const now = Date.now();
+  for (const [key, time] of recentExitSpeech) if (now - time >= 12_000) recentExitSpeech.delete(key);
+  if (recentExitSpeech.has(nextExit)) return false;
+  recentExitSpeech.set(nextExit, now);
+  return true;
+}
+
 function send(channel: string, payload: unknown) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
@@ -108,13 +138,21 @@ async function drainSpeech() {
       if (notice.positionId) {
         try { owner.find(notice.positionId); } catch { continue; }
       }
-      voice.context(`The local speaker is announcing: ${notice.text}. Wait for the trader's reply before speaking.`);
+      if (!claimExitSpeech(notice.text)) continue;
+      voice.context(`Cairo alert: ${notice.text}. Wait for the trader's reply.`);
+      voice.ignoreInput(true);
+      send('cairo:mute-input', true);
       send('cairo:mute-output', true);
       try { await speakLocal(notice.text); }
       catch {
         send('cairo:mute-output', false);
         if (!voice.speak(notice.text)) { localError = 'Spoken alert unavailable. The alert is visible in the panel.'; dirty = true; }
-      } finally { send('cairo:mute-output', false); }
+      } finally {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        voice.ignoreInput(false);
+        send('cairo:mute-input', false);
+        send('cairo:mute-output', false);
+      }
     }
   } finally { speaking = false; }
 }
@@ -123,6 +161,7 @@ function notice(item: Notice) {
   void append({ type: 'alert', planRevision: engine.loaded?.plan.revision, evidence: engine.context(item.symbol).evidence, ...item });
   dirty = true;
   if (item.spoken) {
+    logConversation({ role: 'assistant', channel: 'announcement', text: item.text });
     const entry = { notice: item, owner: engine };
     if (item.kind === 'fill' || item.kind === 'feed') speech.unshift(entry);
     else speech.push(entry);
@@ -167,6 +206,7 @@ async function select(selection: Selection, keepConnection = false) {
     speech.length = 0;
     lastReview.clear();
     partialAnswers.clear();
+    recentExitSpeech.clear();
     const previous = socket;
     if (!keepConnection) {
       socket = undefined;
@@ -324,20 +364,24 @@ function connect() {
 
 const lookupDepth: DepthLookup = (symbol, price) => new Promise(resolve => {
   const client = socket;
-  if (!client || client.readyState !== WebSocket.OPEN || engine.selection.mode !== 'live') { resolve(undefined); return; }
+  if (!client || client.readyState !== WebSocket.OPEN) { resolve(undefined); return; }
+  const owner = engine;
+  const scope = owner.conversationScope;
+  const mode = owner.selection.mode;
   const requestId = randomUUID();
   const finish = (raw?: unknown) => {
     clearTimeout(timer); depthWaiters.delete(requestId);
     const checked = depthPacket.safeParse(raw);
     const event = checked.success && checked.data;
-    if (socket !== client || !event || event.symbol !== symbol || !event.asOf || !event.orderbook) { resolve(undefined); return; }
+    if (socket !== client || owner !== engine || scope !== owner.conversationScope || !event || event.symbol !== symbol ||
+        (event.mode ?? 'live') !== mode || !event.asOf || !event.orderbook) { resolve(undefined); return; }
     const convert = (levels: Array<[number, number]>) => levels.map(([price, displayedSize]) => ({ price, displayedSize }));
     resolve({ asOf: Number(BigInt(event.asOf) / 1_000_000n), threshold: event.orderbook.effectiveWallThreshold,
       bids: convert(event.orderbook.largeBids), offers: convert(event.orderbook.largeAsks) });
   };
   const timer = setTimeout(finish, 700);
   depthWaiters.set(requestId, finish);
-  client.send(JSON.stringify({ type: 'cairo_depth_request', requestId, symbol, price }), error => { if (error) finish(); });
+  client.send(JSON.stringify({ type: 'cairo_depth_request', requestId, symbol, price, mode }), error => { if (error) finish(); });
 });
 
 async function askAgent(words: string, options: { background?: boolean; display?: string; position?: Position } = {}) {
@@ -379,13 +423,15 @@ async function askAgent(words: string, options: { background?: boolean; display?
     let result = answer;
     if (exit) {
       const position = owner.find(exit.id);
-      const unchanged = JSON.stringify(position.exitPlan) === JSON.stringify(exit.plan);
+      const previous = position.exitPlan?.targets[0];
+      const next = exit.plan.targets[0];
+      const sameNextExit = !!position.exitPlan && previous?.price === next?.price && previous?.shares === next?.shares;
       if (!owner.setExitPlan(exit.id, exit.serial, exit.planHash, exit.plan)) throw new Error('The position or plan changed. Check the latest exit plan.');
       result = formatExitPlan(exit.plan);
       dirty = true;
-      if (options.background && !unchanged) {
+      if (options.background && !sameNextExit) {
         notice({ key: randomUUID(), kind: 'advice', symbol: position.symbol, positionId: position.id, spoken: !owner.shadowMode,
-          text: position.symbol + ' exit plan updated. ' + result });
+          text: position.symbol + '. ' + briefVoice(result) });
       }
     } else if (options.position) {
       result = 'No validated exit plan was produced. ' + answer;
@@ -395,12 +441,13 @@ async function askAgent(words: string, options: { background?: boolean; display?
       const active = position.note?.management;
       const sameCondition = active && active.condition?.id === staged.advice.condition?.id && active.condition?.level === staged.advice.condition?.level;
       if (options.background && sameCondition) staged = undefined;
-      else if (!position.pending && owner.propose(staged.id, staged.serial, staged.planHash, staged.advice, options.background)) {
+      else if (!position.pending && owner.propose(staged.id, staged.serial, staged.planHash, staged.advice, options.background && !exit)) {
         result += '\nReview the proposal in Cairo Live or say “watch that” to accept.';
       } else result = 'The position or plan changed before the proposal could be shown. Ask again for current guidance.';
     }
     if (!options.background) draft.text = result;
     void append({ type: 'agent_answer', question: options.display ?? words, answer: result, automatic: !!options.background });
+    logConversation({ role: 'assistant', channel: options.background ? 'automatic' : 'agent', text: result });
     return result;
   } catch (error) {
     if (!options.background && current()) draft.text = error instanceof Error ? error.message : 'OpenCode could not answer';
@@ -416,11 +463,12 @@ async function management(position: Position, speakViaNotice: boolean, automatic
     description + ' for ' + position.symbol + '. Re-evaluate the exit plan with get_exit_context and prepare_exit_plan. If information is missing, include what is missing in notes. Keep supported targets if still appropriate.',
     { background: automatic, display: description + ' for ' + position.symbol, position },
   );
-  if (speakViaNotice && !automatic) voice.speak(result);
+  const spoken = briefVoice(result);
+  if (speakViaNotice && !automatic && claimExitSpeech(spoken)) voice.speak(spoken);
   return result;
 }
 
-const voice = new Voice(async (words, passive) => {
+async function handleVoice(words: string, passive: boolean) {
   const owner = engine;
   const positions = owner.snapshot().positions.filter(position => position.fresh);
   const normalized = words.toLowerCase().replace(/[^a-z0-9.]+/g, ' ');
@@ -459,6 +507,19 @@ const voice = new Voice(async (words, passive) => {
   }
   if (passive && /^(?:hi|hey|hello|thanks|thank you)[.! ]*$/i.test(words)) return;
   return askAgent(words);
+}
+
+const voice = new Voice(async (words, passive) => {
+  logConversation({ role: 'user', channel: 'voice', text: words });
+  try {
+    const response = await handleVoice(words, passive);
+    if (!response) return;
+    const spoken = briefVoice(response);
+    return claimExitSpeech(spoken) ? spoken : undefined;
+  } catch (error) {
+    logConversation({ role: 'assistant', channel: 'voice-error', text: error instanceof Error ? error.message : 'Could not verify the request' });
+    throw error;
+  }
 }, state => { voiceStatus = state; dirty = true; });
 
 function snapshot() { return { ...engine.snapshot(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, replayPlans, chat, chatBusy }; }
@@ -491,7 +552,12 @@ else app.whenReady().then(async () => {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   ipc('snapshot', snapshot);
-  ipc('ask', value => askAgent(z.string().trim().min(1).max(2000).parse(value)));
+  ipc('ask', value => {
+    const text = z.string().trim().min(1).max(2000).parse(value);
+    logConversation({ role: 'user', channel: 'typed', text });
+    return askAgent(text);
+  });
+  ipc('voice-caption', value => logConversation({ role: 'assistant', channel: 'voice', delta: z.string().max(2000).parse(value) }));
   ipc('cancel-question', () => agent.cancel());
   ipc('replay-plan', async value => {
     const id = z.string().parse(value);

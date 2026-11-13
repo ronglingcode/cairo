@@ -16,6 +16,8 @@ OpenCode reasoning uses `deepseek/deepseek-v4-flash` through OpenRouter. Set `OP
 
 Bookmap owns the live Schwab and Massive connections. Load the rebuilt `bookmap-plugin` JAR. Cairo subscribes to the Bookmap loopback feed on port 8765. The live panel starts in shadow mode, which records alerts in the local log. Turn it off to hear notices. App state is saved per session under the OS application data directory for Cairo Live in `state.json` and `alerts.jsonl`.
 
+Each live date and replay run also has a local `conversation.jsonl` with typed questions, recognized voice turns, agent answers, spoken transcript fragments, and audible announcements. Cairo keeps the last exit plan on screen while an open position is being reassessed, and labels it when it needs review or the position feed is stale.
+
 The current depth tool uses the rebuilt Bookmap add-on's read-only snapshot on that same socket. Earlier detector events are available through Bookmap's retained capture files under `~/bmtrader/patterns` when capture is enabled. Enable pattern evidence for the chart to query detected reappearances and bounded replay depth. Tools report snapshot times, gaps, and missing evidence. The agent can prepare an advisory alert for review. **Watch that** activates the alert inside Cairo.
 
 On Windows, the desktop shortcut runs `launch-windows.vbs`. Each successful `npm run package` publishes the new executable path to `release/latest-windows.txt`. The shortcut reads that path when opened. Packaging leaves earlier build folders available, including any instance currently running.

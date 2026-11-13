@@ -11,6 +11,8 @@ declare global {
       ask(text: string): Promise<string>;
       cancelQuestion(): Promise<void>;
       onMuteOutput(handler: (muted: boolean) => void): () => void;
+      onMuteInput(handler: (muted: boolean) => void): () => void;
+      voiceCaption(value: string): Promise<void>;
       replayPlan(id: string): Promise<void>; backtest(): Promise<void>; shadow(value: boolean): Promise<void>;
       identify(id: string, note: { pattern: string; intendedStop: number }): Promise<string>;
       review(id: string): Promise<string>; approve(id: string): Promise<void>;
@@ -50,7 +52,8 @@ function PositionCard({ position, run }: { position: Position; run: (work: () =>
     <div className="line"><h3>{position.symbol} {position.quantity > 0 ? 'long' : 'short'}</h3><span>{Math.abs(position.quantity)} shares · ${position.average.toFixed(2)}</span></div>
     <p className="secondary">{position.fresh ? `Working stop ${position.brokerStops.length ? position.brokerStops.join(', ') : 'unavailable'}` : 'Position data stale'}</p>
     {position.note && <p>{position.note.pattern} · Intended stop ${position.note.intendedStop}</p>}
-    {position.fresh && position.exitPlan && <div className="proposal"><h3>Exit plan</h3>
+    {position.exitPlan && <div className="proposal"><h3>Exit plan</h3>
+      {(!position.fresh || position.exitPlanNeedsReview) && <p className="secondary">{position.fresh ? 'Previous plan · reassessment needed' : 'Previous plan · feed stale'}</p>}
       {position.exitPlan.targets.length > 0 && <ol>{position.exitPlan.targets.map(target => <li key={target.price}>{'$' + target.price} {target.hint} ({target.percent}%, {target.shares} shares)</li>)}</ol>}
       {position.exitPlan.notes.map((note, index) => <p key={index}>{note}</p>)}
     </div>}
@@ -75,6 +78,7 @@ function Panel() {
   const [question, setQuestion] = useState('');
   const voice = useRef<AudioSession | null>(null);
   const speaker = useRef<HTMLAudioElement>(null);
+  const micMuted = useRef(false);
 
   function closeVoice() {
     const current = voice.current;
@@ -93,8 +97,12 @@ function Panel() {
   useEffect(() => {
     const off = window.cairo.onSnapshot(setState);
     const unmute = window.cairo.onMuteOutput(muted => { if (speaker.current) speaker.current.muted = muted; });
+    const input = window.cairo.onMuteInput(muted => {
+      micMuted.current = muted;
+      voice.current?.mic?.getAudioTracks().forEach(track => { track.enabled = !muted; });
+    });
     void window.cairo.snapshot().then(setState).catch(error => setError(error.message));
-    return () => { off(); unmute(); closeVoice(); };
+    return () => { off(); unmute(); input(); closeVoice(); };
   }, []);
 
   useEffect(() => {
@@ -125,7 +133,10 @@ function Panel() {
         if (voice.current !== active) return;
         const event = JSON.parse(data);
         if (event.type === 'session.started') { clearTimeout(active.timer); setMode('listening'); }
-        if (event.type === 'session.output_transcript.delta') setCaption(value => (value + event.delta).slice(-450));
+        if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string') {
+          setCaption(value => (value + event.delta).slice(-450));
+          void window.cairo.voiceCaption(event.delta).catch(() => undefined);
+        }
         if (event.type === 'session.input_transcript.delta') setHeard(value => (value + event.delta).slice(-450));
         if (event.type === 'session.closed') closeVoice();
       });
@@ -133,7 +144,7 @@ function Panel() {
       const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       if (voice.current !== active) { mic.getTracks().forEach(track => track.stop()); return; }
       active.mic = mic;
-      for (const track of mic.getAudioTracks()) peer.addTrack(track, mic);
+      for (const track of mic.getAudioTracks()) { track.enabled = !micMuted.current; peer.addTrack(track, mic); }
       await peer.setLocalDescription(await peer.createOffer());
       await waitForIce(peer);
       if (voice.current !== active) return;
@@ -166,6 +177,7 @@ function Panel() {
     <section className="focus"><h2>{focus ? 'Needs your input' : 'Latest alert'}</h2><p>{focus ? `${focus.symbol}. Which pattern did you use, and where is your intended stop?` : alert?.text ?? 'Waiting for an event'}</p>
       {alert && <div className="feedback">{['Useful', 'Noisy', 'Late'].map(value => <button key={value} onClick={() => run(() => window.cairo.feedback(alert.key, value))}>{value}</button>)}</div>}
     </section>
+    <section className="positions"><h2>Positions</h2>{state?.positions.length ? state.positions.map(position => <PositionCard key={position.id} position={position} run={run} />) : <p className="secondary">No open positions reported</p>}</section>
     <section><h2>Ask Cairo</h2>
       {state?.chat.length ? <div className="chat" role="log" aria-label="Cairo conversation">
         {state.chat.map((message, index) => <p key={index}><strong>{message.role === 'user' ? 'You' : 'Cairo'}</strong> {message.text || 'Checking…'}</p>)}
@@ -175,7 +187,6 @@ function Panel() {
         {state?.chatBusy ? <button type="button" onClick={() => run(() => window.cairo.cancelQuestion())}>Cancel</button> : <button disabled={!question.trim()}>Ask</button>}
       </form>
     </section>
-    <section><h2>Positions</h2>{state?.positions.length ? state.positions.map(position => <PositionCard key={position.id} position={position} run={run} />) : <p className="secondary">No open positions reported</p>}</section>
     <section><h2>Daily plan {state?.plan && <span>· Revision {state.plan.revision}</span>}</h2>
       {state?.selection.mode === 'replay' && state.replayPlans.length > 1 && <label>Replay plan <select aria-label="Replay plan" value={state.selection.replayRunId}
         onChange={event => { const id = event.target.value; if (id) run(() => window.cairo.replayPlan(id)); }}>

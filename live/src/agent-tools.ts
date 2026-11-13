@@ -208,11 +208,11 @@ export async function runTool(name: ToolName, input: unknown, options: {
       const replay = engine.selection.mode === 'replay';
       const display = book.snapshot?.readiness === 'ready' && book.snapshot?.coverage === 'continuous' ? book.snapshot.liquidity : undefined;
       const snapshotDepth = display && (!replay || nanosMs(display.asOf) <= book.cursor) ? { ...display, asOf: nanosMs(display.asOf) } : undefined;
-      const requestedDepth = replay ? undefined : await options.depth(symbol, price);
+      const requestedDepth = await options.depth(symbol, price);
       const depth = requestedDepth ?? snapshotDepth;
       if (!depth?.asOf) return { status: 'No fresh Bookmap depth snapshot', symbol };
       const select = (levels: typeof depth.bids) => levels.filter(level => !price || near(level.price, price)).sort((a, b) => b.displayedSize - a.displayedSize).slice(0, limit);
-      return { symbol, asOf: iso(depth.asOf), fresh: replay || Date.now() - depth.asOf <= 10_000,
+      return { symbol, asOf: iso(depth.asOf), fresh: replay ? book.cursor - depth.asOf <= 10_000 : Date.now() - depth.asOf <= 10_000,
         mode: engine.selection.mode, threshold: depth.threshold, price, bids: select(depth.bids), offers: select(depth.offers),
         scope: price && requestedDepth ? 'Aggregate displayed shares at the requested price' : 'Bounded aggregate displayed levels at or above the threshold; omitted prices may have smaller liquidity' };
     }

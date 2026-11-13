@@ -25,7 +25,7 @@ type Trade = Extract<Message, { type: 'cairo_trade' }>;
 type Evidence = Extract<Message, { type: 'cairo_patterns' }>['patterns'][number];
 export type Note = { pattern: string; intendedStop: number; management?: Advice };
 export type Advice = { summary: string; condition: PriceCondition | null };
-export type Position = { id: string; symbol: string; quantity: number; average: number; brokerStops: number[]; sourceTime: number; fresh: boolean; note?: Note; pending?: Advice; exitPlan?: ExitPlan };
+export type Position = { id: string; symbol: string; quantity: number; average: number; brokerStops: number[]; sourceTime: number; fresh: boolean; note?: Note; pending?: Advice; exitPlan?: ExitPlan; exitPlanNeedsReview?: boolean };
 export type Notice = { key: string; kind: 'fill' | 'condition' | 'pattern' | 'feed' | 'advice'; text: string; symbol: string; marketMs?: number; positionId?: string; spoken: boolean };
 export type SavedState = { notes: Record<string, Note>; delivered: string[]; plan?: { revision: number; hash: string } };
 const ms = (value: string) => Number(BigInt(value) / 1_000_000n);
@@ -71,7 +71,7 @@ export class Engine {
   setPlan(plan?: LoadedPlan, error = '') {
     if (this.active?.hash !== plan?.hash) {
       this.serial++;
-      for (const position of this.positions.values()) { position.pending = undefined; position.exitPlan = undefined; }
+      for (const position of this.positions.values()) { position.pending = undefined; position.exitPlanNeedsReview = !!position.exitPlan; }
     }
     this.active = plan;
     this.error = error;
@@ -200,7 +200,7 @@ export class Engine {
           (prior.quantity !== message.positionQuantity || (previous && [...ids].some(fill => !previous.fills.has(fill))))) {
           this.serial++;
           const position = this.positions.get(symbol)!;
-          position.exitPlan = undefined;
+          position.exitPlanNeedsReview = !!position.exitPlan;
           position.pending = undefined;
           this.reviewFill?.(position);
         }
@@ -237,7 +237,9 @@ export class Engine {
     const prior = this.positions.get(value.symbol);
     const unchanged = prior?.id === value.id && prior.quantity === value.quantity && prior.average === value.average && prior.brokerStops.join() === value.brokerStops.join();
     if (!unchanged) this.serial++;
-    this.positions.set(value.symbol, { ...value, note: this.notes[value.id], pending: unchanged ? prior.pending : undefined, exitPlan: unchanged ? prior.exitPlan : undefined });
+    const exitPlan = prior?.id === value.id ? prior.exitPlan : undefined;
+    this.positions.set(value.symbol, { ...value, note: this.notes[value.id], pending: unchanged ? prior.pending : undefined, exitPlan,
+      exitPlanNeedsReview: !!exitPlan && (!unchanged || prior?.exitPlanNeedsReview === true) });
   }
 
   private opening(symbol: string, id: string, price: number, time: number) {
@@ -299,7 +301,9 @@ export class Engine {
 
   setExitPlan(id: string, serial: number, planHash: string | undefined, plan: ExitPlan) {
     if (!this.current(id, serial, planHash)) return false;
-    this.find(id).exitPlan = plan;
+    const position = this.find(id);
+    position.exitPlan = plan;
+    position.exitPlanNeedsReview = false;
     return true;
   }
 
@@ -318,7 +322,7 @@ export class Engine {
     if (!pattern.trim() || !Number.isFinite(intendedStop) || intendedStop <= 0) throw new Error('Enter a pattern and positive stop price');
     this.serial++;
     position.pending = undefined;
-    position.exitPlan = undefined;
+    position.exitPlanNeedsReview = !!position.exitPlan;
     this.notes[id] = { pattern, intendedStop, management: position.note?.management };
     position.note = this.notes[id];
     return position;

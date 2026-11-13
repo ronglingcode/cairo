@@ -20,6 +20,7 @@ section h2, details summary { margin-bottom: 5px; }
 .focus p { font-size: 16px; }
 .error { background: #40272a; color: #ffc3bb; padding: 8px 11px; border-radius: 5px; overflow-wrap: anywhere; }
 .position { margin-top: 8px; padding: 11px; background: #18222e; border-radius: 6px; }
+.positions { position: sticky; top: 0; z-index: 1; background: #11171f; max-height: 48vh; overflow: auto; }
 .position p + p, .position p + button, .position button + p { margin-top: 5px; }
 .entry, .replay, .feedback { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 7px; margin: 9px 0; }
 .entry label, .replay label { display: grid; font-size: 12px; gap: 2px; }

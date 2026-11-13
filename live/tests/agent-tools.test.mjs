@@ -34,7 +34,7 @@ test('replay tools return displayed depth and only evidence visible in the activ
   const result = await bookmapEvents(engine, { symbol: 'META', price: 188.31, side: 'bid', minutes: 30, limit: 10 }, capture, new AbortController().signal);
   assert.deepEqual(result.events.map(item => item.id), ['recent', 'earlier']);
   const depth = await runTool('get_bookmap_depth', { symbol: 'META', price: 188.31 }, {
-    engine, backtest: temp, captures: capture, depth: async () => { throw new Error('Replay must use its cached snapshot'); }, signal: new AbortController().signal,
+    engine, backtest: temp, captures: capture, depth: async () => undefined, signal: new AbortController().signal,
   });
   assert.deepEqual(depth.bids, [{ price: 188.31, displayedSize: 7143 }]);
   engine.accept({ ...envelope, epoch: 2, type: 'cairo_replay_reset', version: 1, eventTime: ns(now - 5000) });

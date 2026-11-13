@@ -96,8 +96,13 @@ test('replay sells refresh management, preserve the original size, and clear the
   const engine = new Engine(replay, { notes: {}, delivered: [] }, () => {}, Date.now, undefined, position => reviews.push(position.quantity));
   engine.connect();
   engine.accept(fill(1, { quantity: 100, positionQuantity: 100, delivery: 'snapshot' }));
+  const context = engine.context('META');
+  const plan = { originalShares: 100, remaining: 100, targets: [], notes: ['Watch the retest low'] };
+  assert.equal(engine.setExitPlan(context.position.id, context.serial, context.planHash, plan), true);
   engine.accept(fill(2, { side: 'SELL', executionId: 'partial', quantity: 20, positionQuantity: 80, opening: false }));
   assert.deepEqual(reviews, [80]);
+  assert.deepEqual(engine.snapshot().positions[0].exitPlan, plan);
+  assert.equal(engine.snapshot().positions[0].exitPlanNeedsReview, true);
   assert.equal(engine.sizing(engine.snapshot().positions[0]).originalShares, 100);
   engine.accept(fill(3, { side: 'SELL', executionId: 'close', quantity: 80, positionQuantity: 0, opening: false }));
   assert.deepEqual(engine.snapshot().positions, []);
