@@ -61,3 +61,72 @@ test('active trade context includes trader notes and excludes a previously close
   assert.equal(context.traderIntendedStop, 147);
   assert.deepEqual(context.brokerWorkingStops, [146]);
 });
+
+test('credits a better-price partial to the previous VWAP target and rejects a repeat after reconnect', () => {
+  const now = Date.parse('2025-12-04T16:00:00Z');
+  const init = { mode: 'live' };
+  const engine = new Engine(init, { notes: {}, delivered: [] }, () => {}, () => now);
+  const entry = { ...fill(now - 900, 500, true, 'entry'), positionEffectIsOpen: true };
+  const partial = { ...fill(now - 500, 125, false, 'partial'), price: 152.06 };
+  function account(target, sequence, quantity, executions, delivery) {
+    target.accept({ type: 'cairo_account', version: 1, mode: 'live', symbol: 'META', sourceInstanceId: 'fixture',
+      epoch: 1, sequence, delivery, asOf: now, positionQuantity: quantity, positionAveragePrice: 150.46, workingStops: [], executions });
+  }
+  engine.connect();
+  account(engine, 1, 500, [entry], 'snapshot');
+  const context = engine.context('META');
+  const target = { price: 151.38, hint: 'VWAP — partial into VWAP', percent: 25, shares: 125 };
+  assert.equal(engine.setExitPlan(context.position.id, context.serial, context.planHash,
+    { originalShares: 500, remaining: 500, targets: [target], notes: [] }), true);
+  account(engine, 2, 375, [entry, partial], 'stream');
+  const reboot = new Engine(init, engine.saved(), () => {}, () => now);
+  reboot.connect();
+  account(reboot, 1, 375, [entry, partial], 'snapshot');
+  const position = reboot.context('META').position;
+  const [progress] = activeTradeContext(reboot, position).priorTargetFillProgress;
+  assert.equal(progress.creditedShares, 125);
+  assert.equal(progress.complete, true);
+  assert.throws(() => reboot.checkExitPlan(position, { originalShares: 500, remaining: 375,
+    targets: [{ price: 151.62, hint: 'Partial into the VWAP', percent: 20, shares: 100 }], notes: [] }), /Exit already credited/);
+});
+
+for (const side of ['long', 'short']) {
+  test(`credits ${side} exit fills near the target and prevents repeating its allocation`, () => {
+    const now = Date.parse('2025-12-04T16:00:00Z');
+    const isLong = side === 'long';
+    const direction = isLong ? 1 : -1;
+    const engine = new Engine({ mode: 'live' }, { notes: {}, delivered: [] }, () => {}, () => now);
+    engine.connect();
+    const executions = [{ ...fill(now - 100, 300, isLong, 'entry'), positionEffectIsOpen: true }];
+    function account(sequence, remaining) {
+      engine.accept({ type: 'cairo_account', version: 1, mode: 'live', symbol: 'META', sourceInstanceId: 'fixture',
+        epoch: 1, sequence, delivery: 'snapshot', asOf: now, positionQuantity: remaining * direction, positionAveragePrice: 158,
+        workingStops: [], executions });
+    }
+    const target = { price: 160, hint: 'First target', shares: 100, percent: 100 / 3 };
+    const nextTarget = { ...target, price: isLong ? 164 : 156, hint: 'Second target' };
+    const plan = (remaining, targets) => ({ originalShares: 300, remaining, targets, notes: [] });
+    function setPlan(remaining, targets) {
+      const { position, serial, planHash } = engine.context('META');
+      return engine.setExitPlan(position.id, serial, planHash, plan(remaining, targets));
+    }
+    account(1, 300);
+    assert.equal(setPlan(300, [target, nextTarget]), true);
+    executions.push({ ...fill(now - 80, 20, !isLong, 'outside'), price: 160 - direction * 1.01 });
+    account(2, 280);
+    assert.deepEqual(engine.exitProgress(engine.context('META').position), []);
+    executions.push({ ...fill(now - 50, 60, !isLong, 'near'), price: 160 - direction * 0.99 });
+    account(3, 220);
+    assert.deepEqual(engine.context('META').position.exitPlan.targets.map(item => item.shares), [40, 100]);
+    const moved = { ...target, price: 160 + direction * 0.10, shares: 40 };
+    assert.equal(setPlan(220, [moved, nextTarget]), true);
+    executions.push({ ...fill(now - 20, 40, !isLong, 'near-again'), price: moved.price - direction * 0.85 });
+    account(4, 180);
+    const position = engine.context('META').position;
+    assert.deepEqual(engine.exitProgress(position).map(item => item.filled), [100]);
+    assert.deepEqual(position.exitPlan.targets, [nextTarget]);
+    assert.throws(() => setPlan(180, [target]), /Exit already credited/);
+    assert.throws(() => setPlan(180, [{ ...target, price: 160 - direction * 0.5 }]), /Exit already credited/);
+    assert.equal(setPlan(180, [nextTarget]), true);
+  });
+}

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type LoadedPlan, type PriceCondition, type Selection, marketDate, symbolName } from './plan.ts';
-import { positionSizing, tradeExecutions, type ExitPlan, type Fill } from './exit-plan.ts';
+import { exitCreditKey, exitTargetKey, outstandingExitPlan, positionSizing, reconcileExitRecord, tradeExecutions, type ExitPlan, type ExitRecord, type Fill } from './exit-plan.ts';
 
 const positive = z.number().finite().positive();
 const ns = z.string().regex(/^\d{1,20}$/);
@@ -28,7 +28,7 @@ export type Note = { pattern: string; intendedStop: number; management?: Advice 
 export type Advice = { summary: string; condition: PriceCondition | null };
 export type Position = { id: string; symbol: string; quantity: number; average: number; brokerStops: number[]; sourceTime: number; fresh: boolean; note?: Note; pending?: Advice; exitPlan?: ExitPlan; exitPlanNeedsReview?: boolean };
 export type Notice = { key: string; kind: 'fill' | 'condition' | 'pattern' | 'feed' | 'advice'; text: string; symbol: string; marketMs?: number; positionId?: string; spoken: boolean };
-export type SavedState = { notes: Record<string, Note>; delivered: string[]; plan?: { revision: number; hash: string } };
+export type SavedState = { notes: Record<string, Note>; delivered: string[]; plan?: { revision: number; hash: string }; exitRecords?: Record<string, ExitRecord> };
 const ms = (value: string) => Number(BigInt(value) / 1_000_000n);
 
 export class Engine {
@@ -51,6 +51,7 @@ export class Engine {
   private shadow = true;
   private serial = 0;
   private notes: SavedState['notes'];
+  private exitRecords: Record<string, ExitRecord>;
   private clock: () => number;
   readonly selection: Selection;
   private readonly notify: (notice: Notice) => void;
@@ -62,6 +63,7 @@ export class Engine {
     this.selection = selection;
     this.notify = notify;
     this.notes = saved.notes;
+    this.exitRecords = saved.exitRecords ?? {};
     this.sent = new Set(saved.delivered);
     this.clock = clock;
     this.reviewPattern = reviewPattern;
@@ -238,7 +240,10 @@ export class Engine {
     const prior = this.positions.get(value.symbol);
     const unchanged = prior?.id === value.id && prior.quantity === value.quantity && prior.average === value.average && prior.brokerStops.join() === value.brokerStops.join();
     if (!unchanged) this.serial++;
-    const exitPlan = prior?.id === value.id ? prior.exitPlan : undefined;
+    const previousRecord = this.exitRecords[value.id];
+    const record = previousRecord && reconcileExitRecord(previousRecord, this.tradeHistory(value).records, value.quantity);
+    if (record) this.exitRecords[value.id] = record;
+    const exitPlan = record ? outstandingExitPlan(record, Math.abs(value.quantity)) : undefined;
     this.positions.set(value.symbol, { ...value, note: this.notes[value.id], pending: unchanged ? prior.pending : undefined, exitPlan,
       exitPlanNeedsReview: !!exitPlan && (!unchanged || prior?.exitPlanNeedsReview === true) });
   }
@@ -302,9 +307,32 @@ export class Engine {
 
   tradeHistory(position: Position) { return tradeExecutions(position.quantity, this.fills.get(position.symbol)?.records ?? []); }
 
+  exitProgress(position: Position) { return Object.values(this.exitRecords[position.id]?.progress ?? {}); }
+
+  checkExitPlan(position: Position, plan: ExitPlan) {
+    const record = this.exitRecords[position.id];
+    const targetCredits: NonNullable<ExitRecord['targetCredits']> = {};
+    if (!record) return targetCredits;
+    const matched = new Set<string>();
+    for (const target of plan.targets) {
+      const key = exitCreditKey(record, target);
+      const previous = record.progress[key];
+      if (!previous) continue;
+      if (target.shares > previous.target.shares - previous.filled || matched.has(key)) {
+        throw new Error(`Exit already credited: ${previous.filled} of ${previous.target.shares} shares at ${previous.target.hint}. Remove completed targets or use only the unfilled shares.`);
+      }
+      matched.add(key);
+      targetCredits[exitTargetKey(target)] = { key, previouslyFilled: previous.filled };
+    }
+    return targetCredits;
+  }
+
   setExitPlan(id: string, serial: number, planHash: string | undefined, plan: ExitPlan) {
     if (!this.current(id, serial, planHash)) return false;
     const position = this.find(id);
+    const targetCredits = this.checkExitPlan(position, plan);
+    const progress = this.exitRecords[id]?.progress ?? {};
+    this.exitRecords[id] = { plan, progress, targetCredits, fillsSeen: this.tradeHistory(position).records.map(fill => fill.executionId) };
     position.exitPlan = plan;
     position.exitPlanNeedsReview = false;
     return true;
@@ -370,7 +398,7 @@ export class Engine {
   }
 
   private tradeTime(symbol: string) { const trade = this.trades.get(symbol); return trade && ms(trade.eventTime); }
-  saved(): SavedState { return { notes: this.notes, delivered: [...this.sent], plan: this.active && { revision: this.active.plan.revision, hash: this.active.hash } }; }
+  saved(): SavedState { return { notes: this.notes, delivered: [...this.sent], plan: this.active && { revision: this.active.plan.revision, hash: this.active.hash }, exitRecords: this.exitRecords }; }
   snapshot() {
     return { selection: this.selection, connected: this.feed, shadow: this.shadow, plan: this.active?.plan, planPath: this.active?.path, planError: this.error,
       positions: [...this.positions.values()], recent: this.recent, missing: this.active?.plan.watchlist.map(item => item.symbol).filter(symbol => !this.charts.has(symbol)) ?? [],

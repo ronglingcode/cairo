@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { z } from 'zod';
 import { patternSnapshot, type Advice, type Engine, type Position } from './engine.ts';
 import { marketDate, readRules, safeSourcePath, symbolName, type PriceCondition } from './plan.ts';
-import { exitInput, validateExitPlan, type ExitPlan } from './exit-plan.ts';
+import { exitInput, exitPriceBuffer, validateExitPlan, type ExitPlan } from './exit-plan.ts';
 
 const ticker = symbolName.describe('Uppercase Bookmap ticker');
 const symbol = z.object({ symbol: ticker }).strict();
@@ -82,6 +82,8 @@ export function activeTradeContext(engine: Engine, position: Position, includePl
     traderConfirmedPattern: position.note?.pattern ?? null, traderIntendedStop: position.note?.intendedStop ?? null,
     brokerWorkingStops: position.brokerStops, ...(includePlan ? { confirmedPlan: dailyPlan(engine, position.symbol) } : {}),
     exitPlan: position.exitPlan ?? null, exitPlanNeedsReview: !!position.exitPlanNeedsReview,
+    priorTargetFillProgress: engine.exitProgress(position).map(({ target, filled }) =>
+      ({ ...target, priceBuffer: exitPriceBuffer(target.price), creditedShares: filled, unfilledShares: target.shares - filled, complete: filled >= target.shares })),
     historyComplete: history.complete, fillCount: history.records.length, fills: history.records.slice(-fillLimit).map(({ action, price, quantity, timestamp }) =>
       ({ action, price, quantity, at: iso(timestamp) })),
   };
@@ -292,6 +294,7 @@ export async function runTool(name: ToolName, input: unknown, options: ToolOptio
       if (!options.stageExit || !context || !engine.current(context.id, context.serial, context.planHash)) throw new Error('Read the current exit context first.');
       const position = engine.find(context.id);
       const plan = validateExitPlan({ targets, notes }, engine.sizing(position), position.quantity);
+      engine.checkExitPlan(position, plan);
       options.stageExit({ ...context, plan });
       return plan;
     }
