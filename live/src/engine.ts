@@ -310,8 +310,13 @@ export class Engine {
     return true;
   }
 
-  planForAgent() {
-    const cursor = Math.max(0, ...[...this.charts.keys()].map(symbol => this.bookmap(symbol).cursor));
+  agentSymbols() {
+    return [...new Set([...this.charts.keys(), ...this.positions.keys(), ...this.fills.keys(), ...this.levels.keys(),
+      ...(this.active?.plan.watchlist.map(item => item.symbol) ?? [])])];
+  }
+
+  planForAgent(symbol?: string) {
+    const cursor = symbol ? this.bookmap(symbol).cursor : Math.max(0, ...[...this.charts.keys()].map(ticker => this.bookmap(ticker).cursor));
     return this.availablePlan(cursor);
   }
 

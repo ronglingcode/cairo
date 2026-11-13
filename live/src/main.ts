@@ -12,7 +12,7 @@ import { openAIKey, speakLocal, Voice } from './voice.ts';
 import { spokenPrice } from './spoken-price.ts';
 import { Agent } from './agent.ts';
 import { openRouterKey } from './openrouter.ts';
-import { activeTradeContext, runTool, type DepthLookup, type ExitProposal, type Proposal } from './agent-tools.ts';
+import { mentionedSymbols, minuteSeries, runTool, tradingSnapshot, type DepthLookup, type ExitProposal, type MinuteLookup, type Proposal } from './agent-tools.ts';
 import { formatExitPlan } from './exit-plan.ts';
 
 const base = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,7 +51,7 @@ const speech: Array<{ notice: Notice; owner: Engine }> = [];
 const lastReview = new Map<string, number>();
 const fillReviews = new Map<string, ReturnType<typeof setTimeout>>();
 const runningFillReviews = new Map<string, AbortController>();
-let tradeFocus: { symbol: string; direction: string } | undefined;
+let tradeFocus: string | undefined;
 const partialAnswers = new Map<string, { pattern?: string; stop?: number }>();
 const recentExitSpeech = new Map<string, number>();
 let speaking = false;
@@ -77,10 +77,24 @@ const depthPacket = z.object({
     largeAsks: z.array(z.tuple([z.number().positive(), z.number().positive()])),
   }).optional(),
 });
-const depthWaiters = new Map<string, (event?: unknown) => void>();
+const minutePacket = minuteSeries.extend({ requestId: z.string(), symbol: z.string(), version: z.literal(1), mode: z.enum(['live', 'replay']) });
+const bookmapWaiters = new Map<string, (event?: unknown) => void>();
 let chatBusy = false;
 type ChatMessage = { role: 'user' | 'assistant'; text: string };
 let chat: ChatMessage[] = [];
+let replayConversation = randomUUID();
+type ConversationNote = ChatMessage & { symbol?: string; local?: boolean };
+let conversationNotes: ConversationNote[] = [];
+
+function rememberLocalTurn(role: ChatMessage['role'], text: string, symbol?: string) {
+  conversationNotes.push({ role, text, symbol, local: true });
+  logConversation({ role, channel: 'local', text, symbol, local: true });
+}
+
+function localReply(text: string, symbol?: string) {
+  rememberLocalTurn('assistant', text, symbol);
+  return text;
+}
 
 async function atomic(path: string, content: string) {
   const temp = `${path}.${randomUUID()}.tmp`;
@@ -157,6 +171,7 @@ async function drainSpeech() {
 
 function notice(item: Notice) {
   void append({ type: 'alert', planRevision: engine.loaded?.plan.revision, evidence: engine.context(item.symbol).evidence, ...item });
+  if (item.kind === 'fill') rememberLocalTurn('assistant', item.text, item.symbol);
   dirty = true;
   if (item.spoken) {
     const entry = { notice: item, owner: engine };
@@ -189,7 +204,7 @@ function reviewFill(position: Position) {
   const scope = owner.conversationScope;
   clearTimeout(fillReviews.get(position.id));
   runningFillReviews.get(position.id)?.abort(new Error('Superseded by a newer fill'));
-  tradeFocus = { symbol: position.symbol, direction: position.quantity > 0 ? 'long' : 'short' };
+  tradeFocus ??= position.symbol;
   void append({ type: 'fill_review_queued', symbol: position.symbol, positionId: position.id, remaining: Math.abs(position.quantity) });
   const start = () => {
     fillReviews.delete(position.id);
@@ -210,7 +225,8 @@ async function select(selection: Selection, keepConnection = false) {
   try {
     if (!keepConnection) voice.stop();
     agent.reset();
-    chat = []; chatBusy = false;
+    replayConversation = randomUUID();
+    chat = []; conversationNotes = []; chatBusy = false;
     speech.length = 0;
     lastReview.clear();
     partialAnswers.clear();
@@ -227,6 +243,23 @@ async function select(selection: Selection, keepConnection = false) {
     date = selection.mode === 'replay' ? selection.sessionDate : marketDate();
     directory = join(dataDir, 'sessions', date, selection.mode === 'replay' ? `replay-${selection.replayRunId}` : 'live');
     await mkdir(directory, { recursive: true });
+    if (selection.mode === 'live') {
+      const transcript = await readFile(join(directory, 'conversation.jsonl'), 'utf8').catch(() => '');
+      const message = z.object({ role: z.enum(['user', 'assistant']), channel: z.enum(['typed', 'voice', 'local', 'agent', 'automatic']), text: z.string(),
+        symbol: z.string().optional(), local: z.boolean().optional(), scoped: z.boolean().optional() });
+      const restored: ChatMessage[] = [];
+      for (const line of transcript.split('\n').filter(Boolean)) {
+        try {
+          const parsed = message.safeParse(JSON.parse(line));
+          if (!parsed.success) continue;
+          const { role, text, symbol, local, scoped } = parsed.data;
+          if (scoped || local || role === 'assistant') restored.push({ role, text });
+          if (local || !scoped) conversationNotes.push({ role, text, symbol, local });
+          if (scoped && role === 'user' && symbol) tradeFocus = symbol;
+        } catch { /* A partially written line does not invalidate the earlier transcript. */ }
+      }
+      chat = restored.slice(-24);
+    }
     void append({ type: 'session_started', selection });
     logConversation({ type: 'session_started', selection });
     const state: SavedState = await readFile(join(directory, 'state.json'), 'utf8').then(text => JSON.parse(text)).catch(() => ({ notes: {}, delivered: [] }));
@@ -293,7 +326,10 @@ function acceptBookmap(event: unknown) {
   const scope = engine.conversationScope;
   engine.accept(event);
   if (engine.conversationScope !== scope) {
-    agent.reset(); chat = []; chatBusy = false; speech.length = 0; partialAnswers.clear(); lastReview.clear();
+    agent.reset(); chat = []; conversationNotes = []; chatBusy = false; speech.length = 0; partialAnswers.clear(); lastReview.clear();
+    replayConversation = randomUUID();
+    tradeFocus = undefined;
+    logConversation({ type: 'conversation_reset' });
   }
   dirty = true;
 }
@@ -337,8 +373,8 @@ function connect() {
     if (socket !== client) return;
     try {
       const event = JSON.parse(data.toString());
-      if (event.type === 'cairo_depth') {
-        depthWaiters.get(event.requestId)?.(event);
+      if (event.type === 'cairo_depth' || event.type === 'cairo_minute_bars') {
+        bookmapWaiters.get(event.requestId)?.(event);
         return;
       }
       if (['cairo_chart', 'cairo_trade', 'cairo_patterns', 'cairo_replay_fill', 'cairo_replay_reset', 'cairo_account'].includes(event.type)) {
@@ -366,53 +402,83 @@ function connect() {
   client.on('error', () => { if (socket === client) dirty = true; });
   client.on('close', () => {
     if (socket !== client) return;
-    for (const finish of depthWaiters.values()) finish();
+    for (const finish of bookmapWaiters.values()) finish();
     engine.disconnect();
     dirty = true;
     if (!shuttingDown) reconnect = setTimeout(connect, 1500);
   });
 }
 
-const lookupDepth: DepthLookup = (symbol, price) => new Promise(resolve => {
-  const client = socket;
-  if (!client || client.readyState !== WebSocket.OPEN) { resolve(undefined); return; }
-  const owner = engine;
-  const scope = owner.conversationScope;
-  const mode = owner.selection.mode;
-  const requestId = randomUUID();
-  const finish = (raw?: unknown) => {
-    clearTimeout(timer); depthWaiters.delete(requestId);
-    const checked = depthPacket.safeParse(raw);
-    const event = checked.success && checked.data;
-    if (socket !== client || owner !== engine || scope !== owner.conversationScope || !event || event.symbol !== symbol ||
-        (event.mode ?? 'live') !== mode || !event.asOf || !event.orderbook) { resolve(undefined); return; }
-    const convert = (levels: Array<[number, number]>) => levels.map(([price, displayedSize]) => ({ price, displayedSize }));
-    resolve({ asOf: Number(BigInt(event.asOf) / 1_000_000n), threshold: event.orderbook.effectiveWallThreshold,
-      bids: convert(event.orderbook.largeBids), offers: convert(event.orderbook.largeAsks) });
-  };
-  const timer = setTimeout(finish, 700);
-  depthWaiters.set(requestId, finish);
-  client.send(JSON.stringify({ type: 'cairo_depth_request', requestId, symbol, price, mode }), error => { if (error) finish(); });
-});
+function requestBookmap(type: string, symbol: string, fields = {}): Promise<unknown> {
+  return new Promise(resolve => {
+    const client = socket;
+    if (!client || client.readyState !== WebSocket.OPEN) { resolve(undefined); return; }
+    const owner = engine;
+    const scope = owner.conversationScope;
+    const mode = owner.selection.mode;
+    const requestId = randomUUID();
+    const finish = (raw?: unknown) => {
+      clearTimeout(timer); bookmapWaiters.delete(requestId);
+      resolve(socket === client && owner === engine && scope === owner.conversationScope ? raw : undefined);
+    };
+    const timer = setTimeout(finish, 700);
+    bookmapWaiters.set(requestId, finish);
+    client.send(JSON.stringify({ type, requestId, symbol, mode, ...fields }), error => { if (error) finish(); });
+  });
+}
 
-async function askAgent(words: string, options: { background?: boolean; display?: string; position?: Position; signal?: AbortSignal } = {}) {
+const lookupDepth: DepthLookup = async (symbol, price) => {
+  const packet = depthPacket.safeParse(await requestBookmap('cairo_depth_request', symbol, { price }));
+  if (!packet.success) return;
+  const event = packet.data;
+  if (event.symbol !== symbol || (event.mode ?? 'live') !== engine.selection.mode || !event.asOf || !event.orderbook) return;
+  const convert = (levels: Array<[number, number]>) => levels.map(([price, displayedSize]) => ({ price, displayedSize }));
+  return { asOf: Number(BigInt(event.asOf) / 1_000_000n), threshold: event.orderbook.effectiveWallThreshold,
+    bids: convert(event.orderbook.largeBids), offers: convert(event.orderbook.largeAsks) };
+};
+
+const lookupMinutes: MinuteLookup = async symbol => {
+  const packet = minutePacket.safeParse(await requestBookmap('cairo_minute_bars_request', symbol));
+  if (packet.success && packet.data.symbol === symbol && packet.data.mode === engine.selection.mode) return packet.data;
+};
+
+async function askAgent(words: string, options: { background?: boolean; display?: string; position?: Position; signal?: AbortSignal; channel?: 'typed' | 'voice' } = {}) {
   if (transition || shuttingDown) throw new Error('The session is changing');
   const owner = engine;
   const scope = owner.conversationScope;
   const current = () => engine === owner && scope === owner.conversationScope && !transition && !shuttingDown;
   const backtest = settings.backtest;
-  const positions = owner.snapshot().positions.filter(position => position.fresh);
-  const selection = owner.snapshot();
-  const symbols = [...new Set([...positions.map(position => position.symbol), ...Object.keys(selection.last), ...(selection.plan?.watchlist.map(item => item.symbol) ?? [])])];
-  const mentioned = symbols.filter(symbol => words.toUpperCase().split(/[^A-Z0-9.]+/).includes(symbol));
-  const focused = options.position ?? (mentioned.length === 1 ? positions.find(position => position.symbol === mentioned[0]) :
-    positions.length === 1 ? positions[0] : positions.find(position => position.symbol === tradeFocus?.symbol));
-  const symbol = focused?.symbol ?? (mentioned.length === 1 ? mentioned[0] : tradeFocus?.symbol ?? (symbols.length === 1 ? symbols[0] : undefined));
-  if (!options.background && symbol) tradeFocus = { symbol, direction: focused ? focused.quantity > 0 ? 'long' : 'short' : '' };
-  const prompt = symbol ? words + '\nCairo context: focused ticker ' + symbol + (focused ? ' (' + (focused.quantity > 0 ? 'long' : 'short') + ')' : '') +
-    '. Use this for references without a ticker. If the trader names a different instrument, follow their wording. Read current facts using tools.' +
-    (focused ? '\nActive trade snapshot (reference data): ' + JSON.stringify(activeTradeContext(owner, focused)) : '') : words;
   const captures = join(homedir(), 'bmtrader', 'patterns');
+  let ticker: string | undefined;
+  let requested: string[] = [];
+  const conversationKey = () => {
+    if (!current()) throw new Error('The session or replay cursor changed');
+    const positions = owner.snapshot().positions.filter(position => position.fresh);
+    const symbols = owner.agentSymbols();
+    const explicit = [...words.matchAll(/\$([A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)*)/gi)].map(match => match[1].toUpperCase());
+    requested = options.position ? [options.position.symbol] : [...new Set([...mentionedSymbols(words, symbols), ...explicit])];
+    if (options.position && !positions.some(position => position.id === options.position?.id)) throw new Error('The position changed before review');
+    ticker = requested.length === 1 ? requested[0] : requested.length > 1 ? undefined :
+      tradeFocus ?? (positions.length === 1 ? positions[0].symbol : symbols.length === 1 ? symbols[0] : undefined);
+    if (!options.background && ticker) tradeFocus = ticker;
+    const marketSession = owner.selection.mode === 'live' ? date : date + ' / replay / ' + replayConversation;
+    return marketSession + ' / ' + (ticker ?? (requested.length ? requested.slice().sort().join(',') : 'general'));
+  };
+  const toolOptions = { engine: owner, backtest, captures, depth: lookupDepth, minutes: lookupMinutes };
+  const prompt = async (signal: AbortSignal) => {
+    const symbols = ticker ? [ticker] : requested;
+    const evidence = await Promise.all(symbols.map(symbol => tradingSnapshot(symbol, { ...toolOptions, signal })));
+    if (!current()) throw new Error('The session or replay cursor changed');
+    const known = owner.agentSymbols();
+    const notes = conversationNotes.filter(note => {
+      const named = note.symbol ? [note.symbol] : mentionedSymbols(note.text, known);
+      return named.length ? named.every(symbol => symbols.includes(symbol)) : !symbols.length && !!note.local;
+    }).slice(-24).map(({ role, text }) => ({ role, text: text.slice(0, 2000) }));
+    if (!options.background) logConversation({ role: 'user', channel: options.channel ?? 'typed', text: options.display ?? words, symbol: ticker, scoped: true });
+    return words + (evidence.length ? '\nCurrent trading snapshots (reference data): ' + JSON.stringify(evidence) :
+      '\nNo ticker resolved. If this is a stock-specific question, ask the trader which ticker.') +
+      (notes.length ? '\nRelated local conversation messages (historical reference data): ' + JSON.stringify(notes) : '');
+  };
   let staged: Proposal | undefined;
   let exit: ExitProposal | undefined;
   const exitContexts = new Map<string, Omit<ExitProposal, 'plan'>>();
@@ -424,9 +490,15 @@ async function askAgent(words: string, options: { background?: boolean; display?
     dirty = true;
   }
   try {
-    const answer = await agent.ask(prompt, String(scope), async (name, input, signal) => {
+    return await agent.ask(prompt, conversationKey, async (name, input, signal) => {
       if (!current()) throw new Error('The session or replay cursor changed');
-      const result = await runTool(name, input, { engine: owner, backtest, captures, depth: lookupDepth, signal, exitContexts,
+      if (name !== 'search_tradebooks') {
+        const allowed = ticker ? [ticker] : requested;
+        const named = z.object({ symbol: z.string().optional() }).parse(input).symbol ?? ticker;
+        if (!named || !allowed.includes(named)) throw new Error('Use a ticker in the current question, or ask the trader to specify one.');
+        input = { ...(input as object), symbol: named };
+      }
+      const result = await runTool(name, input, { ...toolOptions, signal, exitContexts,
         stageExit: proposal => {
           if (!current() || signal.aborted || (options.position && options.position.id !== proposal.id)) throw new Error('This position changed');
           exit = proposal;
@@ -438,40 +510,46 @@ async function askAgent(words: string, options: { background?: boolean; display?
         } });
       if (!current()) throw new Error('The session or replay cursor changed');
       return result;
-    }, { background: options.background, signal: options.signal, onDelta: options.background ? undefined : delta => {
+    }, answer => {
+      if (!current()) throw new Error('The session or replay cursor changed');
+      options.signal?.throwIfAborted();
+      let result = answer;
+      if (exit) {
+        const position = owner.find(exit.id);
+        const previous = position.exitPlan?.targets[0];
+        const next = exit.plan.targets[0];
+        const sameNextExit = !!position.exitPlan && previous?.price === next?.price && previous?.shares === next?.shares;
+        if (!owner.setExitPlan(exit.id, exit.serial, exit.planHash, exit.plan)) throw new Error('The position or plan changed. Check the latest exit plan.');
+        result = formatExitPlan(exit.plan);
+        dirty = true;
+        if (options.background && !sameNextExit) {
+          notice({ key: randomUUID(), kind: 'advice', symbol: position.symbol, positionId: position.id, spoken: !owner.shadowMode,
+            text: position.symbol + '. ' + briefVoice(result) });
+        }
+      } else if (options.position) {
+        result = 'No validated exit plan was produced. ' + answer;
+      }
+      if (staged) {
+        const position = owner.find(staged.id);
+        const active = position.note?.management;
+        const sameCondition = active && active.condition?.id === staged.advice.condition?.id && active.condition?.level === staged.advice.condition?.level;
+        if (options.background && sameCondition) staged = undefined;
+        else if (!position.pending && owner.propose(staged.id, staged.serial, staged.planHash, staged.advice, options.background && !exit)) {
+          result += '\nReview the proposal in Cairo Live or say “watch that” to accept.';
+        } else result = 'The position or plan changed before the proposal could be shown. Ask again for current guidance.';
+      }
+      if (!options.background) draft.text = result;
+      else {
+        chat = [...chat, { role: 'assistant' as const, text: (options.position ? options.position.symbol + ' · ' : '') + result }].slice(-24);
+        dirty = true;
+      }
+      if (result !== answer) conversationNotes.push({ role: 'assistant', text: result, symbol: ticker, local: true });
+      void append({ type: 'agent_answer', question: options.display ?? words, answer: result, automatic: !!options.background });
+      logConversation({ role: 'assistant', channel: options.background ? 'automatic' : 'agent', text: result, symbol: ticker, scoped: true, local: result !== answer });
+      return result;
+    }, { resume: owner.selection.mode === 'live', background: options.background, signal: options.signal, onDelta: options.background ? undefined : delta => {
       if (current()) { draft.text = (draft.text + delta).slice(0, 6000); dirty = true; }
     } });
-    if (!current()) throw new Error('The session or replay cursor changed');
-    options.signal?.throwIfAborted();
-    let result = answer;
-    if (exit) {
-      const position = owner.find(exit.id);
-      const previous = position.exitPlan?.targets[0];
-      const next = exit.plan.targets[0];
-      const sameNextExit = !!position.exitPlan && previous?.price === next?.price && previous?.shares === next?.shares;
-      if (!owner.setExitPlan(exit.id, exit.serial, exit.planHash, exit.plan)) throw new Error('The position or plan changed. Check the latest exit plan.');
-      result = formatExitPlan(exit.plan);
-      dirty = true;
-      if (options.background && !sameNextExit) {
-        notice({ key: randomUUID(), kind: 'advice', symbol: position.symbol, positionId: position.id, spoken: !owner.shadowMode,
-          text: position.symbol + '. ' + briefVoice(result) });
-      }
-    } else if (options.position) {
-      result = 'No validated exit plan was produced. ' + answer;
-    }
-    if (staged) {
-      const position = owner.find(staged.id);
-      const active = position.note?.management;
-      const sameCondition = active && active.condition?.id === staged.advice.condition?.id && active.condition?.level === staged.advice.condition?.level;
-      if (options.background && sameCondition) staged = undefined;
-      else if (!position.pending && owner.propose(staged.id, staged.serial, staged.planHash, staged.advice, options.background && !exit)) {
-        result += '\nReview the proposal in Cairo Live or say “watch that” to accept.';
-      } else result = 'The position or plan changed before the proposal could be shown. Ask again for current guidance.';
-    }
-    if (!options.background) draft.text = result;
-    void append({ type: 'agent_answer', question: options.display ?? words, answer: result, automatic: !!options.background });
-    logConversation({ role: 'assistant', channel: options.background ? 'automatic' : 'agent', text: result });
-    return result;
   } catch (error) {
     if (!options.background && current()) draft.text = error instanceof Error ? error.message : 'OpenCode could not answer';
     throw error;
@@ -496,26 +574,13 @@ async function handleVoice(words: string, passive: boolean) {
   const positions = owner.snapshot().positions.filter(position => position.fresh);
   const normalized = words.toLowerCase().replace(/[^a-z0-9.]+/g, ' ');
   const mentioned = positions.filter(position => normalized.split(' ').includes(position.symbol.toLowerCase()));
-  const vwapQuestion = /^(?:where is|what is|what's) (?:the |current |live |replay )?vwap[?.! ]*$/i.test(words);
-  if (vwapQuestion && positions.length === 1) {
-    const position = positions[0];
-    const { levels, trade, attached, connected } = owner.bookmap(position.symbol);
-    const value = owner.selection.mode === 'replay' ? trade?.replayVwap :
-      levels && Date.now() - levels.marketAsOf <= 20_000 ? levels.vwap : undefined;
-    if (value && attached && connected) {
-      tradeFocus = { symbol: position.symbol, direction: position.quantity > 0 ? 'long' : 'short' };
-      const answer = position.symbol + ' VWAP is $' + value.toFixed(2) +
-        (owner.selection.mode === 'replay' && !trade?.vwapCoversPremarketStart ? ' with partial replay coverage.' : '.');
-      chat = [...chat, { role: 'user' as const, text: words }, { role: 'assistant' as const, text: answer }].slice(-24);
-      dirty = true;
-      return answer;
-    }
-  }
   if (/\b(?:watch that|accept (?:that|the) plan|use that plan)\b/i.test(words) && !/\?/.test(words)) {
     const pending = (mentioned.length ? mentioned : positions).filter(position => position.pending);
-    if (pending.length !== 1) return pending.length ? 'Which pending recommendation do you want to accept?' : 'There is no pending recommendation to accept.';
+    rememberLocalTurn('user', words, pending.length === 1 ? pending[0].symbol : undefined);
+    if (pending.length !== 1) return localReply(pending.length ? 'Which pending recommendation do you want to accept?' : 'There is no pending recommendation to accept.');
+    tradeFocus = pending[0].symbol;
     owner.approve(pending[0].id); dirty = true; void persist();
-    return pending[0].symbol + ' advisory plan accepted.';
+    return localReply(pending[0].symbol + ' advisory plan accepted.', pending[0].symbol);
   }
   const awaiting = positions.filter(position => !position.note);
   const target = mentioned.length === 1 ? mentioned[0] : awaiting.length === 1 ? awaiting[0] : positions.length === 1 ? positions[0] : undefined;
@@ -530,12 +595,14 @@ async function handleVoice(words: string, passive: boolean) {
       ?? spokenPrice(stopPhrase ?? words);
     if (pattern || stop !== undefined) {
       if (engine !== owner || !owner.snapshot().positions.some(item => item.id === target.id && item.fresh)) return 'The position changed. Please repeat that.';
+      tradeFocus = target.symbol;
+      rememberLocalTurn('user', words, target.symbol);
       const answer = partialAnswers.get(target.id) ?? { pattern: target.note?.pattern };
       if (pattern) answer.pattern = pattern;
       if (stop !== undefined && stop > 0) answer.stop = stop;
       if (!answer.pattern || !answer.stop) {
         partialAnswers.set(target.id, answer);
-        return answer.pattern ? 'What is your intended stop price?' : 'Which Bookmap pattern did you use?';
+        return localReply(answer.pattern ? 'What is your intended stop price?' : 'Which Bookmap pattern did you use?', target.symbol);
       }
       partialAnswers.delete(target.id);
       const position = owner.identify(target.id, answer.pattern, answer.stop);
@@ -544,11 +611,10 @@ async function handleVoice(words: string, passive: boolean) {
     }
   }
   if (passive && /^(?:hi|hey|hello|thanks|thank you)[.! ]*$/i.test(words)) return;
-  return askAgent(words);
+  return askAgent(words, { channel: 'voice' });
 }
 
 const voice = new Voice(async (words, passive) => {
-  logConversation({ role: 'user', channel: 'voice', text: words });
   try {
     const response = await handleVoice(words, passive);
     if (response) speakReply(briefVoice(response));
@@ -590,7 +656,6 @@ else app.whenReady().then(async () => {
   ipc('snapshot', snapshot);
   ipc('ask', value => {
     const text = z.string().trim().min(1).max(2000).parse(value);
-    logConversation({ role: 'user', channel: 'typed', text });
     return askAgent(text);
   });
   ipc('voice-caption', value => logConversation({ role: 'assistant', channel: 'voice', delta: z.string().max(2000).parse(value) }));

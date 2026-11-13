@@ -10,6 +10,8 @@ import { exitInput, validateExitPlan, type ExitPlan } from './exit-plan.ts';
 const ticker = symbolName.describe('Uppercase Bookmap ticker');
 const symbol = z.object({ symbol: ticker }).strict();
 const optionalSymbol = z.object({ symbol: ticker.optional() }).strict();
+const executionQuery = optionalSymbol.extend({ offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(250).default(20) });
 const eventQuery = z.object({
   symbol: ticker, side: z.enum(['bid', 'offer']).optional(), price: z.number().positive().optional(),
   eventType: z.string().regex(/^[A-Z][A-Z0-9_]+$/).max(70).optional(),
@@ -20,8 +22,9 @@ export const toolDefinitions = {
   search_tradebooks: { input: z.object({ query: z.string().trim().min(1).max(180), side: z.enum(['long', 'short']).optional() }).strict(), description: 'Search approved Backtest tradebooks and Bookmap pattern definitions. Use side long or short for Bookmap pattern lists.' },
   get_trading_plan: { input: optionalSymbol, description: 'Read the confirmed session plan and approved conditions, optionally for one ticker.' },
   get_positions: { input: optionalSymbol, description: 'Read Bookmap position facts, working stops, intended stop, current advisory plan and pending proposal.' },
-  get_recent_fills: { input: optionalSymbol, description: 'Read recently received Bookmap executions or simulated replay fills.' },
+  get_recent_fills: { input: executionQuery, description: 'Read Bookmap executions or simulated replay fills, newest first. Use offset to retrieve earlier records from the current session.' },
   get_market_context: { input: symbol, description: 'Read chart coverage, last trade price and time, and detector health for a ticker.' },
+  get_minute_bars: { input: symbol, description: 'Read the available same-session one-minute OHLCV chart and its coverage from Bookmap.' },
   get_exit_context: { input: symbol, description: 'Required for exit planning. Reads original opening shares, adds, executed partials, remaining shares, daily plan, current market/depth, and exact Backtest trade-management guidelines.' },
   prepare_exit_plan: { input: exitInput.extend({ symbol: ticker }), description: 'Validate and display an advisory exit plan. Each target has a price, short hint, and percent of ORIGINAL shares. Notes cover stop and contingencies. Cairo calculates whole shares and rejects oversizing. Use after get_exit_context.' },
   get_bookmap_depth: { input: depthQuery, description: 'Get the current displayed large bids/offers from Bookmap. Optionally query a specific level to compare with a past event. Sizes are aggregated displayed shares, never executions.' },
@@ -30,29 +33,56 @@ export const toolDefinitions = {
 };
 export type ToolName = keyof typeof toolDefinitions;
 export type DepthLookup = (symbol: string, price?: number) => Promise<{ asOf: number; threshold: number; bids: Array<{ price: number; displayedSize: number }>; offers: Array<{ price: number; displayedSize: number }> } | undefined>;
+const barTime = z.number().int().positive().multipleOf(60_000);
+export const minuteSeries = z.object({
+  sessionDate: z.string(), asOf: z.number().int().positive(),
+  source: z.enum(['Bookmap observed trades', 'Bookmap native market runtime']),
+  bars: z.array(z.tuple([barTime, z.number().positive(), z.number().positive(), z.number().positive(),
+    z.number().positive(), z.number().nonnegative()])).max(1500),
+});
+export type MinuteLookup = (symbol: string) => Promise<z.infer<typeof minuteSeries> | undefined>;
 export type Proposal = { id: string; symbol: string; serial: number; planHash?: string; advice: Advice };
 export type ExitProposal = { id: string; serial: number; planHash?: string; plan: ExitPlan };
 const nanosMs = (value: string) => Number(BigInt(value) / 1_000_000n);
 const iso = (value: number) => new Date(value).toISOString();
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7;
 
-function dailyPlan(engine: Engine, symbol?: string) {
-  const loaded = engine.planForAgent();
-  if (!loaded) return null;
-  const { watchlist, ...plan } = loaded.plan;
-  const notes = loaded.markdown.replace(/^```cairo-plan[\t ]*\r?\n[\s\S]*?^```[\t ]*\r?$/gm, '').trim().slice(0, 8000);
-  return { ...plan, path: loaded.path, watchlist: watchlist.filter(item => !symbol || item.symbol === symbol), notes };
+export function mentionedSymbols(text: string, symbols: string[]) {
+  const words = new Set(text.match(/[A-Z0-9]+(?:[.-][A-Z0-9]+)*/gi)?.map(word => word.toUpperCase()));
+  return symbols.filter(symbol => words.has(symbol));
 }
 
-export function activeTradeContext(engine: Engine, position: Position) {
+function dailyPlan(engine: Engine, symbol?: string) {
+  const loaded = engine.planForAgent(symbol);
+  if (!loaded) return null;
+  const { watchlist, ...plan } = loaded.plan;
+  const body = loaded.markdown.replace(/^```cairo-plan[\t ]*\r?\n[\s\S]*?^```[\t ]*\r?$/gm, '').trim();
+  const tickers = watchlist.map(item => item.symbol);
+  let section: { level: number; tickers: string[] }[] = [];
+  const notes = !symbol ? body : body.split(/\r?\n/).filter(line => {
+    const heading = /^(#{1,6})\s/.exec(line);
+    const named = mentionedSymbols(line, tickers);
+    if (heading) {
+      const level = heading[1].length;
+      section = section.filter(item => item.level < level);
+      if (named.length) section.push({ level, tickers: named });
+    }
+    const scope = named.length ? named : section.at(-1)?.tickers;
+    return scope ? scope.every(ticker => ticker === symbol) : tickers.includes(symbol);
+  }).join('\n').trim();
+  return { ...plan, path: loaded.path, watchlist: watchlist.filter(item => !symbol || item.symbol === symbol),
+    notes: notes.slice(0, 16_000), notesTruncated: notes.length > 16_000 };
+}
+
+export function activeTradeContext(engine: Engine, position: Position, includePlan = true, fillLimit = 250) {
   const history = engine.tradeHistory(position);
   return {
     symbol: position.symbol, side: position.quantity > 0 ? 'long' : 'short',
     asOf: iso(position.sourceTime), averageEntry: position.average, sizing: engine.sizing(position),
     traderConfirmedPattern: position.note?.pattern ?? null, traderIntendedStop: position.note?.intendedStop ?? null,
-    brokerWorkingStops: position.brokerStops, confirmedPlan: dailyPlan(engine, position.symbol),
+    brokerWorkingStops: position.brokerStops, ...(includePlan ? { confirmedPlan: dailyPlan(engine, position.symbol) } : {}),
     exitPlan: position.exitPlan ?? null, exitPlanNeedsReview: !!position.exitPlanNeedsReview,
-    historyComplete: history.complete, fills: history.records.map(({ action, price, quantity, timestamp }) =>
+    historyComplete: history.complete, fillCount: history.records.length, fills: history.records.slice(-fillLimit).map(({ action, price, quantity, timestamp }) =>
       ({ action, price, quantity, at: iso(timestamp) })),
   };
 }
@@ -158,11 +188,40 @@ export async function bookmapEvents(engine: Engine, query: z.infer<typeof eventQ
   };
 }
 
-export async function runTool(name: ToolName, input: unknown, options: {
-  engine: Engine; backtest: string; captures: string; depth: DepthLookup; signal: AbortSignal; stage?: (proposal: Proposal) => void;
+type ToolOptions = {
+  engine: Engine; backtest: string; captures: string; depth: DepthLookup; minutes?: MinuteLookup; signal: AbortSignal; stage?: (proposal: Proposal) => void;
   exitContexts?: Map<string, { id: string; serial: number; planHash?: string }>;
   stageExit?: (proposal: ExitProposal) => void;
-}): Promise<unknown> {
+};
+
+export async function tradingSnapshot(symbol: string, options: ToolOptions) {
+  const { engine, signal } = options;
+  const [depth, chart] = await Promise.all([
+    runTool('get_bookmap_depth', { symbol }, options),
+    runTool('get_minute_bars', { symbol }, options),
+  ]);
+  signal.throwIfAborted();
+  const position = engine.context(symbol).position;
+  const fills = engine.recentFills(symbol)[0];
+  const records = [...(fills?.records ?? [])].sort((a, b) => a.timestamp - b.timestamp);
+  return {
+    symbol, mode: engine.selection.mode,
+    plan: dailyPlan(engine, symbol),
+    position: position ?? null,
+    activeTrade: position && activeTradeContext(engine, position, false),
+    executions: fills ? { asOf: iso(fills.asOf), fresh: fills.fresh, count: records.length,
+      records: records.slice(-250).map(record => [record.timestamp, record.isBuy ? 'BUY' : 'SELL', record.price, record.quantity]),
+      columns: ['epochMs', 'side', 'price', 'shares'] } : null,
+    bookmap: {
+      market: await runTool('get_market_context', { symbol }, options),
+      depth,
+      events: await bookmapEvents(engine, { symbol, minutes: 10, limit: 30 }, options.captures, signal),
+    },
+    chart,
+  };
+}
+
+export async function runTool(name: ToolName, input: unknown, options: ToolOptions): Promise<unknown> {
   const { engine } = options;
   switch (name) {
     case 'search_tradebooks': return tradebooks(options.backtest, toolDefinitions[name].input.parse(input));
@@ -176,8 +235,10 @@ export async function runTool(name: ToolName, input: unknown, options: {
         .map(item => ({ ...item, asOf: iso(item.sourceTime), candidateConditions: item.fresh ? managementCandidates(engine, item.symbol).candidates : [] })) };
     }
     case 'get_recent_fills': {
-      const { symbol } = optionalSymbol.parse(input);
-      return { mode: engine.selection.mode, fills: engine.recentFills(symbol).map(item => ({ ...item, asOf: iso(item.asOf), records: item.records.slice(-20).reverse().map(record => ({ ...record, timestamp: iso(record.timestamp) })) })) };
+      const { symbol, offset, limit } = executionQuery.parse(input);
+      return { mode: engine.selection.mode, fills: engine.recentFills(symbol).map(item => ({ ...item, asOf: iso(item.asOf),
+        count: item.records.length, offset, records: [...item.records].sort((a, b) => b.timestamp - a.timestamp)
+          .slice(offset, offset + limit).map(record => ({ ...record, timestamp: iso(record.timestamp) })) })) };
     }
     case 'get_market_context': {
       const { symbol } = toolDefinitions[name].input.parse(input);
@@ -190,6 +251,22 @@ export async function runTool(name: ToolName, input: unknown, options: {
             fresh: connected && attached, firstObserved: trade.vwapFirstObserved ? iso(nanosMs(trade.vwapFirstObserved)) : null,
             coverage: trade.vwapCoversPremarketStart ? 'from premarket start' : 'partial replay coverage' } : null,
         detector: snapshot ? { readiness: snapshot.readiness, coverage: snapshot.coverage, at: iso(nanosMs(snapshot.eventTime)) } : null };
+    }
+    case 'get_minute_bars': {
+      const { symbol } = toolDefinitions[name].input.parse(input);
+      const data = await options.minutes?.(symbol);
+      options.signal.throwIfAborted();
+      const book = engine.bookmap(symbol);
+      const replay = engine.selection.mode === 'replay';
+      const cursor = replay ? book.cursor : Date.now();
+      if (!book.connected || !cursor || !data || data.sessionDate !== marketDate(cursor)) {
+        return { symbol, status: 'One-minute bars unavailable from the current Bookmap feed' };
+      }
+      const bars = data.bars.filter(([time]) => time <= data.asOf && marketDate(time) === data.sessionDate &&
+        (data.asOf <= cursor || time + 60_000 <= cursor));
+      return { symbol, source: data.source, asOf: iso(Math.min(cursor, data.asOf)), fresh: cursor - data.asOf <= 60_000,
+        coverage: 'Available bars only; absent minutes can reflect no trades or missing coverage. The last minute may be incomplete.',
+        columns: ['minuteStartEpochMs', 'open', 'high', 'low', 'close', 'volume'], bars };
     }
     case 'get_exit_context': {
       const { symbol } = toolDefinitions[name].input.parse(input);
@@ -227,7 +304,7 @@ export async function runTool(name: ToolName, input: unknown, options: {
       const display = book.snapshot?.readiness === 'ready' && book.snapshot?.coverage === 'continuous' ? book.snapshot.liquidity : undefined;
       const snapshotDepth = display && (!replay || nanosMs(display.asOf) <= book.cursor) ? { ...display, asOf: nanosMs(display.asOf) } : undefined;
       const requestedDepth = await options.depth(symbol, price);
-      const depth = requestedDepth ?? snapshotDepth;
+      const depth = (requestedDepth && (!replay || requestedDepth.asOf <= engine.bookmap(symbol).cursor) ? requestedDepth : undefined) ?? snapshotDepth;
       if (!depth?.asOf) return { status: 'No fresh Bookmap depth snapshot', symbol };
       const select = (levels: typeof depth.bids) => levels.filter(level => !price || near(level.price, price)).sort((a, b) => b.displayedSize - a.displayedSize).slice(0, limit);
       return { symbol, asOf: iso(depth.asOf), fresh: replay ? book.cursor - depth.asOf <= 10_000 : Date.now() - depth.asOf <= 10_000,
