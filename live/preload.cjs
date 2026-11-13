@@ -8,6 +8,8 @@ function subscribe(channel, handler) {
 }
 contextBridge.exposeInMainWorld('cairo', {
   snapshot: () => invoke('snapshot'),
+  ask: text => invoke('ask', text),
+  cancelQuestion: () => invoke('cancel-question'),
   onSnapshot: handler => subscribe('snapshot', handler),
   onMuteOutput: handler => subscribe('mute-output', handler),
   selection: value => invoke('selection', value),

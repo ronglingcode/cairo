@@ -24,17 +24,6 @@ async function request(key: string, route: string, body: object) {
   return await response.json();
 }
 
-export async function structured<T>(key: string, instructions: string, input: unknown, schema: z.ZodType<T>) {
-  const result = await request(key, 'responses', {
-    model: process.env.CAIRO_LIVE_REASONING_MODEL || 'gpt-6-luna', store: false,
-    instructions, input: JSON.stringify(input),
-    text: { format: { type: 'json_schema', name: 'cairo_result', schema: z.toJSONSchema(schema, { target: 'draft-7' }), strict: true } },
-  });
-  const text = result.output?.flatMap((item: { content?: Array<{ type: string; text: string }> }) => item.content ?? []).find((item: { type: string }) => item.type === 'output_text')?.text;
-  if (!text) throw new Error('No validated answer was returned');
-  return schema.parse(JSON.parse(text));
-}
-
 export class Voice {
   private socket?: WebSocket;
   private generation = 0;
@@ -50,13 +39,13 @@ export class Voice {
     this.state = state;
   }
 
-  async start(key: string, sdp: string, patterns: string[]) {
+  async start(key: string, sdp: string) {
     this.stop();
     const generation = this.generation;
     const result = await request(key, 'live/sessions', {
       session: { model: 'gpt-live-1', store: false, delegation: { type: 'client' },
         client: { data_channel: { allowed_client_events: ['session.close'] } },
-        instructions: `You are Cairo Live, a concise English voice assistant. Stay quiet when the trader is quiet. Handle greetings directly. Known Bookmap pattern names are ${patterns.join(', ')}. Delegate every trading question, trade identification (including short answers with a price), correction, and confirmation such as “watch that” to the application. Wait for its verified reply before asserting a result. Treat prices, patterns and account state as facts only when supplied by the application. You are advisory only.`,
+        instructions: 'You are Cairo Live’s English voice interface. Stay quiet when the trader is quiet. Handle simple greetings directly. Delegate every substantive question, trade identification, correction, and confirmation to the application and wait for its reply. Speak the supplied answer faithfully and briefly. Prices, patterns, and account state come only from the application. You are advisory only.',
       }, transport: { type: 'webrtc', sdp },
     });
     if (generation !== this.generation) throw new Error('Voice setup was canceled');

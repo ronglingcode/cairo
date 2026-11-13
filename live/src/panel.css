@@ -32,3 +32,8 @@ section h2, details summary { margin-bottom: 5px; }
 .watch { margin-top: 4px; }
 .toggle { display: block; margin: 8px 0; }
 details p { overflow-wrap: anywhere; }
+.chat { max-height: 15rem; overflow: auto; display: flex; flex-direction: column; }
+.chat p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat p strong { display: block; }
+.chat-form { display: flex; gap: .5rem; }
+.chat-form input { min-width: 0; flex: 1; }

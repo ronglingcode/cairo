@@ -4,11 +4,13 @@ import type { Position, Snapshot } from './engine.ts';
 import type { Selection } from './plan.ts';
 import './panel.css';
 
-type PanelState = Snapshot & { voiceStatus: string; localError: string; backtest: string; bookmapMode: string; bookmapDate: string };
+type PanelState = Snapshot & { voiceStatus: string; localError: string; backtest: string; bookmapMode: string; bookmapDate: string; chat: Array<{ role: 'user' | 'assistant'; text: string }>; chatBusy: boolean };
 declare global {
   interface Window {
     cairo: {
       snapshot(): Promise<PanelState>; onSnapshot(handler: (value: PanelState) => void): () => void;
+      ask(text: string): Promise<string>;
+      cancelQuestion(): Promise<void>;
       onMuteOutput(handler: (muted: boolean) => void): () => void;
       selection(value: Selection): Promise<void>; backtest(): Promise<void>; shadow(value: boolean): Promise<void>;
       identify(id: string, note: { pattern: string; intendedStop: number }): Promise<string>;
@@ -69,6 +71,7 @@ function Panel() {
   const [caption, setCaption] = useState('');
   const [heard, setHeard] = useState('');
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const [question, setQuestion] = useState('');
   const voice = useRef<AudioSession | null>(null);
   const speaker = useRef<HTMLAudioElement>(null);
 
@@ -143,6 +146,13 @@ function Panel() {
   }
 
   function select(selection: Selection) { closeVoice(); run(() => window.cairo.selection(selection)); }
+  function ask(event: FormEvent) {
+    event.preventDefault();
+    const words = question.trim();
+    if (!words || state?.chatBusy) return;
+    setQuestion('');
+    run(() => window.cairo.ask(words));
+  }
   const alert = state?.recent[0];
   const focus = state?.positions.find(item => item.fresh && !item.note);
   const conflict = state?.bookmapMode && state.bookmapMode !== state.selection.mode;
@@ -155,6 +165,15 @@ function Panel() {
     {(error || state?.localError || conflict || replayDateMismatch) && <p className="error" role="alert">{error || state?.localError || (conflict ? `Bookmap is in ${state?.bookmapMode} mode. Select the matching session.` : `Bookmap is replaying ${state?.bookmapDate}. Choose that date.`)}</p>}
     <section className="focus"><h2>{focus ? 'Needs your input' : 'Latest alert'}</h2><p>{focus ? `${focus.symbol}. Which pattern did you use, and where is your intended stop?` : alert?.text ?? 'Waiting for an event'}</p>
       {alert && <div className="feedback">{['Useful', 'Noisy', 'Late'].map(value => <button key={value} onClick={() => run(() => window.cairo.feedback(alert.key, value))}>{value}</button>)}</div>}
+    </section>
+    <section><h2>Ask Cairo</h2>
+      {state?.chat.length ? <div className="chat" role="log" aria-label="Cairo conversation">
+        {state.chat.map((message, index) => <p key={index}><strong>{message.role === 'user' ? 'You' : 'Cairo'}</strong> {message.text || 'Checking…'}</p>)}
+      </div> : null}
+      <form className="chat-form" onSubmit={ask}>
+        <input aria-label="Question for Cairo" placeholder="Ask about a ticker, position, or pattern" value={question} maxLength={2000} onChange={event => setQuestion(event.target.value)} />
+        {state?.chatBusy ? <button type="button" onClick={() => run(() => window.cairo.cancelQuestion())}>Cancel</button> : <button disabled={!question.trim()}>Ask</button>}
+      </form>
     </section>
     <section><h2>Positions</h2>{state?.positions.length ? state.positions.map(position => <PositionCard key={position.id} position={position} run={run} />) : <p className="secondary">No open positions reported</p>}</section>
     <section><h2>Daily plan {state?.plan && <span>· Revision {state.plan.revision}</span>}</h2>

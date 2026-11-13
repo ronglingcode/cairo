@@ -3,12 +3,15 @@ import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
 import WebSocket from 'ws';
 import { z } from 'zod';
 import { Engine, type Notice, type SavedState, type Position } from './engine.ts';
-import { loadPlan, marketDate, readRules, safeSourcePath, selectionSchema, type PriceCondition, type Selection } from './plan.ts';
-import { openAIKey, speakLocal, structured, Voice } from './voice.ts';
+import { loadPlan, marketDate, readRules, selectionSchema, type Selection } from './plan.ts';
+import { openAIKey, speakLocal, Voice } from './voice.ts';
 import { spokenPrice } from './spoken-price.ts';
+import { Agent } from './agent.ts';
+import { runTool, type DepthLookup, type Proposal } from './agent-tools.ts';
 
 const base = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 app.setName('Cairo Live');
@@ -19,8 +22,6 @@ const localEndpoint = `ws://127.0.0.1:${Number(process.env.CAIRO_LIVE_BOOKMAP_PO
 const defaults = { backtest: process.env.CAIRO_LIVE_BACKTEST || resolve(base, '../../Backtest'), selection: { mode: 'live' } as Selection };
 const settingsSchema = z.object({ backtest: z.string().min(1), selection: selectionSchema });
 const noteSchema = z.object({ pattern: z.string().min(1).max(200), intendedStop: z.number().finite().positive() });
-const adviceChoice = z.object({ disposition: z.enum(['keep', 'propose']), summary: z.string(), nextRuleId: z.string().nullable() }).strict();
-const spokenAnswer = z.object({ symbol: z.string().nullable(), pattern: z.string().nullable(), stop: z.number().nullable(), accept: z.boolean(), question: z.boolean() }).strict();
 let settings = defaults;
 let engine: Engine;
 let win: BrowserWindow;
@@ -45,6 +46,20 @@ const lastReview = new Map<string, number>();
 const partialAnswers = new Map<string, { pattern?: string; stop?: number }>();
 let speaking = false;
 const key = () => openAIKey(resolve(settings.backtest, '../secrets/storeSecrets.js'));
+const binaryName = process.platform === 'win32' ? 'opencode.exe' : 'opencode';
+const agent = new Agent(join(dataDir, 'agent'), app.isPackaged ? join(process.resourcesPath, binaryName) :
+  join(base, 'node_modules', '@opencode', 'cli', 'bin', binaryName), join(base, 'dist-electron', 'agent-plugin.mjs'), key, process.env.CAIRO_LIVE_REASONING_MODEL);
+const depthPacket = z.object({
+  requestId: z.string(), symbol: z.string(), version: z.literal(1),
+  asOf: z.string().regex(/^\d{1,20}$/).optional(), orderbook: z.object({
+    effectiveWallThreshold: z.number(), largeBids: z.array(z.tuple([z.number().positive(), z.number().positive()])),
+    largeAsks: z.array(z.tuple([z.number().positive(), z.number().positive()])),
+  }).optional(),
+});
+const depthWaiters = new Map<string, (event?: unknown) => void>();
+let chatBusy = false;
+type ChatMessage = { role: 'user' | 'assistant'; text: string };
+let chat: ChatMessage[] = [];
 
 async function atomic(path: string, content: string) {
   const temp = `${path}.${randomUUID()}.tmp`;
@@ -111,6 +126,8 @@ async function select(selection: Selection) {
   transition = true;
   try {
     voice.stop();
+    agent.reset();
+    chat = []; chatBusy = false;
     speech.length = 0;
     lastReview.clear();
     partialAnswers.clear();
@@ -172,112 +189,154 @@ function connect() {
     if (socket !== client) return;
     try {
       const event = JSON.parse(data.toString());
+      if (event.type === 'cairo_depth') {
+        depthWaiters.get(event.requestId)?.(event);
+        return;
+      }
       if (['cairo_chart', 'cairo_trade', 'cairo_patterns'].includes(event.type)) {
         if (event.mode === 'live' || event.mode === 'replay') bookmapMode = event.mode;
         if (typeof event.eventTime === 'string' && /^\d{1,20}$/.test(event.eventTime)) bookmapDate = marketDate(Number(BigInt(event.eventTime) / 1_000_000n));
       }
+      const scope = engine.conversationScope;
       engine.accept(event);
+      if (engine.conversationScope !== scope) {
+        agent.reset(); chat = []; chatBusy = false; speech.length = 0; partialAnswers.clear(); lastReview.clear();
+      }
       dirty = true;
     } catch { /* Ignore malformed loopback messages. */ }
   });
   client.on('error', () => { if (socket === client) dirty = true; });
   client.on('close', () => {
     if (socket !== client) return;
+    for (const finish of depthWaiters.values()) finish();
     engine.disconnect();
     dirty = true;
     if (!shuttingDown) reconnect = setTimeout(connect, 1500);
   });
 }
 
-async function management(position: Position, speakViaNotice: boolean, automatic = false) {
+const lookupDepth: DepthLookup = (symbol, price) => new Promise(resolve => {
+  const client = socket;
+  if (!client || client.readyState !== WebSocket.OPEN || engine.selection.mode !== 'live') { resolve(undefined); return; }
+  const requestId = randomUUID();
+  const finish = (raw?: unknown) => {
+    clearTimeout(timer); depthWaiters.delete(requestId);
+    const checked = depthPacket.safeParse(raw);
+    const event = checked.success && checked.data;
+    if (socket !== client || !event || event.symbol !== symbol || !event.asOf || !event.orderbook) { resolve(undefined); return; }
+    const convert = (levels: Array<[number, number]>) => levels.map(([price, displayedSize]) => ({ price, displayedSize }));
+    resolve({ asOf: Number(BigInt(event.asOf) / 1_000_000n), threshold: event.orderbook.effectiveWallThreshold,
+      bids: convert(event.orderbook.largeBids), offers: convert(event.orderbook.largeAsks) });
+  };
+  const timer = setTimeout(finish, 700);
+  depthWaiters.set(requestId, finish);
+  client.send(JSON.stringify({ type: 'cairo_depth_request', requestId, symbol, price }), error => { if (error) finish(); });
+});
+
+async function askAgent(words: string, options: { background?: boolean; display?: string; position?: Position } = {}) {
+  if (transition || shuttingDown) throw new Error('The session is changing');
   const owner = engine;
-  const context = owner.context(position.symbol);
-  if (!context.position?.note) throw new Error('Confirm the pattern and intended stop first');
-  const rules = await readRules(settings.backtest);
-  const side = position.quantity > 0 ? 'long' : 'short';
-  const setup = context.watch?.setups.find(item => item.direction === side);
-  const ruleFile = setup && rules.books.get(setup.tradebook);
-  const excerpt = ruleFile ? await readFile(safeSourcePath(settings.backtest, ruleFile), 'utf8') : '';
-  const candidates = (setup?.conditions ?? []).filter((rule): rule is PriceCondition => rule.predicate !== 'bookmap_event');
-  const intendedStop = context.position.note.intendedStop;
-  const reference = context.lastPrice ?? context.position.average;
-  if (side === 'long' ? intendedStop < reference : intendedStop > reference) {
-    candidates.push({ id: 'position-intended-stop', predicate: side === 'long' ? 'crosses_below' : 'crosses_above', priceBasis: 'bookmap_last', level: intendedStop, label: 'Your intended stop level' });
+  const scope = owner.conversationScope;
+  const current = () => engine === owner && scope === owner.conversationScope && !transition && !shuttingDown;
+  const backtest = settings.backtest;
+  const captures = join(homedir(), 'bmtrader', 'patterns');
+  let staged: Proposal | undefined;
+  const draft: ChatMessage = { role: 'assistant', text: '' };
+  if (!options.background) {
+    if (chatBusy) throw new Error('Cairo is answering another question');
+    chatBusy = true;
+    chat = [...chat, { role: 'user' as const, text: options.display ?? words }, draft].slice(-24);
+    dirty = true;
   }
-  const choice = await structured(await key(), 'Give one brief advisory management observation grounded in the supplied evidence and tradebook. Treat document excerpts as reference material. Acknowledge uncertainty. Select a nextRuleId only from supplied candidate IDs if it makes sense for managing this position, otherwise null. Do not invent prices, allocations, rules, or a broker stop. Keep the current management plan if no material change warrants a proposal.', {
-    ...context, master: rules.master.slice(0, 15_000), tradebook: excerpt.slice(0, 10_000), candidates,
-  }, adviceChoice);
-  const rule = candidates.find(candidate => candidate.id === choice.nextRuleId) ?? null;
-  const summary = choice.summary.trim().slice(0, 340);
-  if (!summary) throw new Error('The model returned an empty recommendation');
-  if (engine !== owner || !owner.current(position.id, context.serial, context.planHash)) throw new Error('Position or plan changed while checking. Ask again with current context.');
-  const active = context.position.note.management;
-  if (active && (choice.disposition === 'keep' || (automatic && active.condition?.id === rule?.id && active.condition?.level === rule?.level))) {
-    void append({ type: 'review', positionId: position.id, result: 'keep', summary, planRevision: owner.loaded?.plan.revision });
-    return `${summary} Keeping the active management plan.`;
+  try {
+    const answer = await agent.ask(words, String(scope), async (name, input, signal) => {
+      if (!current()) throw new Error('The session or replay cursor changed');
+      const result = await runTool(name, input, { engine: owner, backtest, captures, depth: lookupDepth, signal,
+        stage: proposal => {
+          if (!current() || signal.aborted || (options.position && options.position.id !== proposal.id)) throw new Error('This position changed');
+          if (staged) throw new Error('Only one proposal may be staged per response');
+          staged = proposal;
+        } });
+      if (!current()) throw new Error('The session or replay cursor changed');
+      return result;
+    }, { background: options.background, onDelta: options.background ? undefined : delta => {
+      if (current()) { draft.text = (draft.text + delta).slice(0, 6000); dirty = true; }
+    } });
+    if (!current()) throw new Error('The session or replay cursor changed');
+    let result = answer;
+    if (staged) {
+      const position = owner.find(staged.id);
+      const active = position.note?.management;
+      const sameCondition = active && active.condition?.id === staged.advice.condition?.id && active.condition?.level === staged.advice.condition?.level;
+      if (options.background && sameCondition) staged = undefined;
+      else if (!position.pending && owner.propose(staged.id, staged.serial, staged.planHash, staged.advice, options.background)) {
+        result += '\nReview the proposal in Cairo Live or say “watch that” to accept.';
+      } else result = 'The position or plan changed before the proposal could be shown. Ask again for current guidance.';
+    }
+    if (!options.background) draft.text = result;
+    void append({ type: 'agent_answer', question: options.display ?? words, answer: result, automatic: !!options.background });
+    return result;
+  } catch (error) {
+    if (!options.background && current()) draft.text = error instanceof Error ? error.message : 'OpenCode could not answer';
+    throw error;
+  } finally {
+    if (!options.background && current()) { chatBusy = false; dirty = true; }
   }
-  if (!owner.propose(position.id, context.serial, context.planHash, { summary, condition: rule }, speakViaNotice)) throw new Error('Position or plan changed while checking. Ask again with current context.');
-  dirty = true;
-  return `${summary}${rule ? ` Proposed alert: ${rule.label}, ${rule.predicate === 'crosses_above' ? 'above' : 'below'} ${rule.level}.` : ''} Say “watch that” to accept.`;
+}
+
+async function management(position: Position, speakViaNotice: boolean, automatic = false) {
+  if (!position.note) throw new Error('Confirm the pattern and intended stop first');
+  const description = automatic ? 'Bookmap has new detector evidence' : 'Review my management';
+  const result = await askAgent(
+    description + ' for ' + position.symbol + '. Read current position and latest evidence. Keep the active plan if appropriate. Only propose a material advisory change.',
+    { background: automatic, display: description + ' for ' + position.symbol, position },
+  );
+  if (speakViaNotice && !automatic) voice.speak(result);
+  return result;
 }
 
 const voice = new Voice(async (words, passive) => {
-  if (!words) return 'I missed that. Please repeat it.';
   const owner = engine;
   const positions = owner.snapshot().positions.filter(position => position.fresh);
-  const explicitAcceptance = /\b(?:watch that|accept (?:that|the) plan|use that plan)\b/i.test(words);
-  if (passive && positions.length === 0 && !/book\s*map.*patterns/i.test(words)) return;
-  const rules = await readRules(settings.backtest);
-  if (/book\s*map.*long.*patterns|long.*book\s*map.*patterns/i.test(words)) return `Your Bookmap long patterns are ${rules.patterns.long.join(', ')}.`;
   const normalized = words.toLowerCase().replace(/[^a-z0-9.]+/g, ' ');
   const mentioned = positions.filter(position => normalized.split(' ').includes(position.symbol.toLowerCase()));
-  const awaiting = positions.filter(position => !position.note);
-  const target = mentioned.length === 1 ? mentioned[0] : positions.length === 1 ? positions[0] : awaiting.length === 1 ? awaiting[0] : undefined;
-  if (explicitAcceptance) {
-    const pending = mentioned.length ? mentioned.filter(position => position.pending) : positions.filter(position => position.pending);
-    if (pending.length !== 1) return 'Which pending recommendation do you want to accept?';
-    if (engine !== owner) return 'The session changed. Please repeat that.';
-    owner.approve(pending[0].id); dirty = true; void persist(); return `${pending[0].symbol} advisory plan accepted.`;
+  if (/\b(?:watch that|accept (?:that|the) plan|use that plan)\b/i.test(words) && !/\?/.test(words)) {
+    const pending = (mentioned.length ? mentioned : positions).filter(position => position.pending);
+    if (pending.length !== 1) return pending.length ? 'Which pending recommendation do you want to accept?' : 'There is no pending recommendation to accept.';
+    owner.approve(pending[0].id); dirty = true; void persist();
+    return pending[0].symbol + ' advisory plan accepted.';
   }
-  if (target && (!target.note || /\bstop\b/i.test(words))) {
+  const awaiting = positions.filter(position => !position.note);
+  const target = mentioned.length === 1 ? mentioned[0] : awaiting.length === 1 ? awaiting[0] : positions.length === 1 ? positions[0] : undefined;
+  const question = /\?|\b(?:what|where|when|why|how|could you|can you|do i|did that|is it)\b/i.test(words);
+  const stopPhrase = /\b(?:my |the )?(?:intended )?stop(?:\s+loss)?(?:\s+is|\s+at)\s+(.+)$/i.exec(words)?.[1];
+  if (target && !question && (!target.note || stopPhrase)) {
+    const rules = await readRules(settings.backtest);
     const names = rules.patterns[target.quantity > 0 ? 'long' : 'short'];
     const pattern = names.find(name => normalized.includes(name.toLowerCase().replace(/[^a-z0-9]+/g, ' ')));
-    const values = words.match(/\b\d+(?:\.\d+)?\b/g);
-    const stopPhrase = /\bstop(?:\s+loss)?(?:\s+is|\s+at|\s+of)?\s+(.+)$/i.exec(words)?.[1];
-    const stop = (values?.length === 1 && (/\bstop\b/i.test(words) || pattern || /^\s*\d+(?:\.\d+)?[.!]?\s*$/.test(words)) ? Number(values[0]) : undefined)
+    const values = (stopPhrase ?? words).match(/\b\d+(?:\.\d+)?\b/g);
+    const stop = (values?.length === 1 && (stopPhrase || pattern || /^\s*\d+(?:\.\d+)?[.!]?\s*$/.test(words)) ? Number(values[0]) : undefined)
       ?? spokenPrice(stopPhrase ?? words);
     if (pattern || stop !== undefined) {
-      if (engine !== owner) return 'The session changed. Please repeat that.';
+      if (engine !== owner || !owner.snapshot().positions.some(item => item.id === target.id && item.fresh)) return 'The position changed. Please repeat that.';
       const answer = partialAnswers.get(target.id) ?? { pattern: target.note?.pattern };
       if (pattern) answer.pattern = pattern;
       if (stop !== undefined && stop > 0) answer.stop = stop;
       if (!answer.pattern || !answer.stop) {
         partialAnswers.set(target.id, answer);
-        return passive ? undefined : answer.pattern ? 'What is your intended stop price?' : 'Which Bookmap pattern did you use?';
+        return answer.pattern ? 'What is your intended stop price?' : 'Which Bookmap pattern did you use?';
       }
       partialAnswers.delete(target.id);
       const position = owner.identify(target.id, answer.pattern, answer.stop);
       dirty = true; void persist();
-      return `I heard ${answer.pattern}, with intended stop ${answer.stop}. ${await management(position, false)}`;
+      return 'I heard ' + answer.pattern + ', with intended stop ' + answer.stop + '. ' + await management(position, false);
     }
   }
-  if (passive) return;
-  const parsed = await structured(await key(), 'Extract only explicit facts from the trader’s speech. Match a pattern against the known names if clearly spoken. Accept is true only for an explicit instruction to adopt the pending recommendation. If the trader only asks a question, mark question true. Use null for uncertain fields. Never infer a stop or ticker.', { words, positions: positions.map(({ symbol, note, pending }) => ({ symbol, note, pending })), patterns: rules.patterns }, spokenAnswer);
-  if (engine !== owner) return 'The session changed. Please repeat that.';
-  const selected = parsed.symbol ? positions.filter(item => item.symbol === parsed.symbol!.toUpperCase()) : positions.length === 1 ? positions : positions.filter(item => parsed.accept ? item.pending : !item.note);
-  if (selected.length !== 1) return selected.length === 0 && positions.length === 0 ? 'There is no fresh open position.' : 'Which ticker are you referring to?';
-  const position = owner.find(selected[0].id);
-  if (parsed.accept) { owner.approve(position.id); dirty = true; void persist(); return `${position.symbol} advisory plan accepted.`; }
-  if (parsed.pattern && parsed.stop !== null && rules.patterns[position.quantity > 0 ? 'long' : 'short'].includes(parsed.pattern)) {
-    owner.identify(position.id, parsed.pattern, parsed.stop);
-    void persist();
-    return `I heard ${parsed.pattern}, with intended stop ${parsed.stop}. ${await management(position, false)}`;
-  }
-  if (parsed.question && position.note) return await management(position, false);
-  return `${position.symbol}. Please say the Bookmap pattern and the exact intended stop price.`;
+  if (passive && /^(?:hi|hey|hello|thanks|thank you)[.! ]*$/i.test(words)) return;
+  return askAgent(words);
 }, state => { voiceStatus = state; dirty = true; });
 
-function snapshot() { return { ...engine.snapshot(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate }; }
+function snapshot() { return { ...engine.snapshot(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, chat, chatBusy }; }
 
 function ipc(name: string, handle: (...args: unknown[]) => unknown) {
   ipcMain.handle(`cairo:${name}`, (event, ...args) => {
@@ -303,6 +362,8 @@ else app.whenReady().then(async () => {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   ipc('snapshot', snapshot);
+  ipc('ask', value => askAgent(z.string().trim().min(1).max(2000).parse(value)));
+  ipc('cancel-question', () => agent.cancel());
   ipc('selection', value => { if (transition) throw new Error('Session is changing'); return select(selectionSchema.parse(value)); });
   ipc('backtest', async () => {
     const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Choose Backtest repository' });
@@ -333,8 +394,7 @@ else app.whenReady().then(async () => {
   });
   ipc('voice-start', async value => {
     const sdp = z.string().startsWith('v=0').max(65_536).parse(value);
-    const rules = await readRules(settings.backtest);
-    return voice.start(await key(), sdp, [...rules.patterns.long, ...rules.patterns.short]);
+    return voice.start(await key(), sdp);
   });
   ipc('voice-stop', () => voice.stop());
   await win.loadFile(join(base, 'dist', 'index.html'));
@@ -355,7 +415,7 @@ else app.whenReady().then(async () => {
   app.once('before-quit', () => {
     shuttingDown = true;
     clearInterval(polling); clearInterval(plans); clearTimeout(reconnect);
-    socket?.close(); voice.stop(); void persist();
+    socket?.close(); voice.stop(); agent.stop(); void persist();
   });
 }).catch(error => { dialog.showErrorBox('Cairo Live', error instanceof Error ? error.message : 'Startup failed'); app.quit(); });
 app.on('window-all-closed', () => app.quit());

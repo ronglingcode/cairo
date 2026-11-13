@@ -10,7 +10,11 @@ npm start
 
 Run `npm run package` for an unpacked desktop release for the current platform. The macOS bundle includes the microphone usage description. From a packaged app, choose the Backtest checkout under **Session and settings** on first launch. In development the app finds the sibling Backtest checkout automatically. Start voice when ready and allow microphone access. Provide `OPENAI_API_KEY` in the process environment or the existing OpenAI entry in the workspace's `secrets/storeSecrets.js`.
 
+Use **Ask Cairo** for typed questions, or **Start voice** to ask aloud in the same conversation. Try “Which Bookmap patterns do I use on the buy side?”, “What are the largest bids and offers on NVDA?”, or “Did that large bid reappear, and is it still there?” OpenCode can read the plan, Backtest tradebooks, and Cairo's Bookmap snapshots through a dedicated tool plugin. The packaged app bundles OpenCode 2.0.22. Its conversation database is in memory; plans, notes, and agent answers remain in local Markdown, JSON, and JSONL. OpenCode resets conversation context on session changes and replay rewinds.
+
 Bookmap owns the live Schwab and Massive connections. Load the rebuilt `bookmap-plugin` JAR. Cairo subscribes to the Bookmap loopback feed on port 8765. The live panel starts in shadow mode, which records alerts in the local log. Turn it off to hear notices. App state is saved per session under the OS application data directory for Cairo Live in `state.json` and `alerts.jsonl`.
+
+The current depth tool uses the rebuilt Bookmap add-on's read-only snapshot on that same socket. Earlier detector events are available through Bookmap's retained capture files under `~/bmtrader/patterns` when capture is enabled. Enable pattern evidence for the chart to query detected reappearances and bounded replay depth. Tools report snapshot times, gaps, and missing evidence. The agent can prepare an advisory alert for review. **Watch that** activates the alert inside Cairo.
 
 ## Replay
 
