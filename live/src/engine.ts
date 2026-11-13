@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type LoadedPlan, type PriceCondition, type Selection, marketDate, symbolName } from './plan.ts';
-import { positionSizing, type ExitPlan, type Fill } from './exit-plan.ts';
+import { positionSizing, tradeExecutions, type ExitPlan, type Fill } from './exit-plan.ts';
 
 const positive = z.number().finite().positive();
 const ns = z.string().regex(/^\d{1,20}$/);
@@ -14,7 +14,8 @@ const liquidity = z.object({ asOf: ns, threshold: z.number().nonnegative(), best
 export const patternSnapshot = envelope.extend({ type: z.literal('cairo_patterns'), version: z.literal(2), eventTime: ns, readiness: z.enum(['ready', 'not-ready']), coverage: z.enum(['continuous', 'warming', 'gap']), liquidity: liquidity.nullish().catch(undefined), patterns: z.array(z.object({ id: z.union([z.string(), z.number()]), type: z.string(), revision: z.number(), eventTime: ns, observedAt: ns.optional() }).passthrough()).max(64) });
 const messages = z.discriminatedUnion('type', [
   envelope.extend({ type: z.literal('cairo_chart'), version: z.literal(1), attached: z.boolean() }),
-  envelope.extend({ type: z.literal('cairo_trade'), version: z.literal(1), eventTime: ns, price: positive, tradeSequence: positive.int() }),
+  envelope.extend({ type: z.literal('cairo_trade'), version: z.literal(1), eventTime: ns, price: positive, tradeSequence: positive.int(),
+    replayVwap: positive.optional(), vwapFirstObserved: ns.optional(), vwapCoversPremarketStart: z.boolean().optional() }),
   envelope.extend({ type: z.literal('cairo_replay_reset'), version: z.literal(1), eventTime: ns }),
   envelope.extend({ type: z.literal('cairo_replay_fill'), version: z.literal(1), eventTime: ns, executionId: z.string(), positionId: z.string().optional(), side: z.enum(['BUY', 'SELL']), price: positive, quantity: positive, positionQuantity: z.number().finite().nonnegative(), positionAveragePrice: positive, opening: z.boolean() }),
   envelope.extend({ type: z.literal('cairo_account'), version: z.literal(1), asOf: positive, positionQuantity: z.number().finite(), positionAveragePrice: positive.optional(), workingStops: z.array(z.object({ price: positive, quantity: positive })).max(128), executions: z.array(execution).max(8000) }),
@@ -299,6 +300,8 @@ export class Engine {
 
   sizing(position: Position) { return positionSizing(position.quantity, this.fills.get(position.symbol)?.records ?? []); }
 
+  tradeHistory(position: Position) { return tradeExecutions(position.quantity, this.fills.get(position.symbol)?.records ?? []); }
+
   setExitPlan(id: string, serial: number, planHash: string | undefined, plan: ExitPlan) {
     if (!this.current(id, serial, planHash)) return false;
     const position = this.find(id);
@@ -366,7 +369,9 @@ export class Engine {
   snapshot() {
     return { selection: this.selection, connected: this.feed, shadow: this.shadow, plan: this.active?.plan, planPath: this.active?.path, planError: this.error,
       positions: [...this.positions.values()], recent: this.recent, missing: this.active?.plan.watchlist.map(item => item.symbol).filter(symbol => !this.charts.has(symbol)) ?? [],
-      last: Object.fromEntries([...this.trades].map(([symbol, value]) => [symbol, value.price])) };
+      last: Object.fromEntries([...this.trades].map(([symbol, value]) => [symbol, value.price])),
+      replayVwap: Object.fromEntries([...this.trades].flatMap(([symbol, value]) => value.replayVwap === undefined ? [] :
+        [[symbol, { price: value.replayVwap, partial: !value.vwapCoversPremarketStart }]])) };
   }
 }
 

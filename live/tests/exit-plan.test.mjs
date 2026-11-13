@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Engine } from '../src/engine.ts';
 import { formatExitPlan, positionSizing, validateExitPlan } from '../src/exit-plan.ts';
+import { activeTradeContext } from '../src/agent-tools.ts';
 
 const fill = (timestamp, quantity, isBuy, orderId) => ({ executionId: String(timestamp), orderId, timestamp, quantity, isBuy, price: 148 });
 
@@ -42,4 +43,21 @@ test('a reconciled partial and add each request review, duplicate account snapsh
   account(5, 0, [opening, partial, add, fill(now, 90, false, 'exit')]);
   assert.deepEqual(reviews, [80, 90]);
   assert.deepEqual(engine.snapshot().positions, []);
+});
+
+test('active trade context includes trader notes and excludes a previously closed trade', () => {
+  const now = Date.parse('2025-12-04T16:00:00Z');
+  const engine = new Engine({ mode: 'live' }, { notes: {}, delivered: [] }, () => {}, () => now);
+  const records = [fill(now - 900, 20, true, 'old-entry'), fill(now - 800, 20, false, 'old-close'),
+    fill(now - 700, 100, true, 'entry'), fill(now - 500, 20, false, 'partial'), fill(now - 200, 10, true, 'add')];
+  engine.connect();
+  engine.accept({ type: 'cairo_account', version: 1, mode: 'live', symbol: 'META', sourceInstanceId: 'fixture',
+    epoch: 1, sequence: 1, delivery: 'snapshot', asOf: now, positionQuantity: 90, positionAveragePrice: 148,
+    workingStops: [{ price: 146, quantity: 90 }], executions: records });
+  const position = engine.identify(engine.snapshot().positions[0].id, 'Bid Lift', 147);
+  const context = activeTradeContext(engine, position);
+  assert.deepEqual(context.fills.map(({ action, quantity }) => [action, quantity]), [['entry', 100], ['partial', 20], ['add', 10]]);
+  assert.equal(context.traderConfirmedPattern, 'Bid Lift');
+  assert.equal(context.traderIntendedStop, 147);
+  assert.deepEqual(context.brokerWorkingStops, [146]);
 });

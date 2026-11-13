@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import WebSocket from 'ws';
 import { z } from 'zod';
@@ -32,10 +31,10 @@ export class Voice {
   private quietTimer?: ReturnType<typeof setTimeout>;
   private delegationId: string | null = null;
   private ignored = false;
-  private readonly delegate: (words: string, passive: boolean) => Promise<string | undefined>;
+  private readonly delegate: (words: string, passive: boolean) => Promise<void>;
   private readonly state: (state: string) => void;
 
-  constructor(delegate: (words: string, passive: boolean) => Promise<string | undefined>, state: (state: string) => void) {
+  constructor(delegate: (words: string, passive: boolean) => Promise<void>, state: (state: string) => void) {
     this.delegate = delegate;
     this.state = state;
   }
@@ -46,7 +45,7 @@ export class Voice {
     const result = await request(key, 'live/sessions', {
       session: { model: 'gpt-live-1', store: false, delegation: { type: 'client' },
         client: { data_channel: { allowed_client_events: ['session.close'] } },
-        instructions: 'Trading desk voice. Skip greetings, acknowledgments and filler. Delegate user questions silently. Speak only the supplied brief answer, at most two short sentences. Never read the panel aloud or add a follow-up unless a clarification is required. App announcements are not user input.',
+        instructions: 'Transcribe the trader. Stay silent. Cairo speaks all replies and announcements locally.',
       }, transport: { type: 'webrtc', sdp },
     });
     if (generation !== this.generation) throw new Error('Voice setup was canceled');
@@ -87,7 +86,7 @@ export class Voice {
 
   private scheduleReply(socket: WebSocket) {
     clearTimeout(this.quietTimer);
-    this.quietTimer = setTimeout(() => { void this.reply(socket); }, 850);
+    this.quietTimer = setTimeout(() => { void this.reply(socket); }, 1350);
   }
 
   private async reply(socket: WebSocket) {
@@ -96,18 +95,8 @@ export class Voice {
     const id = this.delegationId;
     this.delegationId = null;
     this.transcript = '';
-    if (!words) return;
-    const result = await this.delegate(words, id === null).catch(error => error instanceof Error ? error.message : 'Could not verify that request');
-    if (result && this.socket === socket && !this.ignored) this.send('session.commentary.append', result, id);
-  }
-
-  context(text: string) { this.send('session.thinking.append', text); }
-  speak(text: string) { return this.send('session.commentary.append', text); }
-
-  private send(type: string, content: string, delegationId: string | null = null) {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false;
-    this.socket.send(JSON.stringify({ type, content: content.slice(0, 1400), delegation_id: delegationId, event_id: randomUUID() }));
-    return true;
+    if (!/[a-z0-9]/i.test(words.replace(/\[[^\]]*\]/g, ''))) return;
+    await this.delegate(words, id === null);
   }
 
   stop() {

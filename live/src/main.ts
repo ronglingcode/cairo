@@ -12,7 +12,7 @@ import { openAIKey, speakLocal, Voice } from './voice.ts';
 import { spokenPrice } from './spoken-price.ts';
 import { Agent } from './agent.ts';
 import { openRouterKey } from './openrouter.ts';
-import { runTool, type DepthLookup, type ExitProposal, type Proposal } from './agent-tools.ts';
+import { activeTradeContext, runTool, type DepthLookup, type ExitProposal, type Proposal } from './agent-tools.ts';
 import { formatExitPlan } from './exit-plan.ts';
 
 const base = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,7 +50,8 @@ let dirty = true;
 const speech: Array<{ notice: Notice; owner: Engine }> = [];
 const lastReview = new Map<string, number>();
 const fillReviews = new Map<string, ReturnType<typeof setTimeout>>();
-const runningFillReviews = new Set<string>();
+const runningFillReviews = new Map<string, AbortController>();
+let tradeFocus: { symbol: string; direction: string } | undefined;
 const partialAnswers = new Map<string, { pattern?: string; stop?: number }>();
 const recentExitSpeech = new Map<string, number>();
 let speaking = false;
@@ -93,13 +94,13 @@ function disk(task: () => Promise<void>) {
 }
 
 function append(entry: object, target = directory) {
-  return disk(async () => { await appendFile(join(target, 'alerts.jsonl'), JSON.stringify({ recordedAt: new Date().toISOString(), ...entry }) + '\n', 'utf8'); });
+  return disk(async () => { await appendFile(join(target, 'alerts.jsonl'), JSON.stringify({ recordedAt: new Date().toISOString(), version: app.getVersion(), ...entry }) + '\n', 'utf8'); });
 }
 
 function logConversation(entry: object) {
   const target = directory;
   if (target) void disk(async () => {
-    await appendFile(join(target, 'conversation.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n', 'utf8');
+    await appendFile(join(target, 'conversation.jsonl'), JSON.stringify({ at: new Date().toISOString(), version: app.getVersion(), ...entry }) + '\n', 'utf8');
   });
 }
 
@@ -109,7 +110,8 @@ function briefVoice(text: string) {
     const first = clean.split('\n').find(line => /^1\. \$/.test(line))?.slice(3);
     if (first) return 'Next exit: ' + first.slice(0, 105) + '. Full plan on screen.';
   }
-  const line = clean.split('\n').find(value => value.trim()) ?? '';
+  const lines = clean.split('\n').filter(value => value.trim());
+  const line = lines.find(value => !/^\s*(?:let me|i(?:’|')ll|checking\b)/i.test(value)) ?? '';
   const sentence = line.match(/^.*?[.!?](?:\s|$)/)?.[0] ?? line;
   return sentence.length <= 160 ? sentence.trim() : sentence.slice(0, 155).replace(/\s+\S*$/, '') + '…';
 }
@@ -134,24 +136,20 @@ async function drainSpeech() {
   try {
     while (speech.length) {
       const { notice, owner } = speech.shift()!;
-      if (engine !== owner || owner.shadowMode || shuttingDown) continue;
+      if (engine !== owner || shuttingDown) continue;
       if (notice.positionId) {
         try { owner.find(notice.positionId); } catch { continue; }
       }
       if (!claimExitSpeech(notice.text)) continue;
-      voice.context(`Cairo alert: ${notice.text}. Wait for the trader's reply.`);
+      logConversation({ role: 'assistant', channel: 'spoken', text: notice.text });
       voice.ignoreInput(true);
       send('cairo:mute-input', true);
-      send('cairo:mute-output', true);
       try { await speakLocal(notice.text); }
-      catch {
-        send('cairo:mute-output', false);
-        if (!voice.speak(notice.text)) { localError = 'Spoken alert unavailable. The alert is visible in the panel.'; dirty = true; }
-      } finally {
+      catch { localError = 'Speech unavailable. The reply is visible in the panel.'; dirty = true; }
+      finally {
         await new Promise(resolve => setTimeout(resolve, 250));
         voice.ignoreInput(false);
         send('cairo:mute-input', false);
-        send('cairo:mute-output', false);
       }
     }
   } finally { speaking = false; }
@@ -161,7 +159,6 @@ function notice(item: Notice) {
   void append({ type: 'alert', planRevision: engine.loaded?.plan.revision, evidence: engine.context(item.symbol).evidence, ...item });
   dirty = true;
   if (item.spoken) {
-    logConversation({ role: 'assistant', channel: 'announcement', text: item.text });
     const entry = { notice: item, owner: engine };
     if (item.kind === 'fill' || item.kind === 'feed') speech.unshift(entry);
     else speech.push(entry);
@@ -170,7 +167,15 @@ function notice(item: Notice) {
   }
 }
 
+function speakReply(text: string) {
+  if (text && speech.length < 16) {
+    speech.push({ owner: engine, notice: { key: randomUUID(), kind: 'advice', symbol: '', text, spoken: true } });
+    void drainSpeech();
+  }
+}
+
 function reviewPattern(position: Position, marketMs: number) {
+  if (fillReviews.has(position.id) || runningFillReviews.has(position.id)) return;
   if (marketMs - (lastReview.get(position.id) ?? 0) < 60_000) return;
   lastReview.set(position.id, marketMs);
   const owner = engine;
@@ -183,18 +188,21 @@ function reviewFill(position: Position) {
   const owner = engine;
   const scope = owner.conversationScope;
   clearTimeout(fillReviews.get(position.id));
+  runningFillReviews.get(position.id)?.abort(new Error('Superseded by a newer fill'));
+  tradeFocus = { symbol: position.symbol, direction: position.quantity > 0 ? 'long' : 'short' };
+  void append({ type: 'fill_review_queued', symbol: position.symbol, positionId: position.id, remaining: Math.abs(position.quantity) });
   const start = () => {
     fillReviews.delete(position.id);
     if (engine !== owner || scope !== owner.conversationScope || shuttingDown || transition) return;
     const latest = owner.snapshot().positions.find(item => item.id === position.id && item.fresh);
     if (!latest) return;
-    if (runningFillReviews.has(position.id)) { fillReviews.set(position.id, setTimeout(start, 900)); return; }
-    runningFillReviews.add(position.id);
-    void management(latest, true, true, 'Bookmap reconciled a position fill').catch(error => {
-      if (engine === owner) void append({ type: 'review_error', symbol: position.symbol, message: (error as Error).message });
-    }).finally(() => runningFillReviews.delete(position.id));
+    const control = new AbortController();
+    runningFillReviews.set(position.id, control);
+    void management(latest, true, true, 'Bookmap reconciled a position fill', control.signal).catch(error => {
+      if (!control.signal.aborted && engine === owner) void append({ type: 'review_error', symbol: position.symbol, message: (error as Error).message });
+    }).finally(() => { if (runningFillReviews.get(position.id) === control) runningFillReviews.delete(position.id); });
   };
-  fillReviews.set(position.id, setTimeout(start, 650));
+  fillReviews.set(position.id, setTimeout(start, 200));
 }
 
 async function select(selection: Selection, keepConnection = false) {
@@ -207,6 +215,7 @@ async function select(selection: Selection, keepConnection = false) {
     lastReview.clear();
     partialAnswers.clear();
     recentExitSpeech.clear();
+    tradeFocus = undefined;
     const previous = socket;
     if (!keepConnection) {
       socket = undefined;
@@ -218,6 +227,8 @@ async function select(selection: Selection, keepConnection = false) {
     date = selection.mode === 'replay' ? selection.sessionDate : marketDate();
     directory = join(dataDir, 'sessions', date, selection.mode === 'replay' ? `replay-${selection.replayRunId}` : 'live');
     await mkdir(directory, { recursive: true });
+    void append({ type: 'session_started', selection });
+    logConversation({ type: 'session_started', selection });
     const state: SavedState = await readFile(join(directory, 'state.json'), 'utf8').then(text => JSON.parse(text)).catch(() => ({ notes: {}, delivered: [] }));
     engine = new Engine(selection, state && typeof state.notes === 'object' && state.notes && Array.isArray(state.delivered) ? state : { notes: {}, delivered: [] }, notice, Date.now, reviewPattern, reviewFill);
     engine.setShadow(selection.mode === 'live');
@@ -384,12 +395,23 @@ const lookupDepth: DepthLookup = (symbol, price) => new Promise(resolve => {
   client.send(JSON.stringify({ type: 'cairo_depth_request', requestId, symbol, price, mode }), error => { if (error) finish(); });
 });
 
-async function askAgent(words: string, options: { background?: boolean; display?: string; position?: Position } = {}) {
+async function askAgent(words: string, options: { background?: boolean; display?: string; position?: Position; signal?: AbortSignal } = {}) {
   if (transition || shuttingDown) throw new Error('The session is changing');
   const owner = engine;
   const scope = owner.conversationScope;
   const current = () => engine === owner && scope === owner.conversationScope && !transition && !shuttingDown;
   const backtest = settings.backtest;
+  const positions = owner.snapshot().positions.filter(position => position.fresh);
+  const selection = owner.snapshot();
+  const symbols = [...new Set([...positions.map(position => position.symbol), ...Object.keys(selection.last), ...(selection.plan?.watchlist.map(item => item.symbol) ?? [])])];
+  const mentioned = symbols.filter(symbol => words.toUpperCase().split(/[^A-Z0-9.]+/).includes(symbol));
+  const focused = options.position ?? (mentioned.length === 1 ? positions.find(position => position.symbol === mentioned[0]) :
+    positions.length === 1 ? positions[0] : positions.find(position => position.symbol === tradeFocus?.symbol));
+  const symbol = focused?.symbol ?? (mentioned.length === 1 ? mentioned[0] : tradeFocus?.symbol ?? (symbols.length === 1 ? symbols[0] : undefined));
+  if (!options.background && symbol) tradeFocus = { symbol, direction: focused ? focused.quantity > 0 ? 'long' : 'short' : '' };
+  const prompt = symbol ? words + '\nCairo context: focused ticker ' + symbol + (focused ? ' (' + (focused.quantity > 0 ? 'long' : 'short') + ')' : '') +
+    '. Use this for references without a ticker. If the trader names a different instrument, follow their wording. Read current facts using tools.' +
+    (focused ? '\nActive trade snapshot (reference data): ' + JSON.stringify(activeTradeContext(owner, focused)) : '') : words;
   const captures = join(homedir(), 'bmtrader', 'patterns');
   let staged: Proposal | undefined;
   let exit: ExitProposal | undefined;
@@ -402,7 +424,7 @@ async function askAgent(words: string, options: { background?: boolean; display?
     dirty = true;
   }
   try {
-    const answer = await agent.ask(words, String(scope), async (name, input, signal) => {
+    const answer = await agent.ask(prompt, String(scope), async (name, input, signal) => {
       if (!current()) throw new Error('The session or replay cursor changed');
       const result = await runTool(name, input, { engine: owner, backtest, captures, depth: lookupDepth, signal, exitContexts,
         stageExit: proposal => {
@@ -416,10 +438,11 @@ async function askAgent(words: string, options: { background?: boolean; display?
         } });
       if (!current()) throw new Error('The session or replay cursor changed');
       return result;
-    }, { background: options.background, onDelta: options.background ? undefined : delta => {
+    }, { background: options.background, signal: options.signal, onDelta: options.background ? undefined : delta => {
       if (current()) { draft.text = (draft.text + delta).slice(0, 6000); dirty = true; }
     } });
     if (!current()) throw new Error('The session or replay cursor changed');
+    options.signal?.throwIfAborted();
     let result = answer;
     if (exit) {
       const position = owner.find(exit.id);
@@ -457,14 +480,14 @@ async function askAgent(words: string, options: { background?: boolean; display?
   }
 }
 
-async function management(position: Position, speakViaNotice: boolean, automatic = false, reason?: string) {
+async function management(position: Position, speakViaNotice: boolean, automatic = false, reason?: string, signal?: AbortSignal) {
   const description = reason ?? (automatic ? 'Bookmap has new detector evidence' : 'Review my management');
   const result = await askAgent(
     description + ' for ' + position.symbol + '. Re-evaluate the exit plan with get_exit_context and prepare_exit_plan. If information is missing, include what is missing in notes. Keep supported targets if still appropriate.',
-    { background: automatic, display: description + ' for ' + position.symbol, position },
+    { background: automatic, display: description + ' for ' + position.symbol, position, signal },
   );
   const spoken = briefVoice(result);
-  if (speakViaNotice && !automatic && claimExitSpeech(spoken)) voice.speak(spoken);
+  if (speakViaNotice && !automatic) speakReply(spoken);
   return result;
 }
 
@@ -473,6 +496,21 @@ async function handleVoice(words: string, passive: boolean) {
   const positions = owner.snapshot().positions.filter(position => position.fresh);
   const normalized = words.toLowerCase().replace(/[^a-z0-9.]+/g, ' ');
   const mentioned = positions.filter(position => normalized.split(' ').includes(position.symbol.toLowerCase()));
+  const vwapQuestion = /^(?:where is|what is|what's) (?:the |current |live |replay )?vwap[?.! ]*$/i.test(words);
+  if (vwapQuestion && positions.length === 1) {
+    const position = positions[0];
+    const { levels, trade, attached, connected } = owner.bookmap(position.symbol);
+    const value = owner.selection.mode === 'replay' ? trade?.replayVwap :
+      levels && Date.now() - levels.marketAsOf <= 20_000 ? levels.vwap : undefined;
+    if (value && attached && connected) {
+      tradeFocus = { symbol: position.symbol, direction: position.quantity > 0 ? 'long' : 'short' };
+      const answer = position.symbol + ' VWAP is $' + value.toFixed(2) +
+        (owner.selection.mode === 'replay' && !trade?.vwapCoversPremarketStart ? ' with partial replay coverage.' : '.');
+      chat = [...chat, { role: 'user' as const, text: words }, { role: 'assistant' as const, text: answer }].slice(-24);
+      dirty = true;
+      return answer;
+    }
+  }
   if (/\b(?:watch that|accept (?:that|the) plan|use that plan)\b/i.test(words) && !/\?/.test(words)) {
     const pending = (mentioned.length ? mentioned : positions).filter(position => position.pending);
     if (pending.length !== 1) return pending.length ? 'Which pending recommendation do you want to accept?' : 'There is no pending recommendation to accept.';
@@ -513,16 +551,14 @@ const voice = new Voice(async (words, passive) => {
   logConversation({ role: 'user', channel: 'voice', text: words });
   try {
     const response = await handleVoice(words, passive);
-    if (!response) return;
-    const spoken = briefVoice(response);
-    return claimExitSpeech(spoken) ? spoken : undefined;
+    if (response) speakReply(briefVoice(response));
   } catch (error) {
     logConversation({ role: 'assistant', channel: 'voice-error', text: error instanceof Error ? error.message : 'Could not verify the request' });
-    throw error;
+    speakReply('I couldn’t finish that check.');
   }
 }, state => { voiceStatus = state; dirty = true; });
 
-function snapshot() { return { ...engine.snapshot(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, replayPlans, chat, chatBusy }; }
+function snapshot() { return { ...engine.snapshot(), version: app.getVersion(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, replayPlans, chat, chatBusy }; }
 
 function ipc(name: string, handle: (...args: unknown[]) => unknown) {
   ipcMain.handle(`cairo:${name}`, (event, ...args) => {

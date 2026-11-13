@@ -3,7 +3,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { join, relative } from 'node:path';
 import { z } from 'zod';
-import { patternSnapshot, type Advice, type Engine } from './engine.ts';
+import { patternSnapshot, type Advice, type Engine, type Position } from './engine.ts';
 import { marketDate, readRules, safeSourcePath, symbolName, type PriceCondition } from './plan.ts';
 import { exitInput, validateExitPlan, type ExitPlan } from './exit-plan.ts';
 
@@ -35,6 +35,27 @@ export type ExitProposal = { id: string; serial: number; planHash?: string; plan
 const nanosMs = (value: string) => Number(BigInt(value) / 1_000_000n);
 const iso = (value: number) => new Date(value).toISOString();
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7;
+
+function dailyPlan(engine: Engine, symbol?: string) {
+  const loaded = engine.planForAgent();
+  if (!loaded) return null;
+  const { watchlist, ...plan } = loaded.plan;
+  const notes = loaded.markdown.replace(/^```cairo-plan[\t ]*\r?\n[\s\S]*?^```[\t ]*\r?$/gm, '').trim().slice(0, 8000);
+  return { ...plan, path: loaded.path, watchlist: watchlist.filter(item => !symbol || item.symbol === symbol), notes };
+}
+
+export function activeTradeContext(engine: Engine, position: Position) {
+  const history = engine.tradeHistory(position);
+  return {
+    symbol: position.symbol, side: position.quantity > 0 ? 'long' : 'short',
+    asOf: iso(position.sourceTime), averageEntry: position.average, sizing: engine.sizing(position),
+    traderConfirmedPattern: position.note?.pattern ?? null, traderIntendedStop: position.note?.intendedStop ?? null,
+    brokerWorkingStops: position.brokerStops, confirmedPlan: dailyPlan(engine, position.symbol),
+    exitPlan: position.exitPlan ?? null, exitPlanNeedsReview: !!position.exitPlanNeedsReview,
+    historyComplete: history.complete, fills: history.records.map(({ action, price, quantity, timestamp }) =>
+      ({ action, price, quantity, at: iso(timestamp) })),
+  };
+}
 
 export function managementCandidates(engine: Engine, symbol: string) {
   const context = engine.context(symbol);
@@ -147,11 +168,7 @@ export async function runTool(name: ToolName, input: unknown, options: {
     case 'search_tradebooks': return tradebooks(options.backtest, toolDefinitions[name].input.parse(input));
     case 'get_trading_plan': {
       const { symbol } = optionalSymbol.parse(input);
-      const loaded = engine.planForAgent();
-      if (!loaded) return { status: 'No confirmed plan available at the current cursor' };
-      const { watchlist, ...plan } = loaded.plan;
-      const notes = loaded.markdown.replace(/^```cairo-plan[\t ]*\r?\n[\s\S]*?^```[\t ]*\r?$/gm, '').trim().slice(0, 8000);
-      return { ...plan, path: loaded.path, watchlist: watchlist.filter(item => !symbol || item.symbol === symbol), notes };
+      return dailyPlan(engine, symbol) ?? { status: 'No confirmed plan available at the current cursor' };
     }
     case 'get_positions': {
       const { symbol } = optionalSymbol.parse(input);
@@ -168,7 +185,10 @@ export async function runTool(name: ToolName, input: unknown, options: {
       const tradeMs = trade ? nanosMs(trade.eventTime) : 0;
       return { symbol, connected, attached, cursor: cursor ? iso(cursor) : null,
         lastTrade: tradeMs ? { price: trade?.price, at: iso(tradeMs), fresh: connected && (engine.selection.mode === 'replay' || Date.now() - tradeMs <= 10_000) } : null,
-        sessionLevels: levels ? { ...levels, source: 'Bookmap native market runtime', at: iso(levels.marketAsOf), fresh: connected && Date.now() - levels.marketAsOf <= 20_000 } : null,
+        sessionLevels: levels ? { ...levels, source: 'Bookmap native market runtime', at: iso(levels.marketAsOf), fresh: connected && Date.now() - levels.marketAsOf <= 20_000 }
+          : trade?.replayVwap ? { vwap: trade.replayVwap, source: 'Bookmap recorded trades', at: iso(tradeMs),
+            fresh: connected && attached, firstObserved: trade.vwapFirstObserved ? iso(nanosMs(trade.vwapFirstObserved)) : null,
+            coverage: trade.vwapCoversPremarketStart ? 'from premarket start' : 'partial replay coverage' } : null,
         detector: snapshot ? { readiness: snapshot.readiness, coverage: snapshot.coverage, at: iso(nanosMs(snapshot.eventTime)) } : null };
     }
     case 'get_exit_context': {
@@ -180,15 +200,13 @@ export async function runTool(name: ToolName, input: unknown, options: {
       const guidelines = await readFile(safeSourcePath(options.backtest, guidelinesPath), 'utf8');
       const setup = context.watch?.setups.find(item => item.direction === (position.quantity > 0 ? 'long' : 'short'));
       const setupRules = setup ? await readFile(safeSourcePath(options.backtest, setup.tradebookPath), 'utf8') : undefined;
-      const [market, depth, plan] = await Promise.all([
+      const [market, depth] = await Promise.all([
         runTool('get_market_context', { symbol }, options),
         runTool('get_bookmap_depth', { symbol }, options),
-        runTool('get_trading_plan', { symbol }, options),
       ]);
       if (!engine.current(position.id, context.serial, context.planHash)) throw new Error('Position or plan changed. Refresh the exit context.');
       options.exitContexts?.set(symbol, { id: position.id, serial: context.serial, planHash: context.planHash });
-      return { position, sizing: engine.sizing(position), market, depth, plan, recentPatterns: context.evidence,
-        recentFills: engine.recentFills(symbol).flatMap(item => item.records.slice(-30)),
+      return { position, ...activeTradeContext(engine, position), market, depth, recentPatterns: context.evidence,
         guidelinesPath, guidelines, setupRules: setupRules?.slice(0, 12000) };
     }
     case 'prepare_exit_plan': {

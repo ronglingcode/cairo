@@ -1,36 +1,42 @@
 import { z } from 'zod';
 
 export type Fill = { executionId: string; orderId?: string; timestamp: number; price: number; quantity: number; isBuy: boolean };
-export function positionSizing(quantity: number, executions: Fill[]) {
+export function tradeExecutions(quantity: number, executions: Fill[]) {
   const direction = Math.sign(quantity);
-  const remaining = Math.abs(quantity);
-  let balance = remaining;
-  let taken = 0;
-  const openingSide: Array<{ fill: Fill; quantity: number }> = [];
+  let balance = Math.abs(quantity);
+  const records: Array<Fill & { action: 'entry' | 'add' | 'partial' }> = [];
   const seen = new Set<string>();
-  const fills = [...executions].sort((a, b) => a.timestamp - b.timestamp);
-  for (const fill of fills.reverse()) {
+  for (const fill of [...executions].sort((a, b) => a.timestamp - b.timestamp).reverse()) {
     if (seen.has(fill.executionId)) continue;
     seen.add(fill.executionId);
     if ((fill.isBuy ? 1 : -1) === direction) {
-      openingSide.push({ fill, quantity: Math.min(balance, fill.quantity) });
+      records.push({ ...fill, quantity: Math.min(balance, fill.quantity), action: 'add' });
       balance -= fill.quantity;
       if (balance <= 1e-8) {
-        const original = openingSide.reverse();
-        const entry = original[0];
-        if (original.length > 1 && original.some(item => !item.fill.orderId)) {
-          return { originalShares: null, remaining, taken, added: null };
+        records.reverse();
+        const entry = records[0];
+        for (const record of records) {
+          if (record === entry || (record.action === 'add' && entry.orderId && entry.orderId === record.orderId)) record.action = 'entry';
         }
-        const originalShares = original.reduce((sum, item, index) =>
-          sum + (index === 0 || (entry.fill.orderId && item.fill.orderId === entry.fill.orderId) ? item.quantity : 0), 0);
-        return { originalShares, remaining, taken, added: remaining + taken - originalShares };
+        return { complete: true, records };
       }
     } else {
-      taken += fill.quantity;
+      records.push({ ...fill, action: 'partial' });
       balance += fill.quantity;
     }
   }
-  return { originalShares: null, remaining, taken: null, added: null };
+  return { complete: false, records: records.reverse() };
+}
+
+export function positionSizing(quantity: number, executions: Fill[]) {
+  const remaining = Math.abs(quantity);
+  const { complete, records } = tradeExecutions(quantity, executions);
+  if (!complete) return { originalShares: null, remaining, taken: null, added: null };
+  const taken = records.filter(item => item.action === 'partial').reduce((sum, item) => sum + item.quantity, 0);
+  const openingSide = records.filter(item => item.action !== 'partial');
+  if (openingSide.length > 1 && openingSide.some(item => !item.orderId)) return { originalShares: null, remaining, taken, added: null };
+  const originalShares = openingSide.filter(item => item.action === 'entry').reduce((sum, item) => sum + item.quantity, 0);
+  return { originalShares, remaining, taken, added: remaining + taken - originalShares };
 }
 
 export const exitInput = z.object({
