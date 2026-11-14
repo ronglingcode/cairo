@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('cairo', {
   cancelQuestion: () => invoke('cancel-question'),
   onSnapshot: handler => subscribe('snapshot', handler),
   onMuteInput: handler => subscribe('mute-input', handler),
+  onVoicePlayback: handler => subscribe('voice-playback', handler),
+  voicePlaybackStatus: (id, status) => invoke('voice-playback-status', id, status),
   voiceCaption: value => invoke('voice-caption', value),
   replayPlan: value => invoke('replay-plan', value),
   backtest: () => invoke('backtest'),

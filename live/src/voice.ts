@@ -1,10 +1,25 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import WebSocket from 'ws';
 import { z } from 'zod';
 
 const run = promisify(execFile);
+type PlaybackResult = 'played' | 'timeout' | 'send-failed' | 'server-rejected' | 'player-failed' | 'canceled';
+
+export async function speakLocal(text: string, signal: AbortSignal) {
+  const options = { signal, timeout: 12_000 };
+  if (process.platform === 'darwin') {
+    await run('/usr/bin/say', [' ' + text], options);
+  } else if (process.platform === 'win32') {
+    const script = 'Add-Type -AssemblyName System.Speech; $voice = [System.Speech.Synthesis.SpeechSynthesizer]::new(); try { $voice.Speak($env:CAIRO_LIVE_UTTERANCE) } finally { $voice.Dispose() }';
+    await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { ...options, windowsHide: true, env: { ...process.env, CAIRO_LIVE_UTTERANCE: text } });
+  } else {
+    throw new Error('Local speech is unavailable on this platform');
+  }
+}
 
 export async function openAIKey(file: string) {
   const configured = process.env.OPENAI_API_KEY?.trim();
@@ -31,12 +46,16 @@ export class Voice {
   private quietTimer?: ReturnType<typeof setTimeout>;
   private delegationId: string | null = null;
   private ignored = false;
-  private readonly delegate: (words: string, passive: boolean) => Promise<void>;
+  private playback?: { id: string; activity: () => void; finish: (result: PlaybackResult) => void };
+  private readonly delegate: (words: string, passive: boolean, reply: (text: string) => void) => Promise<void>;
   private readonly state: (state: string) => void;
+  private readonly setPlayback: (id: string | null) => void;
 
-  constructor(delegate: (words: string, passive: boolean) => Promise<void>, state: (state: string) => void) {
+  constructor(delegate: (words: string, passive: boolean, reply: (text: string) => void) => Promise<void>, state: (state: string) => void,
+    setPlayback: (id: string | null) => void) {
     this.delegate = delegate;
     this.state = state;
+    this.setPlayback = setPlayback;
   }
 
   async start(key: string, sdp: string) {
@@ -45,7 +64,7 @@ export class Voice {
     const result = await request(key, 'live/sessions', {
       session: { model: 'gpt-live-1', store: false, delegation: { type: 'client' },
         client: { data_channel: { allowed_client_events: ['session.close'] } },
-        instructions: 'Transcribe the trader. Stay silent. Cairo speaks all replies and announcements locally.',
+        instructions: 'Cairo Live trading voice. Speak only when you receive a commentary update. Read its content once without adding or inventing details. Skip acknowledgments, introductions, and follow-ups.',
       }, transport: { type: 'webrtc', sdp },
     });
     if (generation !== this.generation) throw new Error('Voice setup was canceled');
@@ -56,6 +75,10 @@ export class Voice {
     socket.on('message', buffer => {
       if (this.socket !== socket) return;
       const event = JSON.parse(buffer.toString());
+      if (event.type === 'session.closed') { this.stop(); return; }
+      if (event.type === 'session.output_audio.delta') this.playback?.activity();
+      const playback = this.playback;
+      if (playback && event.type === 'error' && event.error?.event_id === playback.id) playback.finish('server-rejected');
       if (this.ignored) return;
       if (event.type === 'session.input_transcript.delta' && typeof event.delta === 'string') {
         if (event.start_ms - this.end > 1300) this.transcript = '';
@@ -65,14 +88,59 @@ export class Voice {
       }
       if (event.type === 'session.delegation.created' && event.delegation?.target === 'client') {
         this.delegationId = event.delegation.id;
+        socket.send(JSON.stringify({ type: 'session.thinking.append', event_id: randomUUID(), delegation_id: event.delegation.id, content: '' }));
         this.scheduleReply(socket);
       }
-      if (event.type === 'session.closed') this.stop();
     });
     socket.on('open', () => { if (this.socket === socket) this.state('Voice connected'); });
-    socket.on('close', () => { if (this.socket === socket) { this.socket = undefined; this.state('Voice disconnected'); } });
-    socket.on('error', () => { if (this.socket === socket) this.state('Voice control connection failed'); });
+    socket.on('close', () => { if (this.socket === socket) this.stop(); });
+    socket.on('error', () => { if (this.socket === socket) this.stop('Voice control connection failed'); });
     return answer;
+  }
+
+  get connected() { return this.socket?.readyState === WebSocket.OPEN; }
+
+  reportPlayback(id: string, status: 'activity' | 'player-failed') {
+    const playback = this.playback;
+    if (playback?.id !== id) return;
+    if (status === 'activity') playback.activity();
+    else playback.finish(status);
+  }
+
+  speak(text: string, delegationId: string | null, signal: AbortSignal): Promise<PlaybackResult> {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN || this.playback || signal.aborted) return Promise.resolve('canceled');
+    return new Promise(resolve => {
+      const id = randomUUID();
+      let idle: ReturnType<typeof setTimeout>;
+      const startup = setTimeout(() => finish('timeout'), 5_000);
+      const limit = setTimeout(() => finish(idle ? 'played' : 'timeout'), 30_000);
+      const cancel = () => finish('canceled');
+      const finish = (result: PlaybackResult) => {
+        if (this.playback?.id !== id) return;
+        clearTimeout(startup);
+        clearTimeout(limit);
+        clearTimeout(idle);
+        signal.removeEventListener('abort', cancel);
+        this.playback = undefined;
+        this.setPlayback(null);
+        resolve(result);
+      };
+      this.playback = { id, finish, activity: () => {
+        clearTimeout(startup);
+        clearTimeout(idle);
+        idle = setTimeout(() => finish('played'), 1_400);
+      } };
+      signal.addEventListener('abort', cancel, { once: true });
+      this.setPlayback(id);
+      try {
+        socket.send(JSON.stringify({ type: 'session.commentary.append', event_id: id, delegation_id: delegationId, content: text }), error => {
+          if (error) finish('send-failed');
+        });
+      } catch {
+        finish('send-failed');
+      }
+    });
   }
 
   ignoreInput(ignored: boolean) {
@@ -96,27 +164,27 @@ export class Voice {
     this.delegationId = null;
     this.transcript = '';
     if (!/[a-z0-9]/i.test(words.replace(/\[[^\]]*\]/g, ''))) return;
-    await this.delegate(words, id === null);
+    let sent = false;
+    await this.delegate(words, id === null, text => {
+      if (sent || this.socket !== socket) return;
+      sent = true;
+      this.onReply?.(text, id);
+    });
   }
 
-  stop() {
+  onReply?: (text: string, delegationId: string | null) => void;
+
+  stop(status = 'Voice disconnected') {
     this.generation++;
     const socket = this.socket;
     this.socket = undefined;
+    this.playback?.finish('canceled');
     this.transcript = '';
     this.end = 0;
     this.delegationId = null;
     clearTimeout(this.quietTimer);
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'session.close' }));
     socket?.close();
-    this.state('Voice disconnected');
+    this.state(status);
   }
-}
-
-export async function speakLocal(text: string) {
-  if (process.platform === 'darwin') await run('/usr/bin/say', [text], { timeout: 12_000 });
-  else if (process.platform === 'win32') {
-    const code = 'Add-Type -AssemblyName System.Speech; $voice = [System.Speech.Synthesis.SpeechSynthesizer]::new(); try { $voice.Speak($env:CAIRO_LIVE_UTTERANCE) } finally { $voice.Dispose() }';
-    await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(code, 'utf16le').toString('base64')], { windowsHide: true, timeout: 12_000, env: { ...process.env, CAIRO_LIVE_UTTERANCE: text } });
-  } else throw new Error('Local speech is unavailable on this platform');
 }

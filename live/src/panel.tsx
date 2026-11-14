@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { Position, Snapshot } from './engine.ts';
 import './panel.css';
 
-type PanelState = Snapshot & { version: string; voiceStatus: string; localError: string; backtest: string; bookmapMode: string; bookmapDate: string; replayPlans: string[]; chat: Array<{ role: 'user' | 'assistant'; text: string }>; chatBusy: boolean };
+type PanelState = Snapshot & { version: string; voiceStatus: string; localError: string; speechError: string; backtest: string; bookmapMode: string; bookmapDate: string; replayPlans: string[]; chat: Array<{ role: 'user' | 'assistant'; text: string }>; chatBusy: boolean };
 declare global {
   interface Window {
     cairo: {
@@ -11,6 +11,8 @@ declare global {
       ask(text: string): Promise<string>;
       cancelQuestion(): Promise<void>;
       onMuteInput(handler: (muted: boolean) => void): () => void;
+      onVoicePlayback(handler: (id: string | null) => void): () => void;
+      voicePlaybackStatus(id: string, status: 'activity' | 'player-failed'): Promise<void>;
       voiceCaption(value: string): Promise<void>;
       replayPlan(id: string): Promise<void>; backtest(): Promise<void>; shadow(value: boolean): Promise<void>;
       identify(id: string, note: { pattern: string; intendedStop: number }): Promise<string>;
@@ -76,6 +78,7 @@ function Panel() {
   const [question, setQuestion] = useState('');
   const voice = useRef<AudioSession | null>(null);
   const speaker = useRef<HTMLAudioElement>(null);
+  const playbackId = useRef<string | null>(null);
   const micMuted = useRef(false);
 
   function closeVoice() {
@@ -87,18 +90,38 @@ function Panel() {
       if (current.events.readyState === 'open') current.events.send(JSON.stringify({ type: 'session.close' }));
       current.peer.close();
     }
-    if (speaker.current) speaker.current.srcObject = null;
+    playbackId.current = null;
+    if (speaker.current) {
+      speaker.current.muted = true;
+      speaker.current.srcObject = null;
+    }
     setMode('off');
+  }
+
+  function playSpeaker(audio: HTMLAudioElement) {
+    const id = playbackId.current;
+    void audio.play().catch(() => {
+      if (id && playbackId.current === id) {
+        void window.cairo.voicePlaybackStatus(id, 'player-failed').catch(() => undefined);
+      }
+    });
   }
 
   useEffect(() => {
     const off = window.cairo.onSnapshot(setState);
+    const playback = window.cairo.onVoicePlayback(id => {
+      playbackId.current = id;
+      const audio = speaker.current;
+      if (!audio) return;
+      audio.muted = id === null;
+      if (id && audio.srcObject && audio.paused) playSpeaker(audio);
+    });
     const input = window.cairo.onMuteInput(muted => {
       micMuted.current = muted;
       voice.current?.mic?.getAudioTracks().forEach(track => { track.enabled = !muted; });
     });
     void window.cairo.snapshot().then(setState).catch(error => setError(error.message));
-    return () => { off(); input(); closeVoice(); };
+    return () => { off(); input(); playback(); closeVoice(); };
   }, []);
 
   useEffect(() => {
@@ -119,11 +142,20 @@ function Panel() {
     const active: AudioSession = { peer, events };
     voice.current = active;
     setMode('connecting'); setCaption(''); setHeard('');
+    function disconnect(message: string) {
+      if (voice.current !== active) return;
+      closeVoice();
+      void window.cairo.voiceStop().catch(() => undefined);
+      setError(message);
+    }
     try {
+      peer.addEventListener('connectionstatechange', () => {
+        if (peer.connectionState === 'failed') disconnect('Audio connection failed. Start voice again.');
+      });
       peer.addEventListener('track', event => {
         if (voice.current !== active || !speaker.current) return;
         speaker.current.srcObject = new MediaStream([event.track]);
-        void speaker.current.play().catch(() => undefined);
+        playSpeaker(speaker.current);
       });
       events.addEventListener('message', ({ data }) => {
         if (voice.current !== active) return;
@@ -132,11 +164,16 @@ function Panel() {
         if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string') {
           setCaption(value => (value + event.delta).slice(-450));
           void window.cairo.voiceCaption(event.delta).catch(() => undefined);
+          const id = playbackId.current;
+          const audio = speaker.current;
+          if (id && audio?.srcObject && !audio.paused && !audio.muted) {
+            void window.cairo.voicePlaybackStatus(id, 'activity').catch(() => undefined);
+          }
         }
         if (event.type === 'session.input_transcript.delta') setHeard(value => (value + event.delta).slice(-450));
-        if (event.type === 'session.closed') closeVoice();
+        if (event.type === 'session.closed') disconnect('Voice session ended. Start voice again.');
       });
-      events.addEventListener('close', () => { if (voice.current === active) closeVoice(); });
+      events.addEventListener('close', () => disconnect('Voice disconnected. Start voice again.'));
       const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       if (voice.current !== active) { mic.getTracks().forEach(track => track.stop()); return; }
       active.mic = mic;
@@ -146,7 +183,7 @@ function Panel() {
       if (voice.current !== active) return;
       const answer = await window.cairo.voiceStart(peer.localDescription!.sdp);
       if (voice.current !== active) return;
-      active.timer = setTimeout(() => { closeVoice(); void window.cairo.voiceStop(); setError('Voice did not connect. Try again.'); }, 15_000);
+      active.timer = setTimeout(() => disconnect('Voice did not connect. Try again.'), 15_000);
       await peer.setRemoteDescription({ type: 'answer', sdp: answer });
     } catch (error) {
       if (voice.current === active) { closeVoice(); await window.cairo.voiceStop(); throw error; }
@@ -169,7 +206,7 @@ function Panel() {
     <header><div><h1>Cairo Live</h1>{state?.version && <p>Build {state.version}</p>}<p>{state?.connected && state.bookmapMode === 'replay' && (!state.bookmapDate || conflict || replayDateMismatch) ? 'Waiting for replay session' : state?.selection.mode === 'replay' ? `Replay · ${state.selection.sessionDate}` : 'Live session'}</p></div>
       <button className="primary" onClick={() => mode === 'off' ? run(startVoice) : run(async () => { closeVoice(); await window.cairo.voiceStop(); })}>{mode === 'off' ? 'Start voice' : mode === 'connecting' ? 'Cancel voice' : 'End voice'}</button></header>
     <div className="status" role="status"><span>{state?.connected ? 'Bookmap connected' : 'Waiting for Bookmap'}</span><span>{mode === 'listening' ? 'Mic listening' : mode === 'connecting' ? 'Connecting voice…' : 'Mic off'}</span><span>{state?.shadow ? 'Shadow mode' : 'Spoken alerts'}</span></div>
-    {(error || state?.localError) && <p className="error" role="alert">{error || state?.localError}</p>}
+    {(error || state?.localError || state?.speechError) && <p className="error" role="alert">{error || state?.localError || state?.speechError}</p>}
     <section className="focus"><h2>{focus ? 'Needs your input' : 'Latest alert'}</h2><p>{focus ? `${focus.symbol}. Which pattern did you use, and where is your intended stop?` : alert?.text ?? 'Waiting for an event'}</p>
       {alert && <div className="feedback">{['Useful', 'Noisy', 'Late'].map(value => <button key={value} onClick={() => run(() => window.cairo.feedback(alert.key, value))}>{value}</button>)}</div>}
     </section>

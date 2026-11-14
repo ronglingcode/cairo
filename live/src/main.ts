@@ -40,6 +40,7 @@ let lastSaved = '';
 let writeQueue = Promise.resolve();
 let voiceStatus = 'Voice disconnected';
 let localError = '';
+let speechError = '';
 let bookmapMode = '';
 let bookmapDate = '';
 let replayPlans: string[] = [];
@@ -47,7 +48,8 @@ let replayChoice: { date: string; id: string } | undefined;
 let following = false;
 const pendingBookmap: unknown[] = [];
 let dirty = true;
-const speech: Array<{ notice: Notice; owner: Engine }> = [];
+const speech: Array<{ notice: Notice; owner: Engine; delegationId?: string | null }> = [];
+let speechAttempt: AbortController | undefined;
 const lastReview = new Map<string, number>();
 const fillReviews = new Map<string, ReturnType<typeof setTimeout>>();
 const runningFillReviews = new Map<string, AbortController>();
@@ -145,23 +147,49 @@ function send(channel: string, payload: unknown) {
 }
 
 async function drainSpeech() {
-  if (speaking) return;
+  if (speaking || !voice.connected) return;
   speaking = true;
   try {
-    while (speech.length) {
-      const { notice, owner } = speech.shift()!;
+    while (speech.length && voice.connected) {
+      const { notice, owner, delegationId } = speech.shift()!;
       if (engine !== owner || shuttingDown) continue;
       if (notice.positionId) {
         try { owner.find(notice.positionId); } catch { continue; }
       }
       if (!claimExitSpeech(notice.text)) continue;
-      logConversation({ role: 'assistant', channel: 'spoken', text: notice.text });
+      const attempt = new AbortController();
+      speechAttempt = attempt;
       voice.ignoreInput(true);
       send('cairo:mute-input', true);
-      try { await speakLocal(notice.text); }
-      catch { localError = 'Speech unavailable. The reply is visible in the panel.'; dirty = true; }
+      try {
+        const result = await voice.speak(notice.text, delegationId ?? null, attempt.signal);
+        if (attempt.signal.aborted || result === 'canceled') continue;
+        let output = 'gpt-live';
+        if (result !== 'played') {
+          logConversation({ type: 'speech_failure', output, reason: result, noticeKey: notice.key });
+          if (notice.positionId) {
+            try { owner.find(notice.positionId); } catch { continue; }
+          }
+          output = 'local';
+          try {
+            await speakLocal(notice.text, attempt.signal);
+          } catch (error) {
+            if (attempt.signal.aborted) continue;
+            const failure = error as NodeJS.ErrnoException & { killed?: boolean };
+            logConversation({ type: 'speech_failure', output, reason: failure.killed ? 'timeout' : failure.code ?? 'synthesis-failed', noticeKey: notice.key });
+            speechError = 'Speech unavailable. The reply is visible in the panel.';
+            dirty = true;
+            continue;
+          }
+        }
+        if (attempt.signal.aborted) continue;
+        logConversation({ role: 'assistant', channel: 'spoken', text: notice.text, output });
+        speechError = '';
+        dirty = true;
+      }
       finally {
         await new Promise(resolve => setTimeout(resolve, 250));
+        speechAttempt = undefined;
         voice.ignoreInput(false);
         send('cairo:mute-input', false);
       }
@@ -173,7 +201,7 @@ function notice(item: Notice) {
   void append({ type: 'alert', planRevision: engine.loaded?.plan.revision, evidence: engine.context(item.symbol).evidence, ...item });
   if (item.kind === 'fill') rememberLocalTurn('assistant', item.text, item.symbol);
   dirty = true;
-  if (item.spoken) {
+  if (item.spoken && voice.connected) {
     const entry = { notice: item, owner: engine };
     if (item.kind === 'fill' || item.kind === 'feed') speech.unshift(entry);
     else speech.push(entry);
@@ -182,9 +210,9 @@ function notice(item: Notice) {
   }
 }
 
-function speakReply(text: string) {
-  if (text && speech.length < 16) {
-    speech.push({ owner: engine, notice: { key: randomUUID(), kind: 'advice', symbol: '', text, spoken: true } });
+function speakReply(text: string, delegationId?: string | null) {
+  if (text && voice.connected && speech.length < 16) {
+    speech.push({ owner: engine, delegationId, notice: { key: randomUUID(), kind: 'advice', symbol: '', text, spoken: true } });
     void drainSpeech();
   }
 }
@@ -228,6 +256,8 @@ async function select(selection: Selection, keepConnection = false) {
     replayConversation = randomUUID();
     chat = []; conversationNotes = []; chatBusy = false;
     speech.length = 0;
+    speechAttempt?.abort();
+    speechError = '';
     lastReview.clear();
     partialAnswers.clear();
     recentExitSpeech.clear();
@@ -327,6 +357,8 @@ function acceptBookmap(event: unknown) {
   engine.accept(event);
   if (engine.conversationScope !== scope) {
     agent.reset(); chat = []; conversationNotes = []; chatBusy = false; speech.length = 0; partialAnswers.clear(); lastReview.clear();
+    speechAttempt?.abort();
+    speechError = '';
     replayConversation = randomUUID();
     tradeFocus = undefined;
     logConversation({ type: 'conversation_reset' });
@@ -614,17 +646,26 @@ async function handleVoice(words: string, passive: boolean) {
   return askAgent(words, { channel: 'voice' });
 }
 
-const voice = new Voice(async (words, passive) => {
+const voice = new Voice(async (words, passive, reply) => {
   try {
     const response = await handleVoice(words, passive);
-    if (response) speakReply(briefVoice(response));
+    if (response) reply(briefVoice(response));
   } catch (error) {
     logConversation({ role: 'assistant', channel: 'voice-error', text: error instanceof Error ? error.message : 'Could not verify the request' });
-    speakReply('I couldn’t finish that check.');
+    reply('I couldn’t finish that check.');
   }
-}, state => { voiceStatus = state; dirty = true; });
+}, state => {
+  voiceStatus = state;
+  if (state !== 'Voice connected') {
+    speech.length = 0;
+    speechAttempt?.abort();
+    speechError = '';
+  }
+  dirty = true;
+}, enabled => send('cairo:voice-playback', enabled));
+voice.onReply = speakReply;
 
-function snapshot() { return { ...engine.snapshot(), version: app.getVersion(), voiceStatus, localError, backtest: settings.backtest, bookmapMode, bookmapDate, replayPlans, chat, chatBusy }; }
+function snapshot() { return { ...engine.snapshot(), version: app.getVersion(), voiceStatus, localError, speechError, backtest: settings.backtest, bookmapMode, bookmapDate, replayPlans, chat, chatBusy }; }
 
 function ipc(name: string, handle: (...args: unknown[]) => unknown) {
   ipcMain.handle(`cairo:${name}`, (event, ...args) => {
@@ -659,6 +700,7 @@ else app.whenReady().then(async () => {
     return askAgent(text);
   });
   ipc('voice-caption', value => logConversation({ role: 'assistant', channel: 'voice', delta: z.string().max(2000).parse(value) }));
+  ipc('voice-playback-status', (id, value) => voice.reportPlayback(z.uuid().parse(id), z.enum(['activity', 'player-failed']).parse(value)));
   ipc('cancel-question', () => agent.cancel());
   ipc('replay-plan', async value => {
     const id = z.string().parse(value);
