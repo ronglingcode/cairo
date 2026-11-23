@@ -129,6 +129,14 @@ function briefVoice(text: string) {
   }
   const lines = clean.split('\n').filter(value => value.trim());
   const line = lines.find(value => !/^\s*(?:let me|i(?:’|')ll|checking\b)/i.test(value)) ?? '';
+  if (line.endsWith(':')) {
+    const items = lines.flatMap(value => {
+      const item = /^\s*(?:\d+\.|[-•])\s+(.+)$/.exec(value)?.[1];
+      return item ? [item.split(/\s*[—–]|\s+\(/)[0].trim()] : [];
+    }).slice(0, 5);
+    if (items.length) return (line + ' ' + items.join(', ') + '.').slice(0, 240);
+    return 'The details are on screen.';
+  }
   const sentence = line.match(/^.*?[.!?](?:\s|$)/)?.[0] ?? line;
   return sentence.length <= 160 ? sentence.trim() : sentence.slice(0, 155).replace(/\s+\S*$/, '') + '…';
 }
@@ -515,6 +523,7 @@ async function askAgent(words: string, options: { background?: boolean; display?
   };
   let staged: Proposal | undefined;
   let exit: ExitProposal | undefined;
+  let attemptedExit = false;
   const exitContexts = new Map<string, Omit<ExitProposal, 'plan'>>();
   const draft: ChatMessage = { role: 'assistant', text: '' };
   if (!options.background) {
@@ -532,6 +541,7 @@ async function askAgent(words: string, options: { background?: boolean; display?
         if (!named || !allowed.includes(named)) throw new Error('Use a ticker in the current question, or ask the trader to specify one.');
         input = { ...(input as object), symbol: named };
       }
+      if (name === 'prepare_exit_plan') attemptedExit = true;
       const result = await runTool(name, input, { ...toolOptions, signal, exitContexts,
         stageExit: proposal => {
           if (!current() || signal.aborted || (options.position && options.position.id !== proposal.id)) throw new Error('This position changed');
@@ -560,8 +570,9 @@ async function askAgent(words: string, options: { background?: boolean; display?
           notice({ key: randomUUID(), kind: 'advice', symbol: position.symbol, positionId: position.id, spoken: !owner.shadowMode,
             text: position.symbol + '. ' + briefVoice(result) });
         }
-      } else if (options.position) {
-        result = 'No validated exit plan was produced. ' + answer;
+      } else if (attemptedExit || options.position) {
+        void append({ type: 'unvalidated_exit_answer', symbol: options.position?.symbol, answer });
+        result = 'I couldn’t validate an updated exit plan.';
       }
       if (staged) {
         const position = owner.find(staged.id);
@@ -582,7 +593,7 @@ async function askAgent(words: string, options: { background?: boolean; display?
       logConversation({ role: 'assistant', channel: options.background ? 'automatic' : 'agent', text: result, symbol: ticker, scoped: true, local: result !== answer });
       return result;
     }, { resume: owner.selection.mode === 'live', background: options.background, signal: options.signal, onDelta: options.background ? undefined : delta => {
-      if (current()) { draft.text = (draft.text + delta).slice(0, 6000); dirty = true; }
+      if (current() && !options.position && !attemptedExit) { draft.text = (draft.text + delta).slice(0, 6000); dirty = true; }
     } });
   } catch (error) {
     if (!options.background && current()) draft.text = error instanceof Error ? error.message : 'OpenCode could not answer';
