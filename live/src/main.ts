@@ -1,3 +1,4 @@
+import { bookmapEvents } from './wire.ts';
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 import { access, appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
@@ -394,7 +395,7 @@ async function persist() {
 }
 
 function connect() {
-  const client = new WebSocket(localEndpoint, { maxPayload: 3_000_000, handshakeTimeout: 3500 });
+  const client = new WebSocket(localEndpoint, { maxPayload: 0, handshakeTimeout: 3500 });
   socket = client;
   client.on('open', () => {
     if (socket !== client) return;
@@ -404,10 +405,10 @@ function connect() {
   client.on('message', data => {
     if (socket !== client) return;
     try {
-      const event = JSON.parse(data.toString());
+      for (const event of bookmapEvents(JSON.parse(data.toString()))) {
       if (event.type === 'cairo_depth' || event.type === 'cairo_minute_bars') {
         bookmapWaiters.get(event.requestId)?.(event);
-        return;
+        continue;
       }
       if (['cairo_chart', 'cairo_trade', 'cairo_patterns', 'cairo_replay_fill', 'cairo_replay_reset', 'cairo_account'].includes(event.type)) {
         if (event.mode === 'live' || event.mode === 'replay') {
@@ -422,12 +423,13 @@ function connect() {
       const mismatch = bookmapMode && (engine.selection.mode !== bookmapMode ||
         (engine.selection.mode === 'replay' && engine.selection.sessionDate !== bookmapDate));
       if (following || mismatch) {
-        if (pendingBookmap.length < 8192) pendingBookmap.push(event);
+        pendingBookmap.push(event);
         if (mismatch) void followBookmap(client);
       } else {
         for (const pending of pendingBookmap.splice(0)) acceptBookmap(pending);
         acceptBookmap(event);
         if (bookmapMode === 'replay' && event.type === 'cairo_chart') void followBookmap(client);
+      }
       }
     } catch { /* Ignore malformed loopback messages. */ }
   });
